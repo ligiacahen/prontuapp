@@ -2909,7 +2909,7 @@ export default function Home() {
 
                 {!membroSelecionado.parentesco && (
                   <p className="text-sm text-slate-400 text-center py-2">
-                    Para calcular os cuidados preventivos, primeiro informe o grau de parentesco deste membro na aba "Geral" (perfil).
+                    Para calcular os cuidados preventivos, primeiro informe o grau de parentesco deste membro na aba “Geral” (perfil).
                   </p>
                 )}
 
