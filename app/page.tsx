@@ -190,6 +190,18 @@ function calcularIdadeEmMeses(dataNascimento: string, dataReferencia: string) {
   return meses;
 }
 
+function formatarIdadeEmMeses(totalMeses: number): string {
+  if (totalMeses < 12) {
+    return `${totalMeses} ${totalMeses === 1 ? 'mês' : 'meses'}`;
+  }
+  const anos = Math.floor(totalMeses / 12);
+  const mesesRestantes = totalMeses % 12;
+  const textoAnos = `${anos} ${anos === 1 ? 'ano' : 'anos'}`;
+  if (mesesRestantes === 0) return textoAnos;
+  const textoMeses = `${mesesRestantes} ${mesesRestantes === 1 ? 'mês' : 'meses'}`;
+  return `${textoAnos} e ${textoMeses}`;
+}
+
 function classificarZScorePeso(z: number): string {
   if (z < -3) return 'Peso muito baixo p/ idade';
   if (z < -2) return 'Peso baixo p/ idade';
@@ -2830,7 +2842,7 @@ export default function Home() {
                     >
                       <div className="flex items-center justify-between">
                         <p className="font-medium text-slate-800">{formatarData(m.data_medicao)} ✎</p>
-                        <span className="text-xs text-slate-400">{idadeMeses} meses</span>
+                        <span className="text-xs text-slate-400">{formatarIdadeEmMeses(idadeMeses)}</span>
                       </div>
                       <p className="text-xs text-slate-400">
                         {[m.peso_kg != null && `${m.peso_kg} kg`, m.altura_cm != null && `${m.altura_cm} cm`].filter(Boolean).join(' · ')}
