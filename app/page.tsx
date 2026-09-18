@@ -114,6 +114,17 @@ const especialidadesMedicas: string[] = [
   'Urologia', 'Outros',
 ];
 
+const vacinasComuns: string[] = [
+  'BCG', 'Hepatite B', 'Pentavalente (DTP+Hib+Hep B)', 'DTP (Difteria, Tétano e Coqueluche)',
+  'DTPa (acelular)', 'dT (Dupla adulto)', 'dTpa (Tríplice bacteriana acelular do adulto)',
+  'VIP (Poliomielite inativada)', 'VOP (Poliomielite oral)', 'Rotavírus',
+  'Pneumocócica 10-valente', 'Pneumocócica 13-valente', 'Pneumocócica 23-valente',
+  'Meningocócica C (conjugada)', 'Meningocócica ACWY', 'Meningocócica B',
+  'Febre Amarela', 'Tríplice Viral (Sarampo, Caxumba e Rubéola)', 'Tetra Viral (SCR + Varicela)',
+  'Varicela (Catapora)', 'Hepatite A', 'HPV', 'Influenza (Gripe)', 'Dengue', 'Covid-19',
+  'Raiva', 'Herpes-zóster', 'Outra (especificar)',
+];
+
 type Consulta = {
   id: string;
   data_hora: string;
@@ -592,6 +603,7 @@ export default function Home() {
   const [vacinas, setVacinas] = useState<Vacina[]>([]);
   const [mostrarFormVacina, setMostrarFormVacina] = useState(false);
   const [novoNomeVacina, setNovoNomeVacina] = useState('');
+  const [vacinaOutroNome, setVacinaOutroNome] = useState('');
   const [novaDoseVacina, setNovaDoseVacina] = useState('');
   const [novaDataVacina, setNovaDataVacina] = useState('');
   const [novaProximaDoseVacina, setNovaProximaDoseVacina] = useState('');
@@ -1327,6 +1339,7 @@ export default function Home() {
   function abrirNovaVacina() {
     setVacinaEditandoId(null);
     setNovoNomeVacina('');
+    setVacinaOutroNome('');
     setNovaDoseVacina('');
     setNovaDataVacina('');
     setNovaProximaDoseVacina('');
@@ -1337,7 +1350,13 @@ export default function Home() {
 
   function abrirEdicaoVacina(v: Vacina) {
     setVacinaEditandoId(v.id);
-    setNovoNomeVacina(v.nome);
+    if (vacinasComuns.includes(v.nome)) {
+      setNovoNomeVacina(v.nome);
+      setVacinaOutroNome('');
+    } else {
+      setNovoNomeVacina('Outra (especificar)');
+      setVacinaOutroNome(v.nome);
+    }
     setNovaDoseVacina(v.dose || '');
     setNovaDataVacina(v.data_aplicacao);
     setNovaProximaDoseVacina(v.proxima_dose_data || '');
@@ -1348,7 +1367,8 @@ export default function Home() {
 
   async function salvarVacina() {
     setErroVacina('');
-    if (!novoNomeVacina || !novaDataVacina) {
+    const nomeFinal = novoNomeVacina === 'Outra (especificar)' ? vacinaOutroNome.trim() : novoNomeVacina;
+    if (!nomeFinal || !novaDataVacina) {
       setErroVacina('Preencha ao menos o nome e a data de aplicação.');
       return;
     }
@@ -1356,7 +1376,7 @@ export default function Home() {
     setCarregando(true);
 
     const dados = {
-      nome: novoNomeVacina,
+      nome: nomeFinal,
       dose: novaDoseVacina || null,
       data_aplicacao: novaDataVacina,
       proxima_dose_data: novaProximaDoseVacina || null,
@@ -1374,6 +1394,7 @@ export default function Home() {
     }
     setVacinaEditandoId(null);
     setNovoNomeVacina('');
+    setVacinaOutroNome('');
     setNovaDoseVacina('');
     setNovaDataVacina('');
     setNovaProximaDoseVacina('');
@@ -2560,12 +2581,27 @@ export default function Home() {
                   </button>
                 ) : (
                   <div className="space-y-3 rounded-xl border border-slate-100 p-4">
-                    <input
+                    <select
                       className={inputClasse}
-                      placeholder="nome da vacina (ex: Influenza, Tríplice viral)"
                       value={novoNomeVacina}
-                      onChange={(e) => setNovoNomeVacina(e.target.value)}
-                    />
+                      onChange={(e) => {
+                        setNovoNomeVacina(e.target.value);
+                        setVacinaOutroNome('');
+                      }}
+                    >
+                      <option value="">selecione a vacina</option>
+                      {vacinasComuns.map((v) => (
+                        <option key={v} value={v}>{v}</option>
+                      ))}
+                    </select>
+                    {novoNomeVacina === 'Outra (especificar)' && (
+                      <input
+                        className={inputClasse}
+                        placeholder="qual vacina?"
+                        value={vacinaOutroNome}
+                        onChange={(e) => setVacinaOutroNome(e.target.value)}
+                      />
+                    )}
                     <input
                       className={inputClasse}
                       placeholder="dose (ex: 1ª dose, reforço)"
