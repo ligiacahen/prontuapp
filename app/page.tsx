@@ -574,6 +574,7 @@ export default function Home() {
   const [novoIncluirIr, setNovoIncluirIr] = useState(false);
   const [novaObsFinanceira, setNovaObsFinanceira] = useState('');
   const [erroConsulta, setErroConsulta] = useState('');
+  const [gravandoCampo, setGravandoCampo] = useState<string | null>(null);
   const [consultaEditandoId, setConsultaEditandoId] = useState<string | null>(null);
   const [buscaConsulta, setBuscaConsulta] = useState('');
 
@@ -1226,6 +1227,33 @@ export default function Home() {
     setConsultaEditandoId(null);
     setMostrarFormConsulta(false);
     await carregarConsultas(membroSelecionado.id);
+  }
+
+  // Reconhecimento de voz nativo do navegador (Web Speech API). Funciona bem no Chrome/Android;
+  // suporte no Safari/iPhone é mais limitado. Precisa de internet — o áudio é processado
+  // pelo próprio navegador, o app não grava nem guarda o áudio, só o texto reconhecido.
+  function alternarReconhecimentoVoz(campo: string, setValor: React.Dispatch<React.SetStateAction<string>>) {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert('Reconhecimento de voz não é suportado neste navegador. Tente pelo Chrome (funciona melhor no Android).');
+      return;
+    }
+    if (gravandoCampo === campo) {
+      setGravandoCampo(null);
+      return;
+    }
+    const reconhecimento = new SpeechRecognition();
+    reconhecimento.lang = 'pt-BR';
+    reconhecimento.continuous = false;
+    reconhecimento.interimResults = false;
+    reconhecimento.onresult = (event: any) => {
+      const texto = event.results[0][0].transcript;
+      setValor((anterior) => (anterior ? `${anterior} ${texto}` : texto));
+    };
+    reconhecimento.onend = () => setGravandoCampo(null);
+    reconhecimento.onerror = () => setGravandoCampo(null);
+    reconhecimento.start();
+    setGravandoCampo(campo);
   }
 
   function abrirNovoExame() {
@@ -2395,13 +2423,25 @@ export default function Home() {
                       <option value="realizada">Realizada</option>
                       <option value="cancelada">Cancelada</option>
                     </select>
-                    <textarea
-                      className={inputClasse}
-                      placeholder="o que o médico disse, o que acompanhar, exames pedidos... (opcional)"
-                      rows={3}
-                      value={novaAnotacaoConsulta}
-                      onChange={(e) => setNovaAnotacaoConsulta(e.target.value)}
-                    />
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs text-slate-400">o que o médico disse, o que acompanhar, exames pedidos... (opcional)</label>
+                        <button
+                          type="button"
+                          onClick={() => alternarReconhecimentoVoz('anotacaoConsulta', setNovaAnotacaoConsulta)}
+                          className={`shrink-0 rounded-full px-2 py-1 text-xs ${gravandoCampo === 'anotacaoConsulta' ? 'bg-red-100 text-red-700 animate-pulse' : 'bg-slate-100 text-slate-600'}`}
+                        >
+                          🎤 {gravandoCampo === 'anotacaoConsulta' ? 'Ouvindo...' : 'Falar'}
+                        </button>
+                      </div>
+                      <textarea
+                        className={inputClasse}
+                        placeholder="o que o médico disse, o que acompanhar, exames pedidos... (opcional)"
+                        rows={3}
+                        value={novaAnotacaoConsulta}
+                        onChange={(e) => setNovaAnotacaoConsulta(e.target.value)}
+                      />
+                    </div>
                     <div>
                       <label className="text-xs text-slate-400 mb-1 block">agendar retorno (opcional)</label>
                       <input
