@@ -1664,7 +1664,7 @@ export default function Home() {
     { id: 'consultas', label: 'Consultas', icone: '📅' },
     { id: 'exames', label: 'Exames', icone: '🧪' },
     { id: 'vacinas', label: 'Vacinas', icone: '💉' },
-    { id: 'nascimento', label: 'Nascimento', icone: '👶' },
+    { id: 'nascimento', label: 'Ficha Pessoal', icone: '🪪' },
     { id: 'crescimento', label: 'Crescimento', icone: '📈' },
     { id: 'riscos', label: 'Cuidados Preventivos', icone: '🧬' },
   ];
@@ -1843,131 +1843,18 @@ export default function Home() {
               ← Voltar
             </button>
 
-            <div className="mb-4 flex items-center gap-3">
+            <button
+              onClick={() => setTelaDetalhe('nascimento')}
+              className="mb-6 flex w-full items-center gap-3 rounded-xl p-2 text-left transition hover:bg-slate-50"
+            >
               <div className="flex h-12 w-12 items-center justify-center rounded-full bg-teal-100 text-teal-700 font-semibold text-lg">
                 {membroSelecionado.nome.charAt(0).toUpperCase()}
               </div>
               <div>
                 <h2 className="text-lg font-semibold text-slate-800">{membroSelecionado.nome}</h2>
-                <p className="text-xs text-slate-400">{calcularIdade(membroSelecionado.data_nascimento)} anos</p>
+                <p className="text-xs text-slate-400">{calcularIdade(membroSelecionado.data_nascimento)} anos · toque para ver a ficha pessoal</p>
               </div>
-            </div>
-
-            <div className="space-y-3 mb-6">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-xl bg-slate-50 p-3">
-                  <p className="text-xs text-slate-400">Data de nascimento</p>
-                  <p className="text-sm font-medium text-slate-800">{formatarData(membroSelecionado.data_nascimento)}</p>
-                </div>
-                <div className="rounded-xl bg-slate-50 p-3">
-                  <p className="text-xs text-slate-400">Sexo biológico</p>
-                  <p className="text-sm font-medium text-slate-800 capitalize">{membroSelecionado.sexo_biologico}</p>
-                </div>
-
-                {!editandoTipo ? (
-                  <button
-                    onClick={() => {
-                      setValorTipoEdit(membroSelecionado.tipo_sanguineo || '');
-                      setEditandoTipo(true);
-                    }}
-                    className="rounded-xl bg-slate-50 p-3 text-left transition hover:bg-slate-100"
-                  >
-                    <p className="text-xs text-slate-400">Tipo sanguíneo ✎</p>
-                    <p className="text-sm font-medium text-slate-800">{membroSelecionado.tipo_sanguineo || 'toque para informar'}</p>
-                  </button>
-                ) : (
-                  <div className="rounded-xl bg-slate-50 p-3">
-                    <p className="text-xs text-slate-400 mb-1">Tipo sanguíneo</p>
-                    <select
-                      autoFocus
-                      className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm text-slate-800"
-                      value={valorTipoEdit}
-                      onChange={(e) => salvarTipoSanguineo(e.target.value)}
-                      onBlur={() => setEditandoTipo(false)}
-                    >
-                      <option value="">selecione</option>
-                      <option value="A+">A+</option>
-                      <option value="A-">A-</option>
-                      <option value="B+">B+</option>
-                      <option value="B-">B-</option>
-                      <option value="AB+">AB+</option>
-                      <option value="AB-">AB-</option>
-                      <option value="O+">O+</option>
-                      <option value="O-">O-</option>
-                    </select>
-                  </div>
-                )}
-
-                <div className="rounded-xl bg-slate-50 p-3">
-                  <p className="text-xs text-slate-400">Idade</p>
-                  <p className="text-sm font-medium text-slate-800">{calcularIdade(membroSelecionado.data_nascimento)} anos</p>
-                </div>
-
-                {!editandoParentesco ? (
-                  <button
-                    onClick={() => {
-                      setValorParentescoEdit(membroSelecionado.parentesco || '');
-                      setEditandoParentesco(true);
-                    }}
-                    className="col-span-2 rounded-xl bg-slate-50 p-3 text-left transition hover:bg-slate-100"
-                  >
-                    <p className="text-xs text-slate-400">Grau de parentesco ✎</p>
-                    <p className="text-sm font-medium text-slate-800">
-                      {opcoesParentesco.find((p) => p.value === membroSelecionado.parentesco)?.label || 'toque para informar'}
-                    </p>
-                  </button>
-                ) : (
-                  <div className="col-span-2 rounded-xl bg-slate-50 p-3">
-                    <p className="text-xs text-slate-400 mb-1">Grau de parentesco</p>
-                    <select
-                      autoFocus
-                      className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm text-slate-800"
-                      value={valorParentescoEdit}
-                      onChange={(e) => salvarParentesco(e.target.value)}
-                      onBlur={() => setEditandoParentesco(false)}
-                    >
-                      <option value="">selecione</option>
-                      {opcoesParentesco.map((p) => (
-                        <option key={p.value} value={p.value}>{p.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-              </div>
-
-              {!editandoObs ? (
-                <button
-                  onClick={() => {
-                    setValorObsEdit(membroSelecionado.observacoes_gerais || '');
-                    setEditandoObs(true);
-                  }}
-                  className="w-full rounded-xl bg-slate-50 p-3 text-left transition hover:bg-slate-100"
-                >
-                  <p className="text-xs text-slate-400">Observações ✎</p>
-                  <p className="text-sm text-slate-700">{membroSelecionado.observacoes_gerais || 'toque para adicionar'}</p>
-                </button>
-              ) : (
-                <div className="rounded-xl bg-slate-50 p-3 space-y-2">
-                  <p className="text-xs text-slate-400">Observações</p>
-                  <textarea
-                    autoFocus
-                    className={inputClasse}
-                    rows={3}
-                    value={valorObsEdit}
-                    onChange={(e) => setValorObsEdit(e.target.value)}
-                  />
-                  <div className="flex gap-2">
-                    <button disabled={carregando} onClick={salvarObservacoes} className={botaoPrimario}>
-                      {carregando ? 'Salvando...' : 'Salvar'}
-                    </button>
-                    <button onClick={() => setEditandoObs(false)} className={botaoSecundario}>
-                      Cancelar
-                    </button>
-                  </div>
-                </div>
-              )}
-              {erroEdicao && <p className="text-sm text-red-600">{erroEdicao}</p>}
-            </div>
+            </button>
 
             <div className="grid grid-cols-3 sm:grid-cols-4 gap-4">
               {secoes.map((s) => (
@@ -2118,13 +2005,25 @@ export default function Home() {
                       />
                       Relevante geneticamente (aparece no histórico familiar)
                     </label>
-                    <textarea
-                      className={inputClasse}
-                      placeholder="observação (opcional)"
-                      rows={2}
-                      value={novaObservacaoCondicao}
-                      onChange={(e) => setNovaObservacaoCondicao(e.target.value)}
-                    />
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs text-slate-400">observação (opcional)</label>
+                        <button
+                          type="button"
+                          onClick={() => alternarReconhecimentoVoz('obsCondicao', setNovaObservacaoCondicao)}
+                          className={`shrink-0 rounded-full px-2 py-1 text-xs ${gravandoCampo === 'obsCondicao' ? 'bg-red-100 text-red-700 animate-pulse' : 'bg-slate-100 text-slate-600'}`}
+                        >
+                          🎤 {gravandoCampo === 'obsCondicao' ? 'Ouvindo...' : 'Falar'}
+                        </button>
+                      </div>
+                      <textarea
+                        className={inputClasse}
+                        placeholder="observação (opcional)"
+                        rows={2}
+                        value={novaObservacaoCondicao}
+                        onChange={(e) => setNovaObservacaoCondicao(e.target.value)}
+                      />
+                    </div>
                     {erroCondicao && <p className="text-sm text-red-600">{erroCondicao}</p>}
                     <div className="flex gap-2">
                       <button disabled={carregando} onClick={salvarCondicao} className={botaoPrimario}>
@@ -2270,13 +2169,25 @@ export default function Home() {
                         <option key={c.value} value={c.value}>{c.label}</option>
                       ))}
                     </select>
-                    <textarea
-                      className={inputClasse}
-                      placeholder="observação (ex: motivo de uso)"
-                      rows={2}
-                      value={novaObservacaoMedicacao}
-                      onChange={(e) => setNovaObservacaoMedicacao(e.target.value)}
-                    />
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs text-slate-400">observação (ex: motivo de uso)</label>
+                        <button
+                          type="button"
+                          onClick={() => alternarReconhecimentoVoz('obsMedicacao', setNovaObservacaoMedicacao)}
+                          className={`shrink-0 rounded-full px-2 py-1 text-xs ${gravandoCampo === 'obsMedicacao' ? 'bg-red-100 text-red-700 animate-pulse' : 'bg-slate-100 text-slate-600'}`}
+                        >
+                          🎤 {gravandoCampo === 'obsMedicacao' ? 'Ouvindo...' : 'Falar'}
+                        </button>
+                      </div>
+                      <textarea
+                        className={inputClasse}
+                        placeholder="observação (ex: motivo de uso)"
+                        rows={2}
+                        value={novaObservacaoMedicacao}
+                        onChange={(e) => setNovaObservacaoMedicacao(e.target.value)}
+                      />
+                    </div>
                     {erroMedicacao && <p className="text-sm text-red-600">{erroMedicacao}</p>}
                     <div className="flex gap-2">
                       <button disabled={carregando} onClick={salvarMedicacao} className={botaoPrimario}>
@@ -2575,13 +2486,25 @@ export default function Home() {
                       value={novoLaboratorioExame}
                       onChange={(e) => setNovoLaboratorioExame(e.target.value)}
                     />
-                    <textarea
-                      className={inputClasse}
-                      placeholder="resumo do resultado (opcional)"
-                      rows={3}
-                      value={novoResultadoExame}
-                      onChange={(e) => setNovoResultadoExame(e.target.value)}
-                    />
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs text-slate-400">resumo do resultado (opcional)</label>
+                        <button
+                          type="button"
+                          onClick={() => alternarReconhecimentoVoz('resultadoExame', setNovoResultadoExame)}
+                          className={`shrink-0 rounded-full px-2 py-1 text-xs ${gravandoCampo === 'resultadoExame' ? 'bg-red-100 text-red-700 animate-pulse' : 'bg-slate-100 text-slate-600'}`}
+                        >
+                          🎤 {gravandoCampo === 'resultadoExame' ? 'Ouvindo...' : 'Falar'}
+                        </button>
+                      </div>
+                      <textarea
+                        className={inputClasse}
+                        placeholder="resumo do resultado (opcional)"
+                        rows={3}
+                        value={novoResultadoExame}
+                        onChange={(e) => setNovoResultadoExame(e.target.value)}
+                      />
+                    </div>
                     {erroExame && <p className="text-sm text-red-600">{erroExame}</p>}
                     <div className="flex gap-2">
                       <button disabled={carregando} onClick={salvarExame} className={botaoPrimario}>
@@ -2667,13 +2590,25 @@ export default function Home() {
                         onChange={(e) => setNovaProximaDoseVacina(e.target.value)}
                       />
                     </div>
-                    <textarea
-                      className={inputClasse}
-                      placeholder="observações (opcional)"
-                      rows={2}
-                      value={novaObsVacina}
-                      onChange={(e) => setNovaObsVacina(e.target.value)}
-                    />
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs text-slate-400">observações (opcional)</label>
+                        <button
+                          type="button"
+                          onClick={() => alternarReconhecimentoVoz('obsVacina', setNovaObsVacina)}
+                          className={`shrink-0 rounded-full px-2 py-1 text-xs ${gravandoCampo === 'obsVacina' ? 'bg-red-100 text-red-700 animate-pulse' : 'bg-slate-100 text-slate-600'}`}
+                        >
+                          🎤 {gravandoCampo === 'obsVacina' ? 'Ouvindo...' : 'Falar'}
+                        </button>
+                      </div>
+                      <textarea
+                        className={inputClasse}
+                        placeholder="observações (opcional)"
+                        rows={2}
+                        value={novaObsVacina}
+                        onChange={(e) => setNovaObsVacina(e.target.value)}
+                      />
+                    </div>
                     {erroVacina && <p className="text-sm text-red-600">{erroVacina}</p>}
                     <div className="flex gap-2">
                       <button disabled={carregando} onClick={salvarVacina} className={botaoPrimario}>
@@ -2695,6 +2630,135 @@ export default function Home() {
 
             {telaDetalhe === 'nascimento' && (
               <div className="space-y-3">
+                <div className="space-y-3 mb-2">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="rounded-xl bg-slate-50 p-3">
+                      <p className="text-xs text-slate-400">Data de nascimento</p>
+                      <p className="text-sm font-medium text-slate-800">{formatarData(membroSelecionado.data_nascimento)}</p>
+                    </div>
+                    <div className="rounded-xl bg-slate-50 p-3">
+                      <p className="text-xs text-slate-400">Sexo biológico</p>
+                      <p className="text-sm font-medium text-slate-800 capitalize">{membroSelecionado.sexo_biologico}</p>
+                    </div>
+
+                    {!editandoTipo ? (
+                      <button
+                        onClick={() => {
+                          setValorTipoEdit(membroSelecionado.tipo_sanguineo || '');
+                          setEditandoTipo(true);
+                        }}
+                        className="rounded-xl bg-slate-50 p-3 text-left transition hover:bg-slate-100"
+                      >
+                        <p className="text-xs text-slate-400">Tipo sanguíneo ✎</p>
+                        <p className="text-sm font-medium text-slate-800">{membroSelecionado.tipo_sanguineo || 'toque para informar'}</p>
+                      </button>
+                    ) : (
+                      <div className="rounded-xl bg-slate-50 p-3">
+                        <p className="text-xs text-slate-400 mb-1">Tipo sanguíneo</p>
+                        <select
+                          autoFocus
+                          className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm text-slate-800"
+                          value={valorTipoEdit}
+                          onChange={(e) => salvarTipoSanguineo(e.target.value)}
+                          onBlur={() => setEditandoTipo(false)}
+                        >
+                          <option value="">selecione</option>
+                          <option value="A+">A+</option>
+                          <option value="A-">A-</option>
+                          <option value="B+">B+</option>
+                          <option value="B-">B-</option>
+                          <option value="AB+">AB+</option>
+                          <option value="AB-">AB-</option>
+                          <option value="O+">O+</option>
+                          <option value="O-">O-</option>
+                        </select>
+                      </div>
+                    )}
+
+                    <div className="rounded-xl bg-slate-50 p-3">
+                      <p className="text-xs text-slate-400">Idade</p>
+                      <p className="text-sm font-medium text-slate-800">{calcularIdade(membroSelecionado.data_nascimento)} anos</p>
+                    </div>
+
+                    {!editandoParentesco ? (
+                      <button
+                        onClick={() => {
+                          setValorParentescoEdit(membroSelecionado.parentesco || '');
+                          setEditandoParentesco(true);
+                        }}
+                        className="col-span-2 rounded-xl bg-slate-50 p-3 text-left transition hover:bg-slate-100"
+                      >
+                        <p className="text-xs text-slate-400">Grau de parentesco ✎</p>
+                        <p className="text-sm font-medium text-slate-800">
+                          {opcoesParentesco.find((p) => p.value === membroSelecionado.parentesco)?.label || 'toque para informar'}
+                        </p>
+                      </button>
+                    ) : (
+                      <div className="col-span-2 rounded-xl bg-slate-50 p-3">
+                        <p className="text-xs text-slate-400 mb-1">Grau de parentesco</p>
+                        <select
+                          autoFocus
+                          className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm text-slate-800"
+                          value={valorParentescoEdit}
+                          onChange={(e) => salvarParentesco(e.target.value)}
+                          onBlur={() => setEditandoParentesco(false)}
+                        >
+                          <option value="">selecione</option>
+                          {opcoesParentesco.map((p) => (
+                            <option key={p.value} value={p.value}>{p.label}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+
+                  {!editandoObs ? (
+                    <button
+                      onClick={() => {
+                        setValorObsEdit(membroSelecionado.observacoes_gerais || '');
+                        setEditandoObs(true);
+                      }}
+                      className="w-full rounded-xl bg-slate-50 p-3 text-left transition hover:bg-slate-100"
+                    >
+                      <p className="text-xs text-slate-400">Observações ✎</p>
+                      <p className="text-sm text-slate-700">{membroSelecionado.observacoes_gerais || 'toque para adicionar'}</p>
+                    </button>
+                  ) : (
+                    <div className="rounded-xl bg-slate-50 p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs text-slate-400">Observações</p>
+                        <button
+                          type="button"
+                          onClick={() => alternarReconhecimentoVoz('obsGeral', setValorObsEdit)}
+                          className={`shrink-0 rounded-full px-2 py-1 text-xs ${gravandoCampo === 'obsGeral' ? 'bg-red-100 text-red-700 animate-pulse' : 'bg-slate-100 text-slate-600'}`}
+                        >
+                          🎤 {gravandoCampo === 'obsGeral' ? 'Ouvindo...' : 'Falar'}
+                        </button>
+                      </div>
+                      <textarea
+                        autoFocus
+                        className={inputClasse}
+                        rows={3}
+                        value={valorObsEdit}
+                        onChange={(e) => setValorObsEdit(e.target.value)}
+                      />
+                      <div className="flex gap-2">
+                        <button disabled={carregando} onClick={salvarObservacoes} className={botaoPrimario}>
+                          {carregando ? 'Salvando...' : 'Salvar'}
+                        </button>
+                        <button onClick={() => setEditandoObs(false)} className={botaoSecundario}>
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {erroEdicao && <p className="text-sm text-red-600">{erroEdicao}</p>}
+                </div>
+
+                <div className="border-t border-slate-100 pt-3">
+                  <p className="text-xs font-medium text-slate-500 mb-2">Informações de nascimento</p>
+                </div>
+
                 {!mostrarFormNascimento ? (
                   <>
                     {!nascimento ? (
@@ -2813,13 +2877,25 @@ export default function Home() {
                       value={novoLocalNascimento}
                       onChange={(e) => setNovoLocalNascimento(e.target.value)}
                     />
-                    <textarea
-                      className={inputClasse}
-                      placeholder="intercorrências (opcional)"
-                      rows={3}
-                      value={novasIntercorrencias}
-                      onChange={(e) => setNovasIntercorrencias(e.target.value)}
-                    />
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs text-slate-400">intercorrências (opcional)</label>
+                        <button
+                          type="button"
+                          onClick={() => alternarReconhecimentoVoz('intercorrencias', setNovasIntercorrencias)}
+                          className={`shrink-0 rounded-full px-2 py-1 text-xs ${gravandoCampo === 'intercorrencias' ? 'bg-red-100 text-red-700 animate-pulse' : 'bg-slate-100 text-slate-600'}`}
+                        >
+                          🎤 {gravandoCampo === 'intercorrencias' ? 'Ouvindo...' : 'Falar'}
+                        </button>
+                      </div>
+                      <textarea
+                        className={inputClasse}
+                        placeholder="intercorrências (opcional)"
+                        rows={3}
+                        value={novasIntercorrencias}
+                        onChange={(e) => setNovasIntercorrencias(e.target.value)}
+                      />
+                    </div>
                     {erroNascimento && <p className="text-sm text-red-600">{erroNascimento}</p>}
                     <div className="flex gap-2">
                       <button disabled={carregando} onClick={salvarNascimento} className={botaoPrimario}>
@@ -2961,7 +3037,7 @@ export default function Home() {
 
                 {!membroSelecionado.parentesco && (
                   <p className="text-sm text-slate-400 text-center py-2">
-                    Para calcular os cuidados preventivos, primeiro informe o grau de parentesco deste membro na aba “Geral” (perfil).
+                    Para calcular os cuidados preventivos, primeiro informe o grau de parentesco deste membro na “Ficha Pessoal”.
                   </p>
                 )}
 
