@@ -14,6 +14,7 @@ type Membro = {
   observacoes_gerais: string | null;
   data_falecimento: string | null;
   parentesco: string | null;
+  foto_url: string | null;
 };
 
 const opcoesParentesco: { value: string; label: string }[] = [
@@ -438,7 +439,7 @@ function paraNumeroTolerante(valor: string): number | null {
 }
 
 const tipoCondicaoLabels: Record<string, string> = {
-  doenca: 'Doença',
+  doenca: 'Hipótese diagnóstica',
   cirurgia: 'Cirurgia',
 };
 
@@ -535,6 +536,8 @@ export default function Home() {
   const [editandoObs, setEditandoObs] = useState(false);
   const [valorObsEdit, setValorObsEdit] = useState('');
   const [erroEdicao, setErroEdicao] = useState('');
+  const [enviandoFoto, setEnviandoFoto] = useState(false);
+  const [erroFoto, setErroFoto] = useState('');
 
   const [membroSelecionado, setMembroSelecionado] = useState<Membro | null>(null);
   const [telaDetalhe, setTelaDetalhe] = useState<Aba | null>(null);
@@ -673,7 +676,7 @@ export default function Home() {
   async function carregarMembros() {
     const { data, error } = await supabase
       .from('membro')
-      .select('id, nome, data_nascimento, sexo_biologico, tipo_sanguineo, observacoes_gerais, data_falecimento, parentesco')
+      .select('id, nome, data_nascimento, sexo_biologico, tipo_sanguineo, observacoes_gerais, data_falecimento, parentesco, foto_url')
       .is('data_falecimento', null)
       .order('nome');
     if (!error && data) setMembros(data);
@@ -1593,6 +1596,66 @@ export default function Home() {
     await carregarRiscosGeneticos({ ...membroSelecionado, parentesco: novoValor || null });
   }
 
+  async function salvarFotoMembro(arquivo: File) {
+    if (!membroSelecionado) return;
+    if (!arquivo.type.startsWith('image/')) {
+      setErroFoto('Selecione um arquivo de imagem (jpg, png, etc).');
+      return;
+    }
+    if (arquivo.size > 5 * 1024 * 1024) {
+      setErroFoto('A imagem deve ter no máximo 5MB.');
+      return;
+    }
+    setErroFoto('');
+    setEnviandoFoto(true);
+
+    const extensao = arquivo.name.split('.').pop() || 'jpg';
+    const caminho = `${membroSelecionado.id}/${Date.now()}.${extensao}`;
+
+    const { error: erroUpload } = await supabase.storage
+      .from('fotos-membros')
+      .upload(caminho, arquivo, { upsert: true });
+
+    if (erroUpload) {
+      setEnviandoFoto(false);
+      setErroFoto(erroUpload.message);
+      return;
+    }
+
+    const { data: urlData } = supabase.storage.from('fotos-membros').getPublicUrl(caminho);
+    const novaUrl = urlData.publicUrl;
+
+    const { error: erroUpdate } = await supabase
+      .from('membro')
+      .update({ foto_url: novaUrl })
+      .eq('id', membroSelecionado.id);
+
+    setEnviandoFoto(false);
+    if (erroUpdate) {
+      setErroFoto(erroUpdate.message);
+      return;
+    }
+    setMembroSelecionado({ ...membroSelecionado, foto_url: novaUrl });
+    await carregarMembros();
+  }
+
+  async function removerFotoMembro() {
+    if (!membroSelecionado) return;
+    setErroFoto('');
+    setEnviandoFoto(true);
+    const { error } = await supabase
+      .from('membro')
+      .update({ foto_url: null })
+      .eq('id', membroSelecionado.id);
+    setEnviandoFoto(false);
+    if (error) {
+      setErroFoto(error.message);
+      return;
+    }
+    setMembroSelecionado({ ...membroSelecionado, foto_url: null });
+    await carregarMembros();
+  }
+
   async function carregarRiscosGeneticos(membro: Membro) {
     if (!membro.parentesco) {
       setRiscos(null);
@@ -1680,7 +1743,7 @@ export default function Home() {
     'w-full rounded-xl border border-slate-200 py-3 font-medium text-slate-600 transition hover:bg-slate-50';
 
   const secoes: { id: Aba; label: string; icone: string }[] = [
-    { id: 'condicoes', label: 'Condições', icone: '🩺' },
+    { id: 'condicoes', label: 'Hipótese Diagnóstica', icone: '🩺' },
     { id: 'medicacoes', label: 'Medicações', icone: '💊' },
     { id: 'consultas', label: 'Consultas', icone: '📅' },
     { id: 'exames', label: 'Exames', icone: '🧪' },
@@ -1697,11 +1760,24 @@ export default function Home() {
       <div className={`w-full ${larguraContainer} rounded-2xl bg-white p-8 shadow-sm border border-slate-100 transition-all`}>
         {!membroSelecionado && (
           <div className="mb-8 text-center">
-            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-teal-600 text-white text-xl font-bold">
-              P
+            <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl border-2 border-green-600 bg-green-50 text-green-700">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={1.75}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="h-8 w-8"
+              >
+                <rect x="5" y="4" width="14" height="17" rx="2" />
+                <path d="M9 4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1z" />
+                <path d="m8.5 13 2.5 2.5 4.5-5" />
+              </svg>
             </div>
             <h1 className="text-xl font-semibold text-slate-800">ProntuApp</h1>
-            <p className="text-sm text-slate-400 mt-1">Saúde da sua família, organizada</p>
+            <p className="text-sm text-slate-400 mt-1">Prontuário na palma da mão.</p>
           </div>
         )}
 
@@ -1775,9 +1851,17 @@ export default function Home() {
                   onClick={() => { setMembroSelecionado(m); setTelaDetalhe(null); }}
                   className="flex w-full items-center gap-3 rounded-xl border border-slate-100 p-3 text-left transition hover:bg-slate-50"
                 >
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-teal-100 text-teal-700 font-semibold">
-                    {m.nome.charAt(0).toUpperCase()}
-                  </div>
+                  {m.foto_url ? (
+                    <img
+                      src={m.foto_url}
+                      alt={m.nome}
+                      className="h-10 w-10 shrink-0 rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-teal-100 text-teal-700 font-semibold">
+                      {m.nome.charAt(0).toUpperCase()}
+                    </div>
+                  )}
                   <div>
                     <p className="font-medium text-slate-800">{m.nome}</p>
                     <p className="text-xs text-slate-400">{calcularIdade(m.data_nascimento)} anos</p>
@@ -1868,9 +1952,17 @@ export default function Home() {
               onClick={() => setTelaDetalhe('nascimento')}
               className="mb-6 flex w-full items-center gap-3 rounded-xl p-2 text-left transition hover:bg-slate-50"
             >
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-teal-100 text-teal-700 font-semibold text-lg">
-                {membroSelecionado.nome.charAt(0).toUpperCase()}
-              </div>
+              {membroSelecionado.foto_url ? (
+                <img
+                  src={membroSelecionado.foto_url}
+                  alt={membroSelecionado.nome}
+                  className="h-12 w-12 shrink-0 rounded-full object-cover"
+                />
+              ) : (
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-teal-100 text-teal-700 font-semibold text-lg">
+                  {membroSelecionado.nome.charAt(0).toUpperCase()}
+                </div>
+              )}
               <div>
                 <h2 className="text-lg font-semibold text-slate-800">{membroSelecionado.nome}</h2>
                 <p className="text-xs text-slate-400">{calcularIdade(membroSelecionado.data_nascimento)} anos · toque para ver a ficha pessoal</p>
@@ -1970,7 +2062,7 @@ export default function Home() {
                         setDoencaOutraNome('');
                       }}
                     >
-                      <option value="doenca">Doença</option>
+                      <option value="doenca">Hipótese diagnóstica</option>
                       <option value="cirurgia">Cirurgia</option>
                     </select>
                     {novoTipoCondicao === 'doenca' ? (
@@ -1980,7 +2072,7 @@ export default function Home() {
                           value={novoNomeCondicao}
                           onChange={(e) => setNovoNomeCondicao(e.target.value)}
                         >
-                          <option value="">selecione a doença</option>
+                          <option value="">selecione a hipótese diagnóstica</option>
                           {categoriasDoencas.map((cat) => (
                             <optgroup key={cat} label={cat}>
                               {doencasComuns.filter((d) => d.categoria === cat).map((d) => (
@@ -1992,7 +2084,7 @@ export default function Home() {
                         {novoNomeCondicao === 'Outra doença (especificar)' && (
                           <input
                             className={inputClasse}
-                            placeholder="qual doença?"
+                            placeholder="qual hipótese diagnóstica?"
                             value={doencaOutraNome}
                             onChange={(e) => setDoencaOutraNome(e.target.value)}
                           />
@@ -2666,6 +2758,50 @@ export default function Home() {
 
             {telaDetalhe === 'nascimento' && (
               <div className="space-y-3">
+                <div className="flex items-center gap-4 rounded-xl bg-slate-50 p-3 mb-2">
+                  {membroSelecionado.foto_url ? (
+                    <img
+                      src={membroSelecionado.foto_url}
+                      alt={membroSelecionado.nome}
+                      className="h-16 w-16 shrink-0 rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-teal-100 text-teal-700 font-semibold text-xl">
+                      {membroSelecionado.nome.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <div className="flex-1 space-y-1">
+                    <p className="text-xs text-slate-400">Foto do perfil</p>
+                    <div className="flex flex-wrap gap-2">
+                      <label className="cursor-pointer rounded-full bg-teal-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-teal-700">
+                        {enviandoFoto ? 'Enviando...' : membroSelecionado.foto_url ? 'Trocar foto' : 'Adicionar foto'}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          disabled={enviandoFoto}
+                          onChange={(e) => {
+                            const arquivo = e.target.files?.[0];
+                            if (arquivo) salvarFotoMembro(arquivo);
+                            e.target.value = '';
+                          }}
+                        />
+                      </label>
+                      {membroSelecionado.foto_url && (
+                        <button
+                          type="button"
+                          disabled={enviandoFoto}
+                          onClick={removerFotoMembro}
+                          className="rounded-full border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-50"
+                        >
+                          Remover
+                        </button>
+                      )}
+                    </div>
+                    {erroFoto && <p className="text-xs text-red-600">{erroFoto}</p>}
+                  </div>
+                </div>
+
                 <div className="space-y-3 mb-2">
                   <div className="grid grid-cols-2 gap-3">
                     <div className="rounded-xl bg-slate-50 p-3">
