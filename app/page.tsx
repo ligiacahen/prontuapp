@@ -39,6 +39,7 @@ type Condicao = {
   status: string;
   relevante_geneticamente: boolean;
   observacao: string | null;
+  orientacoes: string | null;
 };
 
 type Medicacao = {
@@ -50,6 +51,7 @@ type Medicacao = {
   data_inicio: string;
   data_fim: string | null;
   condicao_relacionada_id: string | null;
+  consulta_relacionada_id: string | null;
   classe: string | null;
   observacao: string | null;
 };
@@ -142,6 +144,7 @@ type Consulta = {
   valor_reembolsado: number | null;
   incluir_ir: boolean;
   obs_financeira: string | null;
+  condicao_relacionada_id: string | null;
 };
 
 type Exame = {
@@ -182,8 +185,17 @@ type MedicaoCrescimento = {
   altura_cm: number | null;
 };
 
+type Medico = {
+  id: string;
+  nome: string;
+  especialidade: string | null;
+  telefone: string | null;
+  local: string | null;
+  observacao: string | null;
+};
+
 type Passo = 'login' | 'cadastro' | 'onboarding' | 'painel';
-type Aba = 'geral' | 'condicoes' | 'medicacoes' | 'consultas' | 'exames' | 'vacinas' | 'nascimento' | 'crescimento' | 'riscos';
+type Aba = 'geral' | 'condicoes' | 'medicacoes' | 'consultas' | 'exames' | 'vacinas' | 'nascimento' | 'crescimento' | 'riscos' | 'medicos';
 
 function calcularIdade(dataNascimento: string) {
   const nascimento = new Date(dataNascimento);
@@ -483,6 +495,18 @@ const doencasComuns: { nome: string; categoria: string }[] = [
   { nome: 'Retinose pigmentar', categoria: 'Oftalmológica' },
   { nome: 'Daltonismo (deficiência de percepção de cores)', categoria: 'Oftalmológica' },
   { nome: 'Alta miopia', categoria: 'Oftalmológica' },
+  { nome: 'Dor de barriga', categoria: 'Sintomas comuns (sem diagnóstico fechado)' },
+  { nome: 'Dor de cabeça', categoria: 'Sintomas comuns (sem diagnóstico fechado)' },
+  { nome: 'Dor de ouvido', categoria: 'Sintomas comuns (sem diagnóstico fechado)' },
+  { nome: 'Dor de garganta', categoria: 'Sintomas comuns (sem diagnóstico fechado)' },
+  { nome: 'Febre', categoria: 'Sintomas comuns (sem diagnóstico fechado)' },
+  { nome: 'Tosse', categoria: 'Sintomas comuns (sem diagnóstico fechado)' },
+  { nome: 'Resfriado / Virose', categoria: 'Sintomas comuns (sem diagnóstico fechado)' },
+  { nome: 'Vômito', categoria: 'Sintomas comuns (sem diagnóstico fechado)' },
+  { nome: 'Diarreia', categoria: 'Sintomas comuns (sem diagnóstico fechado)' },
+  { nome: 'Reação alérgica (sem diagnóstico fechado)', categoria: 'Sintomas comuns (sem diagnóstico fechado)' },
+  { nome: 'Dor muscular', categoria: 'Sintomas comuns (sem diagnóstico fechado)' },
+  { nome: 'Mal-estar geral', categoria: 'Sintomas comuns (sem diagnóstico fechado)' },
   { nome: 'Outra doença (especificar)', categoria: 'Outra' },
 ];
 
@@ -550,9 +574,11 @@ export default function Home() {
   const [novoStatusCondicao, setNovoStatusCondicao] = useState('ativa');
   const [novoRelevanteGenetico, setNovoRelevanteGenetico] = useState(false);
   const [novaObservacaoCondicao, setNovaObservacaoCondicao] = useState('');
+  const [novaOrientacaoCondicao, setNovaOrientacaoCondicao] = useState('');
   const [doencaOutraNome, setDoencaOutraNome] = useState('');
   const [erroCondicao, setErroCondicao] = useState('');
   const [condicaoEditandoId, setCondicaoEditandoId] = useState<string | null>(null);
+  const [buscaCondicao, setBuscaCondicao] = useState('');
 
   const [medicacoes, setMedicacoes] = useState<Medicacao[]>([]);
   const [mostrarFormMedicacao, setMostrarFormMedicacao] = useState(false);
@@ -564,6 +590,7 @@ export default function Home() {
   const [usoContinuo, setUsoContinuo] = useState(true);
   const [novaDataFimMed, setNovaDataFimMed] = useState('');
   const [novaCondicaoRelacionada, setNovaCondicaoRelacionada] = useState('');
+  const [novaConsultaRelacionadaMed, setNovaConsultaRelacionadaMed] = useState('');
   const [novaClasseMedicacao, setNovaClasseMedicacao] = useState('');
   const [novaObservacaoMedicacao, setNovaObservacaoMedicacao] = useState('');
   const [erroMedicacao, setErroMedicacao] = useState('');
@@ -587,12 +614,24 @@ export default function Home() {
   const [novoValorReembolsado, setNovoValorReembolsado] = useState('');
   const [novoIncluirIr, setNovoIncluirIr] = useState(false);
   const [novaObsFinanceira, setNovaObsFinanceira] = useState('');
+  const [novaCondicaoRelacionadaConsulta, setNovaCondicaoRelacionadaConsulta] = useState('');
   const [erroConsulta, setErroConsulta] = useState('');
   const [gravandoCampo, setGravandoCampo] = useState<string | null>(null);
   const [consultaEditandoId, setConsultaEditandoId] = useState<string | null>(null);
   const [buscaConsulta, setBuscaConsulta] = useState('');
 
   const [confirmandoExclusaoMembro, setConfirmandoExclusaoMembro] = useState(false);
+
+  const [medicos, setMedicos] = useState<Medico[]>([]);
+  const [mostrarFormMedico, setMostrarFormMedico] = useState(false);
+  const [medicoEditandoId, setMedicoEditandoId] = useState<string | null>(null);
+  const [novoNomeMedico, setNovoNomeMedico] = useState('');
+  const [novaEspecialidadeMedico, setNovaEspecialidadeMedico] = useState('');
+  const [especialidadeOutraMedico, setEspecialidadeOutraMedico] = useState('');
+  const [novoTelefoneMedico, setNovoTelefoneMedico] = useState('');
+  const [novoLocalMedico, setNovoLocalMedico] = useState('');
+  const [novaObsMedico, setNovaObsMedico] = useState('');
+  const [erroMedico, setErroMedico] = useState('');
 
   const [exames, setExames] = useState<Exame[]>([]);
   const [mostrarFormExame, setMostrarFormExame] = useState(false);
@@ -657,6 +696,7 @@ export default function Home() {
       carregarNascimento(membroSelecionado.id);
       carregarCrescimento(membroSelecionado.id);
       carregarRiscosGeneticos(membroSelecionado);
+      carregarMedicos();
     } else {
       setCondicoes([]);
       setMedicacoes([]);
@@ -667,6 +707,7 @@ export default function Home() {
       setCrescimento([]);
       setRiscos(null);
       setHistoricoGeral(null);
+      setMedicos([]);
     }
     setEditandoTipo(false);
     setEditandoObs(false);
@@ -685,7 +726,7 @@ export default function Home() {
   async function carregarCondicoes(membroId: string) {
     const { data, error } = await supabase
       .from('condicao')
-      .select('id, tipo, nome, data_diagnostico_ou_procedimento, status, relevante_geneticamente, observacao')
+      .select('id, tipo, nome, data_diagnostico_ou_procedimento, status, relevante_geneticamente, observacao, orientacoes')
       .eq('membro_id', membroId)
       .order('data_diagnostico_ou_procedimento', { ascending: false });
     if (!error && data) setCondicoes(data);
@@ -694,7 +735,7 @@ export default function Home() {
   async function carregarMedicacoes(membroId: string) {
     const { data, error } = await supabase
       .from('medicacao')
-      .select('id, nome, dosagem, frequencia, horario, data_inicio, data_fim, condicao_relacionada_id, classe, observacao')
+      .select('id, nome, dosagem, frequencia, horario, data_inicio, data_fim, condicao_relacionada_id, consulta_relacionada_id, classe, observacao')
       .eq('membro_id', membroId)
       .order('data_inicio', { ascending: false });
     if (!error && data) setMedicacoes(data);
@@ -703,7 +744,7 @@ export default function Home() {
   async function carregarConsultas(membroId: string) {
     const { data, error } = await supabase
       .from('consulta')
-      .select('id, data_hora, local, motivo, anotacoes, status, especialidade(nome), profissional_saude(nome), data_retorno_sugerida, forma_atendimento, valor_pago, solicitou_reembolso, valor_reembolsado, incluir_ir, obs_financeira')
+      .select('id, data_hora, local, motivo, anotacoes, status, especialidade(nome), profissional_saude(nome), data_retorno_sugerida, forma_atendimento, valor_pago, solicitou_reembolso, valor_reembolsado, incluir_ir, obs_financeira, condicao_relacionada_id')
       .eq('membro_id', membroId)
       .order('data_hora', { ascending: true });
     if (!error && data) setConsultas(data as any);
@@ -780,6 +821,108 @@ export default function Home() {
       .single();
     if (error) throw error;
     return novo.id;
+  }
+
+  // Médicos/profissionais de saúde são guardados por família (não por membro) — por
+  // isso um pediatra cadastrado para um filho já aparece automaticamente para os
+  // irmãos, sem precisar "copiar" nada.
+  async function obterFamiliaId(): Promise<string | null> {
+    const { data: userData } = await supabase.auth.getUser();
+    const { data: meuUsuario } = await supabase
+      .from('usuario')
+      .select('familia_id')
+      .eq('id', userData.user?.id)
+      .single();
+    return meuUsuario?.familia_id || null;
+  }
+
+  async function carregarMedicos() {
+    const familiaId = await obterFamiliaId();
+    if (!familiaId) return;
+    const { data, error } = await supabase
+      .from('profissional_saude')
+      .select('id, nome, especialidade, telefone, local, observacao')
+      .eq('familia_id', familiaId)
+      .order('nome');
+    if (!error && data) setMedicos(data);
+  }
+
+  function abrirNovoMedico() {
+    setMedicoEditandoId(null);
+    setNovoNomeMedico('');
+    setNovaEspecialidadeMedico('');
+    setEspecialidadeOutraMedico('');
+    setNovoTelefoneMedico('');
+    setNovoLocalMedico('');
+    setNovaObsMedico('');
+    setErroMedico('');
+    setMostrarFormMedico(true);
+  }
+
+  function abrirEdicaoMedico(m: Medico) {
+    setMedicoEditandoId(m.id);
+    setNovoNomeMedico(m.nome);
+    if (m.especialidade && !especialidadesMedicas.includes(m.especialidade)) {
+      setNovaEspecialidadeMedico('Outros');
+      setEspecialidadeOutraMedico(m.especialidade);
+    } else {
+      setNovaEspecialidadeMedico(m.especialidade || '');
+      setEspecialidadeOutraMedico('');
+    }
+    setNovoTelefoneMedico(m.telefone || '');
+    setNovoLocalMedico(m.local || '');
+    setNovaObsMedico(m.observacao || '');
+    setErroMedico('');
+    setMostrarFormMedico(true);
+  }
+
+  async function salvarMedico() {
+    setErroMedico('');
+    if (!novoNomeMedico.trim()) {
+      setErroMedico('Preencha ao menos o nome.');
+      return;
+    }
+    const familiaId = await obterFamiliaId();
+    if (!familiaId) return;
+    setCarregando(true);
+
+    const especialidadeFinal =
+      novaEspecialidadeMedico === 'Outros' ? especialidadeOutraMedico.trim() || null : novaEspecialidadeMedico || null;
+
+    const dados = {
+      nome: novoNomeMedico.trim(),
+      especialidade: especialidadeFinal,
+      telefone: novoTelefoneMedico || null,
+      local: novoLocalMedico || null,
+      observacao: novaObsMedico || null,
+    };
+
+    const { error } = medicoEditandoId
+      ? await supabase.from('profissional_saude').update(dados).eq('id', medicoEditandoId)
+      : await supabase.from('profissional_saude').insert({ familia_id: familiaId, ...dados });
+
+    setCarregando(false);
+    if (error) {
+      setErroMedico(error.message);
+      return;
+    }
+    setMedicoEditandoId(null);
+    setMostrarFormMedico(false);
+    await carregarMedicos();
+  }
+
+  async function excluirMedico() {
+    if (!medicoEditandoId) return;
+    setCarregando(true);
+    const { error } = await supabase.from('profissional_saude').delete().eq('id', medicoEditandoId);
+    setCarregando(false);
+    if (error) {
+      setErroMedico(error.message);
+      return;
+    }
+    setMedicoEditandoId(null);
+    setMostrarFormMedico(false);
+    await carregarMedicos();
   }
 
   async function verificarFamilia() {
@@ -915,6 +1058,7 @@ export default function Home() {
     setNovoStatusCondicao('ativa');
     setNovoRelevanteGenetico(false);
     setNovaObservacaoCondicao('');
+    setNovaOrientacaoCondicao('');
     setErroCondicao('');
     setMostrarFormCondicao(true);
   }
@@ -933,6 +1077,7 @@ export default function Home() {
     setNovoStatusCondicao(c.status);
     setNovoRelevanteGenetico(c.relevante_geneticamente);
     setNovaObservacaoCondicao(c.observacao || '');
+    setNovaOrientacaoCondicao(c.orientacoes || '');
     setErroCondicao('');
     setMostrarFormCondicao(true);
   }
@@ -957,6 +1102,7 @@ export default function Home() {
       status: novoStatusCondicao,
       relevante_geneticamente: novoRelevanteGenetico,
       observacao: novaObservacaoCondicao || null,
+      orientacoes: novaOrientacaoCondicao || null,
     };
 
     const { error } = condicaoEditandoId
@@ -976,6 +1122,7 @@ export default function Home() {
     setNovoStatusCondicao('ativa');
     setNovoRelevanteGenetico(false);
     setNovaObservacaoCondicao('');
+    setNovaOrientacaoCondicao('');
     setMostrarFormCondicao(false);
     await carregarCondicoes(membroSelecionado.id);
   }
@@ -1004,6 +1151,7 @@ export default function Home() {
     setUsoContinuo(true);
     setNovaDataFimMed('');
     setNovaCondicaoRelacionada('');
+    setNovaConsultaRelacionadaMed('');
     setNovaClasseMedicacao('');
     setNovaObservacaoMedicacao('');
     setErroMedicacao('');
@@ -1020,6 +1168,7 @@ export default function Home() {
     setUsoContinuo(!m.data_fim);
     setNovaDataFimMed(m.data_fim || '');
     setNovaCondicaoRelacionada(m.condicao_relacionada_id || '');
+    setNovaConsultaRelacionadaMed(m.consulta_relacionada_id || '');
     setNovaClasseMedicacao(m.classe || '');
     setNovaObservacaoMedicacao(m.observacao || '');
     setErroMedicacao('');
@@ -1043,6 +1192,7 @@ export default function Home() {
       data_inicio: novaDataInicioMed,
       data_fim: usoContinuo ? null : (novaDataFimMed || null),
       condicao_relacionada_id: novaCondicaoRelacionada || null,
+      consulta_relacionada_id: novaConsultaRelacionadaMed || null,
       classe: novaClasseMedicacao || null,
       observacao: novaObservacaoMedicacao || null,
     };
@@ -1065,6 +1215,7 @@ export default function Home() {
     setUsoContinuo(true);
     setNovaDataFimMed('');
     setNovaCondicaoRelacionada('');
+    setNovaConsultaRelacionadaMed('');
     setNovaClasseMedicacao('');
     setNovaObservacaoMedicacao('');
     setMostrarFormMedicacao(false);
@@ -1102,6 +1253,7 @@ export default function Home() {
     setNovoValorReembolsado('');
     setNovoIncluirIr(false);
     setNovaObsFinanceira('');
+    setNovaCondicaoRelacionadaConsulta('');
     setErroConsulta('');
     setMostrarFormConsulta(true);
   }
@@ -1129,6 +1281,7 @@ export default function Home() {
     setNovoValorReembolsado(c.valor_reembolsado != null ? String(c.valor_reembolsado) : '');
     setNovoIncluirIr(c.incluir_ir || false);
     setNovaObsFinanceira(c.obs_financeira || '');
+    setNovaCondicaoRelacionadaConsulta(c.condicao_relacionada_id || '');
     setErroConsulta('');
     setMostrarFormConsulta(true);
   }
@@ -1176,6 +1329,7 @@ export default function Home() {
           : null,
         incluir_ir: novoIncluirIr,
         obs_financeira: novaObsFinanceira || null,
+        condicao_relacionada_id: novaCondicaoRelacionadaConsulta || null,
       };
 
       const { error } = consultaEditandoId
@@ -1200,6 +1354,7 @@ export default function Home() {
       setNovoValorReembolsado('');
       setNovoIncluirIr(false);
       setNovaObsFinanceira('');
+      setNovaCondicaoRelacionadaConsulta('');
       setMostrarFormConsulta(false);
       await carregarConsultas(membroSelecionado.id);
     } catch (e: any) {
@@ -1211,6 +1366,7 @@ export default function Home() {
   async function excluirMembro() {
     if (!membroSelecionado) return;
     setCarregando(true);
+    setErro('');
     const membroId = membroSelecionado.id;
     // Apaga registros relacionados primeiro, caso o banco não tenha ON DELETE CASCADE configurado.
     await supabase.from('condicao').delete().eq('membro_id', membroId);
@@ -1218,11 +1374,19 @@ export default function Home() {
     await supabase.from('consulta').delete().eq('membro_id', membroId);
     await supabase.from('exame').delete().eq('membro_id', membroId);
     await supabase.from('vacina').delete().eq('membro_id', membroId);
-    const { error } = await supabase.from('membro').delete().eq('id', membroId);
+    await supabase.from('informacao_nascimento').delete().eq('membro_id', membroId);
+    await supabase.from('medicao_crescimento').delete().eq('membro_id', membroId);
+    const { error, count } = await supabase
+      .from('membro')
+      .delete({ count: 'exact' })
+      .eq('id', membroId);
     setCarregando(false);
     if (error) {
       setErro(error.message);
-      setConfirmandoExclusaoMembro(false);
+      return;
+    }
+    if (!count) {
+      setErro('Não foi possível excluir este membro (sem permissão ou já excluído). Tente sair e entrar na conta novamente.');
       return;
     }
     setConfirmandoExclusaoMembro(false);
@@ -1743,9 +1907,10 @@ export default function Home() {
     'w-full rounded-xl border border-slate-200 py-3 font-medium text-slate-600 transition hover:bg-slate-50';
 
   const secoes: { id: Aba; label: string; icone: string }[] = [
-    { id: 'condicoes', label: 'Hipótese Diagnóstica', icone: '🩺' },
+    { id: 'condicoes', label: 'Evento de Saúde', icone: '🩺' },
     { id: 'medicacoes', label: 'Medicações', icone: '💊' },
     { id: 'consultas', label: 'Consultas', icone: '📅' },
+    { id: 'medicos', label: 'Médicos', icone: '👨‍⚕️' },
     { id: 'exames', label: 'Exames', icone: '🧪' },
     { id: 'vacinas', label: 'Vacinas', icone: '💉' },
     { id: 'nascimento', label: 'Ficha Pessoal', icone: '🪪' },
@@ -2024,10 +2189,31 @@ export default function Home() {
 
             {telaDetalhe === 'condicoes' && (
               <div className="space-y-3">
-                {condicoes.length === 0 && (
-                  <p className="text-sm text-slate-400 text-center py-2">Nenhuma condição registrada ainda.</p>
+                {condicoes.length > 0 && (
+                  <input
+                    className={inputClasse}
+                    placeholder="🔎 buscar por nome, tipo ou status"
+                    value={buscaCondicao}
+                    onChange={(e) => setBuscaCondicao(e.target.value)}
+                  />
                 )}
-                {condicoes.map((c) => (
+                {condicoes.length === 0 && (
+                  <p className="text-sm text-slate-400 text-center py-2">Nenhum evento de saúde registrado ainda.</p>
+                )}
+                {condicoes
+                  .filter((c) => {
+                    const termo = buscaCondicao.trim().toLowerCase();
+                    if (!termo) return true;
+                    return (
+                      c.nome.toLowerCase().includes(termo) ||
+                      (tipoCondicaoLabels[c.tipo] || c.tipo).toLowerCase().includes(termo) ||
+                      (statusCondicaoLabels[c.status] || c.status).toLowerCase().includes(termo)
+                    );
+                  })
+                  .map((c) => {
+                  const consultasLigadas = consultas.filter((cs) => cs.condicao_relacionada_id === c.id);
+                  const medicacoesLigadas = medicacoes.filter((m) => m.condicao_relacionada_id === c.id);
+                  return (
                   <button
                     key={c.id}
                     onClick={() => abrirEdicaoCondicao(c)}
@@ -2044,8 +2230,24 @@ export default function Home() {
                       {c.data_diagnostico_ou_procedimento && ` · ${formatarData(c.data_diagnostico_ou_procedimento)}`}
                     </p>
                     {c.observacao && <p className="text-xs text-slate-500 mt-1">📝 {c.observacao}</p>}
+                    {c.orientacoes && <p className="text-xs text-teal-700 mt-1">💡 {c.orientacoes}</p>}
+                    {(consultasLigadas.length > 0 || medicacoesLigadas.length > 0) && (
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {consultasLigadas.length > 0 && (
+                          <span className="text-xs bg-slate-100 text-slate-600 rounded-full px-2 py-0.5">
+                            📅 {consultasLigadas.length} consulta{consultasLigadas.length > 1 ? 's' : ''}
+                          </span>
+                        )}
+                        {medicacoesLigadas.length > 0 && (
+                          <span className="text-xs bg-slate-100 text-slate-600 rounded-full px-2 py-0.5">
+                            💊 {medicacoesLigadas.length} medicação{medicacoesLigadas.length > 1 ? 'ões' : ''}
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </button>
-                ))}
+                  );
+                })}
 
                 {!mostrarFormCondicao ? (
                   <button onClick={abrirNovaCondicao} className={botaoPrimario}>
@@ -2120,7 +2322,7 @@ export default function Home() {
                     </label>
                     <div>
                       <div className="flex items-center justify-between mb-1">
-                        <label className="text-xs text-slate-400">observação (opcional)</label>
+                        <label className="text-xs text-slate-400">breve relato (opcional)</label>
                         <button
                           type="button"
                           onClick={() => alternarReconhecimentoVoz('obsCondicao', setNovaObservacaoCondicao)}
@@ -2131,10 +2333,29 @@ export default function Home() {
                       </div>
                       <textarea
                         className={inputClasse}
-                        placeholder="observação (opcional)"
+                        placeholder="breve relato (opcional)"
                         rows={2}
                         value={novaObservacaoCondicao}
                         onChange={(e) => setNovaObservacaoCondicao(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs text-slate-400">orientações (opcional)</label>
+                        <button
+                          type="button"
+                          onClick={() => alternarReconhecimentoVoz('orientacaoCondicao', setNovaOrientacaoCondicao)}
+                          className={`shrink-0 rounded-full px-2 py-1 text-xs ${gravandoCampo === 'orientacaoCondicao' ? 'bg-red-100 text-red-700 animate-pulse' : 'bg-slate-100 text-slate-600'}`}
+                        >
+                          🎤 {gravandoCampo === 'orientacaoCondicao' ? 'Ouvindo...' : 'Falar'}
+                        </button>
+                      </div>
+                      <textarea
+                        className={inputClasse}
+                        placeholder="orientações do médico, cuidados a seguir... (opcional)"
+                        rows={2}
+                        value={novaOrientacaoCondicao}
+                        onChange={(e) => setNovaOrientacaoCondicao(e.target.value)}
                       />
                     </div>
                     {erroCondicao && <p className="text-sm text-red-600">{erroCondicao}</p>}
@@ -2179,6 +2400,7 @@ export default function Home() {
                   .map((m) => {
                   const ativa = !m.data_fim || m.data_fim >= new Date().toISOString().slice(0, 10);
                   const condicaoNome = condicoes.find((c) => c.id === m.condicao_relacionada_id)?.nome;
+                  const consultaLigada = consultas.find((cs) => cs.id === m.consulta_relacionada_id);
                   const labelClasse = classesMedicamento.find((c) => c.value === m.classe)?.label;
                   return (
                     <button
@@ -2202,6 +2424,11 @@ export default function Home() {
                       )}
                       {condicaoNome && (
                         <p className="text-xs text-slate-400 mt-1">Para: {condicaoNome}</p>
+                      )}
+                      {consultaLigada && (
+                        <p className="text-xs text-slate-400 mt-1">
+                          Receitada em: {consultaLigada.especialidade?.nome || 'consulta'} de {new Date(consultaLigada.data_hora).toLocaleDateString('pt-BR')}
+                        </p>
                       )}
                       {m.observacao && <p className="text-xs text-slate-500 mt-1">📝 {m.observacao}</p>}
                     </button>
@@ -2265,13 +2492,34 @@ export default function Home() {
                     <select
                       className={inputClasse}
                       value={novaCondicaoRelacionada}
-                      onChange={(e) => setNovaCondicaoRelacionada(e.target.value)}
+                      onChange={(e) => {
+                        setNovaCondicaoRelacionada(e.target.value);
+                        setNovaConsultaRelacionadaMed('');
+                      }}
                     >
-                      <option value="">não relacionado a nenhuma condição específica</option>
+                      <option value="">não relacionado a nenhum evento de saúde específico</option>
                       {condicoes.map((c) => (
                         <option key={c.id} value={c.id}>{c.nome}</option>
                       ))}
                     </select>
+                    <select
+                      className={inputClasse}
+                      value={novaConsultaRelacionadaMed}
+                      onChange={(e) => setNovaConsultaRelacionadaMed(e.target.value)}
+                    >
+                      <option value="">não veio de nenhuma consulta específica</option>
+                      {consultas
+                        .filter((cs) => !novaCondicaoRelacionada || cs.condicao_relacionada_id === novaCondicaoRelacionada)
+                        .map((cs) => (
+                          <option key={cs.id} value={cs.id}>
+                            {(cs.especialidade?.nome || 'Consulta')} · {new Date(cs.data_hora).toLocaleDateString('pt-BR')}
+                            {cs.profissional_saude?.nome ? ` · ${cs.profissional_saude.nome}` : ''}
+                          </option>
+                        ))}
+                    </select>
+                    {novaCondicaoRelacionada && consultas.filter((cs) => cs.condicao_relacionada_id === novaCondicaoRelacionada).length === 0 && (
+                      <p className="text-xs text-slate-400 -mt-1">Nenhuma consulta ligada a esse evento ainda — pode deixar em branco.</p>
+                    )}
                     <select
                       className={inputClasse}
                       value={novaClasseMedicacao}
@@ -2352,6 +2600,7 @@ export default function Home() {
                       : c.status === 'cancelada'
                       ? 'bg-slate-100 text-slate-500'
                       : 'bg-amber-100 text-amber-700';
+                  const condicaoLigadaNome = condicoes.find((cd) => cd.id === c.condicao_relacionada_id)?.nome;
                   return (
                     <button
                       key={c.id}
@@ -2370,6 +2619,9 @@ export default function Home() {
                         {c.local && ` · ${c.local}`}
                       </p>
                       {c.motivo && <p className="text-xs text-slate-400 mt-1">Motivo: {c.motivo}</p>}
+                      {condicaoLigadaNome && (
+                        <p className="text-xs text-slate-400 mt-1">Sobre: {condicaoLigadaNome}</p>
+                      )}
                       {c.anotacoes && <p className="text-xs text-slate-500 mt-1">📝 {c.anotacoes}</p>}
                       {c.data_retorno_sugerida && (
                         <span className="inline-block mt-1 mr-1 text-xs bg-teal-50 text-teal-700 rounded-full px-2 py-0.5">
@@ -2414,9 +2666,20 @@ export default function Home() {
                     <input
                       className={inputClasse}
                       placeholder="profissional (opcional, ex: Dr. João Silva)"
+                      list="lista-medicos-cadastrados"
                       value={novoProfissionalConsulta}
                       onChange={(e) => setNovoProfissionalConsulta(e.target.value)}
                     />
+                    <datalist id="lista-medicos-cadastrados">
+                      {medicos.map((m) => (
+                        <option key={m.id} value={m.nome} />
+                      ))}
+                    </datalist>
+                    {medicos.length > 0 && (
+                      <p className="text-xs text-slate-400 -mt-1">
+                        💡 Digite o mesmo nome de um médico já cadastrado em "Médicos" para reaproveitar os dados dele.
+                      </p>
+                    )}
                     <div>
                       <label className="text-xs text-slate-400 mb-1 block">data e hora</label>
                       <input
@@ -2438,6 +2701,16 @@ export default function Home() {
                       value={novoMotivoConsulta}
                       onChange={(e) => setNovoMotivoConsulta(e.target.value)}
                     />
+                    <select
+                      className={inputClasse}
+                      value={novaCondicaoRelacionadaConsulta}
+                      onChange={(e) => setNovaCondicaoRelacionadaConsulta(e.target.value)}
+                    >
+                      <option value="">essa consulta é sobre qual evento de saúde? (opcional)</option>
+                      {condicoes.map((c) => (
+                        <option key={c.id} value={c.id}>{c.nome}</option>
+                      ))}
+                    </select>
                     <select
                       className={inputClasse}
                       value={novoStatusConsulta}
@@ -2545,6 +2818,96 @@ export default function Home() {
                     {consultaEditandoId && (
                       <button disabled={carregando} onClick={excluirConsulta} className="w-full text-sm text-red-600 pt-1">
                         Excluir esta consulta
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {telaDetalhe === 'medicos' && (
+              <div className="space-y-3">
+                <p className="text-xs text-slate-400">
+                  Esses profissionais ficam disponíveis para todos os membros da família — não precisa cadastrar de novo para um irmão que usa o mesmo médico.
+                </p>
+                {medicos.length === 0 && (
+                  <p className="text-sm text-slate-400 text-center py-2">Nenhum médico cadastrado ainda.</p>
+                )}
+                {medicos.map((m) => (
+                  <button
+                    key={m.id}
+                    onClick={() => abrirEdicaoMedico(m)}
+                    className="w-full rounded-xl border border-slate-100 p-3 text-left transition hover:bg-slate-50"
+                  >
+                    <p className="font-medium text-slate-800">{m.nome} ✎</p>
+                    <p className="text-xs text-slate-400">
+                      {[m.especialidade, m.telefone, m.local].filter(Boolean).join(' · ')}
+                    </p>
+                    {m.observacao && <p className="text-xs text-slate-500 mt-1">📝 {m.observacao}</p>}
+                  </button>
+                ))}
+
+                {!mostrarFormMedico ? (
+                  <button onClick={abrirNovoMedico} className={botaoPrimario}>
+                    + Adicionar médico
+                  </button>
+                ) : (
+                  <div className="space-y-3 rounded-xl border border-slate-100 p-4">
+                    <input
+                      className={inputClasse}
+                      placeholder="nome (ex: Dr. João Silva)"
+                      value={novoNomeMedico}
+                      onChange={(e) => setNovoNomeMedico(e.target.value)}
+                    />
+                    <select
+                      className={inputClasse}
+                      value={novaEspecialidadeMedico}
+                      onChange={(e) => setNovaEspecialidadeMedico(e.target.value)}
+                    >
+                      <option value="">especialidade (opcional)</option>
+                      {especialidadesMedicas.map((e) => (
+                        <option key={e} value={e}>{e}</option>
+                      ))}
+                    </select>
+                    {novaEspecialidadeMedico === 'Outros' && (
+                      <input
+                        className={inputClasse}
+                        placeholder="qual especialidade?"
+                        value={especialidadeOutraMedico}
+                        onChange={(e) => setEspecialidadeOutraMedico(e.target.value)}
+                      />
+                    )}
+                    <input
+                      className={inputClasse}
+                      placeholder="telefone (opcional)"
+                      value={novoTelefoneMedico}
+                      onChange={(e) => setNovoTelefoneMedico(e.target.value)}
+                    />
+                    <input
+                      className={inputClasse}
+                      placeholder="local/clínica (opcional)"
+                      value={novoLocalMedico}
+                      onChange={(e) => setNovoLocalMedico(e.target.value)}
+                    />
+                    <textarea
+                      className={inputClasse}
+                      placeholder="observação (opcional)"
+                      rows={2}
+                      value={novaObsMedico}
+                      onChange={(e) => setNovaObsMedico(e.target.value)}
+                    />
+                    {erroMedico && <p className="text-sm text-red-600">{erroMedico}</p>}
+                    <div className="flex gap-2">
+                      <button disabled={carregando} onClick={salvarMedico} className={botaoPrimario}>
+                        {carregando ? 'Salvando...' : 'Salvar'}
+                      </button>
+                      <button onClick={() => setMostrarFormMedico(false)} className={botaoSecundario}>
+                        Cancelar
+                      </button>
+                    </div>
+                    {medicoEditandoId && (
+                      <button disabled={carregando} onClick={excluirMedico} className="w-full text-sm text-red-600 pt-1">
+                        Excluir este médico
                       </button>
                     )}
                   </div>
