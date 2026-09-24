@@ -2677,7 +2677,7 @@ export default function Home() {
                     </datalist>
                     {medicos.length > 0 && (
                       <p className="text-xs text-slate-400 -mt-1">
-                        💡 Digite o mesmo nome de um médico já cadastrado em "Médicos" para reaproveitar os dados dele.
+                        💡 Digite o mesmo nome de um médico já cadastrado em “Médicos” para reaproveitar os dados dele.
                       </p>
                     )}
                     <div>
