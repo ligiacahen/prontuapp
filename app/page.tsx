@@ -40,6 +40,8 @@ type Condicao = {
   relevante_geneticamente: boolean;
   observacao: string | null;
   orientacoes: string | null;
+  medico: string | null;
+  evento_relacionado_id: string | null;
 };
 
 type Medicacao = {
@@ -54,6 +56,7 @@ type Medicacao = {
   consulta_relacionada_id: string | null;
   classe: string | null;
   observacao: string | null;
+  medico_receitou: string | null;
 };
 
 const classesMedicamento: { value: string; label: string }[] = [
@@ -195,7 +198,7 @@ type Medico = {
 };
 
 type Passo = 'login' | 'cadastro' | 'onboarding' | 'painel';
-type Aba = 'geral' | 'condicoes' | 'medicacoes' | 'consultas' | 'exames' | 'vacinas' | 'nascimento' | 'crescimento' | 'riscos' | 'medicos';
+type Aba = 'geral' | 'condicoes' | 'medicacoes' | 'consultas' | 'exames' | 'vacinas' | 'nascimento' | 'crescimento' | 'riscos' | 'medicos' | 'novoregistro';
 
 function calcularIdade(dataNascimento: string) {
   const nascimento = new Date(dataNascimento);
@@ -633,6 +636,62 @@ export default function Home() {
   const [novaObsMedico, setNovaObsMedico] = useState('');
   const [erroMedico, setErroMedico] = useState('');
 
+  // Estados do fluxo "+ Novo Registro" — um formulário enxuto e único pra criar
+  // Evento de Saúde, Cirurgia, Consulta ou Medicação rapidamente, já ligando um ao
+  // outro quando fizer sentido. Os registros criados aqui são reais (vão pras mesmas
+  // tabelas/telas de sempre) — só ficam com menos campos preenchidos, pra completar
+  // depois em Evento de Saúde / Consultas / Medicações.
+  const [nrTipo, setNrTipo] = useState<'evento' | 'cirurgia' | 'consulta' | 'medicamento' | null>(null);
+  const [nrBusca, setNrBusca] = useState('');
+  const [nrSalvo, setNrSalvo] = useState(false);
+  const [erroNovoRegistro, setErroNovoRegistro] = useState('');
+
+  // Evento de saúde (doença)
+  const [nrEventoNome, setNrEventoNome] = useState('');
+  const [nrEventoOutroNome, setNrEventoOutroNome] = useState('');
+  const [nrEventoData, setNrEventoData] = useState('');
+  const [nrEventoCronica, setNrEventoCronica] = useState(false);
+  const [nrEventoRelato, setNrEventoRelato] = useState('');
+  const [nrEventoGerouConsulta, setNrEventoGerouConsulta] = useState(false);
+  const [nrEventoGerouMedicamento, setNrEventoGerouMedicamento] = useState(false);
+
+  // Cirurgia
+  const [nrCirurgiaNome, setNrCirurgiaNome] = useState('');
+  const [nrCirurgiaData, setNrCirurgiaData] = useState('');
+  const [nrCirurgiaMedico, setNrCirurgiaMedico] = useState('');
+  const [nrCirurgiaRelato, setNrCirurgiaRelato] = useState('');
+  const [nrCirurgiaEventoRelacionado, setNrCirurgiaEventoRelacionado] = useState('');
+  const [nrCirurgiaGerouMedicamento, setNrCirurgiaGerouMedicamento] = useState(false);
+
+  // Consulta
+  const [nrConsultaEspecialidade, setNrConsultaEspecialidade] = useState('');
+  const [nrConsultaEspecialidadeOutro, setNrConsultaEspecialidadeOutro] = useState('');
+  const [nrConsultaMedico, setNrConsultaMedico] = useState('');
+  const [nrConsultaData, setNrConsultaData] = useState('');
+  const [nrConsultaRotina, setNrConsultaRotina] = useState(false);
+  const [nrConsultaEventoRelacionado, setNrConsultaEventoRelacionado] = useState('');
+  const [nrConsultaObs, setNrConsultaObs] = useState('');
+  const [nrConsultaGerouMedicamento, setNrConsultaGerouMedicamento] = useState(false);
+
+  // Medicamento
+  const [nrMedNome, setNrMedNome] = useState('');
+  const [nrMedDosagem, setNrMedDosagem] = useState('');
+  const [nrMedData, setNrMedData] = useState('');
+  const [nrMedUsoContinuo, setNrMedUsoContinuo] = useState(true);
+  const [nrMedDataFim, setNrMedDataFim] = useState('');
+  const [nrMedEventoRelacionado, setNrMedEventoRelacionado] = useState('');
+  const [nrMedMedicoReceitou, setNrMedMedicoReceitou] = useState('');
+  const [nrMedObs, setNrMedObs] = useState('');
+
+  // Campos "gerou consulta" / "gerou medicamento" inline (compartilhados pelos 3 fluxos
+  // que podem disparar essas mini-seções: evento, cirurgia e consulta)
+  const [nrSubConsultaEspecialidade, setNrSubConsultaEspecialidade] = useState('');
+  const [nrSubConsultaMedico, setNrSubConsultaMedico] = useState('');
+  const [nrSubConsultaData, setNrSubConsultaData] = useState('');
+  const [nrSubMedNome, setNrSubMedNome] = useState('');
+  const [nrSubMedDosagem, setNrSubMedDosagem] = useState('');
+  const [nrSubMedUsoContinuo, setNrSubMedUsoContinuo] = useState(true);
+
   const [exames, setExames] = useState<Exame[]>([]);
   const [mostrarFormExame, setMostrarFormExame] = useState(false);
   const [novoNomeExame, setNovoNomeExame] = useState('');
@@ -726,7 +785,7 @@ export default function Home() {
   async function carregarCondicoes(membroId: string) {
     const { data, error } = await supabase
       .from('condicao')
-      .select('id, tipo, nome, data_diagnostico_ou_procedimento, status, relevante_geneticamente, observacao, orientacoes')
+      .select('id, tipo, nome, data_diagnostico_ou_procedimento, status, relevante_geneticamente, observacao, orientacoes, medico, evento_relacionado_id')
       .eq('membro_id', membroId)
       .order('data_diagnostico_ou_procedimento', { ascending: false });
     if (!error && data) setCondicoes(data);
@@ -735,7 +794,7 @@ export default function Home() {
   async function carregarMedicacoes(membroId: string) {
     const { data, error } = await supabase
       .from('medicacao')
-      .select('id, nome, dosagem, frequencia, horario, data_inicio, data_fim, condicao_relacionada_id, consulta_relacionada_id, classe, observacao')
+      .select('id, nome, dosagem, frequencia, horario, data_inicio, data_fim, condicao_relacionada_id, consulta_relacionada_id, classe, observacao, medico_receitou')
       .eq('membro_id', membroId)
       .order('data_inicio', { ascending: false });
     if (!error && data) setMedicacoes(data);
@@ -923,6 +982,209 @@ export default function Home() {
     setMedicoEditandoId(null);
     setMostrarFormMedico(false);
     await carregarMedicos();
+  }
+
+  // --- Fluxo "+ Novo Registro" ---
+
+  function limparNovoRegistro() {
+    setNrEventoNome(''); setNrEventoOutroNome(''); setNrEventoData(''); setNrEventoCronica(false);
+    setNrEventoRelato(''); setNrEventoGerouConsulta(false); setNrEventoGerouMedicamento(false);
+    setNrCirurgiaNome(''); setNrCirurgiaData(''); setNrCirurgiaMedico(''); setNrCirurgiaRelato('');
+    setNrCirurgiaEventoRelacionado(''); setNrCirurgiaGerouMedicamento(false);
+    setNrConsultaEspecialidade(''); setNrConsultaEspecialidadeOutro(''); setNrConsultaMedico('');
+    setNrConsultaData(''); setNrConsultaRotina(false); setNrConsultaEventoRelacionado('');
+    setNrConsultaObs(''); setNrConsultaGerouMedicamento(false);
+    setNrMedNome(''); setNrMedDosagem(''); setNrMedData(''); setNrMedUsoContinuo(true);
+    setNrMedDataFim(''); setNrMedEventoRelacionado(''); setNrMedMedicoReceitou(''); setNrMedObs('');
+    setNrSubConsultaEspecialidade(''); setNrSubConsultaMedico(''); setNrSubConsultaData('');
+    setNrSubMedNome(''); setNrSubMedDosagem(''); setNrSubMedUsoContinuo(true);
+    setErroNovoRegistro('');
+  }
+
+  async function criarConsultaRapida(opts: {
+    membroId: string;
+    especialidade: string;
+    medico: string;
+    data: string;
+    condicaoId: string | null;
+    familiaId: string | null;
+    observacao?: string;
+  }): Promise<string> {
+    const especialidadeId = opts.especialidade ? await resolverEspecialidade(opts.especialidade) : null;
+    const profissionalId = opts.medico && opts.familiaId ? await resolverProfissional(opts.medico, opts.familiaId) : null;
+    const { data: nova, error } = await supabase
+      .from('consulta')
+      .insert({
+        membro_id: opts.membroId,
+        especialidade_id: especialidadeId,
+        profissional_id: profissionalId,
+        data_hora: opts.data || new Date().toISOString(),
+        status: 'realizada',
+        condicao_relacionada_id: opts.condicaoId,
+        anotacoes: opts.observacao || null,
+        origem_agendamento: 'manual',
+      })
+      .select('id')
+      .single();
+    if (error) throw error;
+    return nova.id as string;
+  }
+
+  async function criarMedicamentoRapido(opts: {
+    membroId: string;
+    nome: string;
+    dosagem?: string;
+    dataInicio?: string;
+    usoContinuo: boolean;
+    dataFim?: string;
+    condicaoId: string | null;
+    consultaId?: string | null;
+    medicoReceitou?: string;
+    observacao?: string;
+  }): Promise<void> {
+    if (!opts.nome || !opts.nome.trim()) return;
+    const { error } = await supabase.from('medicacao').insert({
+      membro_id: opts.membroId,
+      nome: opts.nome.trim(),
+      dosagem: opts.dosagem || null,
+      data_inicio: opts.dataInicio || new Date().toISOString().slice(0, 10),
+      data_fim: opts.usoContinuo ? null : (opts.dataFim || null),
+      condicao_relacionada_id: opts.condicaoId || null,
+      consulta_relacionada_id: opts.consultaId || null,
+      medico_receitou: opts.medicoReceitou || null,
+      observacao: opts.observacao || null,
+    });
+    if (error) throw error;
+  }
+
+  async function salvarNovoRegistro() {
+    if (!membroSelecionado || !nrTipo) return;
+    const membroId = membroSelecionado.id;
+    setErroNovoRegistro('');
+    setNrSalvo(false);
+    setCarregando(true);
+    try {
+      const familiaId = await obterFamiliaId();
+
+      if (nrTipo === 'evento') {
+        const nomeFinal = nrEventoNome === 'Outra doença (especificar)' ? nrEventoOutroNome.trim() : nrEventoNome;
+        if (!nomeFinal) throw new Error('Escolha ou digite qual é o evento de saúde.');
+        const { data: novaCondicao, error: erroCondicao } = await supabase
+          .from('condicao')
+          .insert({
+            membro_id: membroId,
+            tipo: 'doenca',
+            nome: nomeFinal,
+            data_diagnostico_ou_procedimento: nrEventoData || null,
+            status: nrEventoCronica ? 'cronica' : 'ativa',
+            relevante_geneticamente: false,
+            observacao: nrEventoRelato || null,
+          })
+          .select('id')
+          .single();
+        if (erroCondicao) throw erroCondicao;
+        const condicaoId = novaCondicao.id as string;
+
+        let consultaId: string | null = null;
+        if (nrEventoGerouConsulta) {
+          consultaId = await criarConsultaRapida({
+            membroId,
+            especialidade: nrSubConsultaEspecialidade,
+            medico: nrSubConsultaMedico,
+            data: nrSubConsultaData,
+            condicaoId,
+            familiaId,
+          });
+        }
+        if (nrEventoGerouMedicamento) {
+          await criarMedicamentoRapido({
+            membroId,
+            nome: nrSubMedNome,
+            dosagem: nrSubMedDosagem,
+            usoContinuo: nrSubMedUsoContinuo,
+            condicaoId,
+            consultaId,
+          });
+        }
+      } else if (nrTipo === 'cirurgia') {
+        if (!nrCirurgiaNome.trim()) throw new Error('Escreva qual foi a cirurgia.');
+        const { data: novaCirurgia, error: erroCirurgia } = await supabase
+          .from('condicao')
+          .insert({
+            membro_id: membroId,
+            tipo: 'cirurgia',
+            nome: nrCirurgiaNome.trim(),
+            data_diagnostico_ou_procedimento: nrCirurgiaData || null,
+            status: 'resolvida',
+            relevante_geneticamente: false,
+            observacao: nrCirurgiaRelato || null,
+            medico: nrCirurgiaMedico || null,
+            evento_relacionado_id: nrCirurgiaEventoRelacionado || null,
+          })
+          .select('id')
+          .single();
+        if (erroCirurgia) throw erroCirurgia;
+        const cirurgiaId = novaCirurgia.id as string;
+        if (nrCirurgiaGerouMedicamento) {
+          await criarMedicamentoRapido({
+            membroId,
+            nome: nrSubMedNome,
+            dosagem: nrSubMedDosagem,
+            usoContinuo: nrSubMedUsoContinuo,
+            condicaoId: cirurgiaId,
+            consultaId: null,
+          });
+        }
+      } else if (nrTipo === 'consulta') {
+        const especialidadeFinal = nrConsultaEspecialidade === 'Outros' ? nrConsultaEspecialidadeOutro.trim() : nrConsultaEspecialidade;
+        if (!especialidadeFinal || !nrConsultaData) throw new Error('Preencha ao menos a especialidade e a data.');
+        const condicaoEscolhida = nrConsultaRotina ? null : (nrConsultaEventoRelacionado || null);
+        const consultaId = await criarConsultaRapida({
+          membroId,
+          especialidade: especialidadeFinal,
+          medico: nrConsultaMedico,
+          data: nrConsultaData,
+          condicaoId: condicaoEscolhida,
+          familiaId,
+          observacao: nrConsultaObs,
+        });
+        if (nrConsultaGerouMedicamento) {
+          await criarMedicamentoRapido({
+            membroId,
+            nome: nrSubMedNome,
+            dosagem: nrSubMedDosagem,
+            usoContinuo: nrSubMedUsoContinuo,
+            condicaoId: condicaoEscolhida,
+            consultaId,
+          });
+        }
+      } else if (nrTipo === 'medicamento') {
+        if (!nrMedNome.trim() || !nrMedData) throw new Error('Preencha ao menos o nome e a data de início.');
+        await criarMedicamentoRapido({
+          membroId,
+          nome: nrMedNome,
+          dosagem: nrMedDosagem,
+          dataInicio: nrMedData,
+          usoContinuo: nrMedUsoContinuo,
+          dataFim: nrMedDataFim,
+          condicaoId: nrMedEventoRelacionado || null,
+          medicoReceitou: nrMedMedicoReceitou,
+          observacao: nrMedObs,
+        });
+      }
+
+      await Promise.all([
+        carregarCondicoes(membroId),
+        carregarConsultas(membroId),
+        carregarMedicacoes(membroId),
+      ]);
+      limparNovoRegistro();
+      setNrSalvo(true);
+    } catch (e: any) {
+      setErroNovoRegistro(e.message || 'Erro ao salvar.');
+    } finally {
+      setCarregando(false);
+    }
   }
 
   async function verificarFamilia() {
@@ -1907,6 +2169,7 @@ export default function Home() {
     'w-full rounded-xl border border-slate-200 py-3 font-medium text-slate-600 transition hover:bg-slate-50';
 
   const secoes: { id: Aba; label: string; icone: string }[] = [
+    { id: 'novoregistro', label: '+ Novo Registro', icone: '➕' },
     { id: 'condicoes', label: 'Evento de Saúde', icone: '🩺' },
     { id: 'medicacoes', label: 'Medicações', icone: '💊' },
     { id: 'consultas', label: 'Consultas', icone: '📅' },
@@ -2186,6 +2449,408 @@ export default function Home() {
                 {secoes.find((s) => s.id === telaDetalhe)?.label}
               </h2>
             </div>
+
+            {telaDetalhe === 'novoregistro' && (
+              <div className="space-y-4">
+                <p className="text-sm text-slate-500">
+                  Escolha o que você quer registrar. Os campos aqui são resumidos — dá pra completar mais detalhes depois na tela de cada um.
+                </p>
+                <datalist id="lista-medicos-cadastrados">
+                  {medicos.map((m) => (
+                    <option key={m.id} value={m.nome} />
+                  ))}
+                </datalist>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { id: 'evento' as const, label: 'Evento de Saúde', icone: '🩺' },
+                    { id: 'cirurgia' as const, label: 'Cirurgia', icone: '🔪' },
+                    { id: 'consulta' as const, label: 'Consulta', icone: '📅' },
+                    { id: 'medicamento' as const, label: 'Medicamento', icone: '💊' },
+                  ].map((op) => (
+                    <button
+                      key={op.id}
+                      onClick={() => {
+                        setNrTipo(op.id);
+                        setNrBusca('');
+                        setNrSalvo(false);
+                        setErroNovoRegistro('');
+                      }}
+                      className={`rounded-xl border p-4 text-center transition ${nrTipo === op.id ? 'border-teal-500 bg-teal-50' : 'border-slate-200 hover:bg-slate-50'}`}
+                    >
+                      <div className="text-2xl">{op.icone}</div>
+                      <div className="text-sm font-medium text-slate-700 mt-1">{op.label}</div>
+                    </button>
+                  ))}
+                </div>
+
+                {nrSalvo && (
+                  <p className="text-sm text-teal-700 bg-teal-50 rounded-xl p-3">
+                    ✓ Salvo! Você pode completar mais detalhes a qualquer momento na tela correspondente.
+                  </p>
+                )}
+
+                {nrTipo === 'evento' && (
+                  <div className="space-y-3 rounded-xl border border-slate-100 p-4">
+                    <input
+                      className={inputClasse}
+                      placeholder="🔎 buscar evento de saúde já cadastrado"
+                      value={nrBusca}
+                      onChange={(e) => setNrBusca(e.target.value)}
+                    />
+                    {nrBusca.trim() && (
+                      <div className="space-y-1">
+                        {condicoes
+                          .filter((c) => c.tipo === 'doenca' && c.nome.toLowerCase().includes(nrBusca.trim().toLowerCase()))
+                          .slice(0, 5)
+                          .map((c) => (
+                            <button
+                              key={c.id}
+                              onClick={() => { setTelaDetalhe('condicoes'); abrirEdicaoCondicao(c); }}
+                              className="w-full text-left text-sm rounded-lg bg-slate-50 px-3 py-2 hover:bg-slate-100"
+                            >
+                              {c.nome}{c.data_diagnostico_ou_procedimento && ` · ${formatarData(c.data_diagnostico_ou_procedimento)}`}
+                            </button>
+                          ))}
+                        {condicoes.filter((c) => c.tipo === 'doenca' && c.nome.toLowerCase().includes(nrBusca.trim().toLowerCase())).length === 0 && (
+                          <p className="text-xs text-slate-400">Nenhum encontrado — pode cadastrar um novo abaixo.</p>
+                        )}
+                      </div>
+                    )}
+                    <p className="text-xs font-medium text-slate-500 pt-1">Novo evento de saúde</p>
+                    <select className={inputClasse} value={nrEventoNome} onChange={(e) => setNrEventoNome(e.target.value)}>
+                      <option value="">qual o evento (doença)?</option>
+                      {categoriasDoencas.map((cat) => (
+                        <optgroup key={cat} label={cat}>
+                          {doencasComuns.filter((d) => d.categoria === cat).map((d) => (
+                            <option key={d.nome} value={d.nome}>{d.nome}</option>
+                          ))}
+                        </optgroup>
+                      ))}
+                    </select>
+                    {nrEventoNome === 'Outra doença (especificar)' && (
+                      <input
+                        className={inputClasse}
+                        placeholder="qual evento de saúde?"
+                        value={nrEventoOutroNome}
+                        onChange={(e) => setNrEventoOutroNome(e.target.value)}
+                      />
+                    )}
+                    <input className={inputClasse} type="date" value={nrEventoData} onChange={(e) => setNrEventoData(e.target.value)} />
+                    <label className="flex items-center gap-2 text-sm text-slate-600">
+                      <input type="checkbox" checked={nrEventoCronica} onChange={(e) => setNrEventoCronica(e.target.checked)} />
+                      É crônica / contínua
+                    </label>
+                    <label className="flex items-center gap-2 text-sm text-slate-600">
+                      <input type="checkbox" checked={nrEventoGerouConsulta} onChange={(e) => setNrEventoGerouConsulta(e.target.checked)} />
+                      Gerou consulta
+                    </label>
+                    {nrEventoGerouConsulta && (
+                      <div className="ml-2 space-y-2 border-l-2 border-teal-100 pl-3">
+                        <select className={inputClasse} value={nrSubConsultaEspecialidade} onChange={(e) => setNrSubConsultaEspecialidade(e.target.value)}>
+                          <option value="">especialidade</option>
+                          {especialidadesMedicas.map((esp) => (
+                            <option key={esp} value={esp}>{esp}</option>
+                          ))}
+                        </select>
+                        <input
+                          className={inputClasse}
+                          placeholder="médico (opcional)"
+                          list="lista-medicos-cadastrados"
+                          value={nrSubConsultaMedico}
+                          onChange={(e) => setNrSubConsultaMedico(e.target.value)}
+                        />
+                        <input className={inputClasse} type="date" value={nrSubConsultaData} onChange={(e) => setNrSubConsultaData(e.target.value)} />
+                      </div>
+                    )}
+                    <label className="flex items-center gap-2 text-sm text-slate-600">
+                      <input type="checkbox" checked={nrEventoGerouMedicamento} onChange={(e) => setNrEventoGerouMedicamento(e.target.checked)} />
+                      Gerou medicamento
+                    </label>
+                    {nrEventoGerouMedicamento && (
+                      <div className="ml-2 space-y-2 border-l-2 border-teal-100 pl-3">
+                        <input className={inputClasse} placeholder="nome do remédio" value={nrSubMedNome} onChange={(e) => setNrSubMedNome(e.target.value)} />
+                        <input className={inputClasse} placeholder="dosagem (opcional)" value={nrSubMedDosagem} onChange={(e) => setNrSubMedDosagem(e.target.value)} />
+                        <label className="flex items-center gap-2 text-sm text-slate-600">
+                          <input type="checkbox" checked={nrSubMedUsoContinuo} onChange={(e) => setNrSubMedUsoContinuo(e.target.checked)} />
+                          Uso contínuo
+                        </label>
+                      </div>
+                    )}
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs text-slate-400">breve relato (opcional)</label>
+                        <button
+                          type="button"
+                          onClick={() => alternarReconhecimentoVoz('nrEventoRelato', setNrEventoRelato)}
+                          className={`shrink-0 rounded-full px-2 py-1 text-xs ${gravandoCampo === 'nrEventoRelato' ? 'bg-red-100 text-red-700 animate-pulse' : 'bg-slate-100 text-slate-600'}`}
+                        >
+                          🎤 {gravandoCampo === 'nrEventoRelato' ? 'Ouvindo...' : 'Falar'}
+                        </button>
+                      </div>
+                      <textarea className={inputClasse} rows={2} value={nrEventoRelato} onChange={(e) => setNrEventoRelato(e.target.value)} />
+                    </div>
+                    {erroNovoRegistro && <p className="text-sm text-red-600">{erroNovoRegistro}</p>}
+                    <button disabled={carregando} onClick={salvarNovoRegistro} className={botaoPrimario}>
+                      {carregando ? 'Salvando...' : 'Salvar'}
+                    </button>
+                  </div>
+                )}
+
+                {nrTipo === 'cirurgia' && (
+                  <div className="space-y-3 rounded-xl border border-slate-100 p-4">
+                    <input
+                      className={inputClasse}
+                      placeholder="🔎 buscar cirurgia já cadastrada"
+                      value={nrBusca}
+                      onChange={(e) => setNrBusca(e.target.value)}
+                    />
+                    {nrBusca.trim() && (
+                      <div className="space-y-1">
+                        {condicoes
+                          .filter((c) => c.tipo === 'cirurgia' && c.nome.toLowerCase().includes(nrBusca.trim().toLowerCase()))
+                          .slice(0, 5)
+                          .map((c) => (
+                            <button
+                              key={c.id}
+                              onClick={() => { setTelaDetalhe('condicoes'); abrirEdicaoCondicao(c); }}
+                              className="w-full text-left text-sm rounded-lg bg-slate-50 px-3 py-2 hover:bg-slate-100"
+                            >
+                              {c.nome}{c.data_diagnostico_ou_procedimento && ` · ${formatarData(c.data_diagnostico_ou_procedimento)}`}
+                            </button>
+                          ))}
+                        {condicoes.filter((c) => c.tipo === 'cirurgia' && c.nome.toLowerCase().includes(nrBusca.trim().toLowerCase())).length === 0 && (
+                          <p className="text-xs text-slate-400">Nenhuma encontrada — pode cadastrar uma nova abaixo.</p>
+                        )}
+                      </div>
+                    )}
+                    <p className="text-xs font-medium text-slate-500 pt-1">Nova cirurgia</p>
+                    <input className={inputClasse} placeholder="qual cirurgia" value={nrCirurgiaNome} onChange={(e) => setNrCirurgiaNome(e.target.value)} />
+                    <input className={inputClasse} type="date" value={nrCirurgiaData} onChange={(e) => setNrCirurgiaData(e.target.value)} />
+                    <input
+                      className={inputClasse}
+                      placeholder="médico (opcional)"
+                      list="lista-medicos-cadastrados"
+                      value={nrCirurgiaMedico}
+                      onChange={(e) => setNrCirurgiaMedico(e.target.value)}
+                    />
+                    <select className={inputClasse} value={nrCirurgiaEventoRelacionado} onChange={(e) => setNrCirurgiaEventoRelacionado(e.target.value)}>
+                      <option value="">relacionada a algum evento de saúde? (opcional)</option>
+                      {condicoes.filter((c) => c.tipo === 'doenca').map((c) => (
+                        <option key={c.id} value={c.id}>{c.nome}</option>
+                      ))}
+                    </select>
+                    <label className="flex items-center gap-2 text-sm text-slate-600">
+                      <input type="checkbox" checked={nrCirurgiaGerouMedicamento} onChange={(e) => setNrCirurgiaGerouMedicamento(e.target.checked)} />
+                      Gerou medicamento
+                    </label>
+                    {nrCirurgiaGerouMedicamento && (
+                      <div className="ml-2 space-y-2 border-l-2 border-teal-100 pl-3">
+                        <input className={inputClasse} placeholder="nome do remédio" value={nrSubMedNome} onChange={(e) => setNrSubMedNome(e.target.value)} />
+                        <input className={inputClasse} placeholder="dosagem (opcional)" value={nrSubMedDosagem} onChange={(e) => setNrSubMedDosagem(e.target.value)} />
+                        <label className="flex items-center gap-2 text-sm text-slate-600">
+                          <input type="checkbox" checked={nrSubMedUsoContinuo} onChange={(e) => setNrSubMedUsoContinuo(e.target.checked)} />
+                          Uso contínuo
+                        </label>
+                      </div>
+                    )}
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs text-slate-400">breve relato (opcional)</label>
+                        <button
+                          type="button"
+                          onClick={() => alternarReconhecimentoVoz('nrCirurgiaRelato', setNrCirurgiaRelato)}
+                          className={`shrink-0 rounded-full px-2 py-1 text-xs ${gravandoCampo === 'nrCirurgiaRelato' ? 'bg-red-100 text-red-700 animate-pulse' : 'bg-slate-100 text-slate-600'}`}
+                        >
+                          🎤 {gravandoCampo === 'nrCirurgiaRelato' ? 'Ouvindo...' : 'Falar'}
+                        </button>
+                      </div>
+                      <textarea className={inputClasse} rows={2} value={nrCirurgiaRelato} onChange={(e) => setNrCirurgiaRelato(e.target.value)} />
+                    </div>
+                    {erroNovoRegistro && <p className="text-sm text-red-600">{erroNovoRegistro}</p>}
+                    <button disabled={carregando} onClick={salvarNovoRegistro} className={botaoPrimario}>
+                      {carregando ? 'Salvando...' : 'Salvar'}
+                    </button>
+                  </div>
+                )}
+
+                {nrTipo === 'consulta' && (
+                  <div className="space-y-3 rounded-xl border border-slate-100 p-4">
+                    <input
+                      className={inputClasse}
+                      placeholder="🔎 buscar consulta já cadastrada"
+                      value={nrBusca}
+                      onChange={(e) => setNrBusca(e.target.value)}
+                    />
+                    {nrBusca.trim() && (
+                      <div className="space-y-1">
+                        {consultas
+                          .filter((c) =>
+                            (c.especialidade?.nome || '').toLowerCase().includes(nrBusca.trim().toLowerCase()) ||
+                            (c.profissional_saude?.nome || '').toLowerCase().includes(nrBusca.trim().toLowerCase())
+                          )
+                          .slice(0, 5)
+                          .map((c) => (
+                            <button
+                              key={c.id}
+                              onClick={() => { setTelaDetalhe('consultas'); abrirEdicaoConsulta(c); }}
+                              className="w-full text-left text-sm rounded-lg bg-slate-50 px-3 py-2 hover:bg-slate-100"
+                            >
+                              {c.especialidade?.nome || 'Consulta'} · {new Date(c.data_hora).toLocaleDateString('pt-BR')}
+                            </button>
+                          ))}
+                      </div>
+                    )}
+                    <p className="text-xs font-medium text-slate-500 pt-1">Nova consulta</p>
+                    <select className={inputClasse} value={nrConsultaEspecialidade} onChange={(e) => setNrConsultaEspecialidade(e.target.value)}>
+                      <option value="">especialidade</option>
+                      {especialidadesMedicas.map((esp) => (
+                        <option key={esp} value={esp}>{esp}</option>
+                      ))}
+                    </select>
+                    {nrConsultaEspecialidade === 'Outros' && (
+                      <input
+                        className={inputClasse}
+                        placeholder="qual especialidade?"
+                        value={nrConsultaEspecialidadeOutro}
+                        onChange={(e) => setNrConsultaEspecialidadeOutro(e.target.value)}
+                      />
+                    )}
+                    <input
+                      className={inputClasse}
+                      placeholder="médico (opcional)"
+                      list="lista-medicos-cadastrados"
+                      value={nrConsultaMedico}
+                      onChange={(e) => setNrConsultaMedico(e.target.value)}
+                    />
+                    <input className={inputClasse} type="datetime-local" value={nrConsultaData} onChange={(e) => setNrConsultaData(e.target.value)} />
+                    <label className="flex items-center gap-2 text-sm text-slate-600">
+                      <input
+                        type="checkbox"
+                        checked={nrConsultaRotina}
+                        onChange={(e) => {
+                          setNrConsultaRotina(e.target.checked);
+                          if (e.target.checked) setNrConsultaEventoRelacionado('');
+                        }}
+                      />
+                      Consulta de rotina (não ligada a nenhum evento de saúde)
+                    </label>
+                    {!nrConsultaRotina && (
+                      <select className={inputClasse} value={nrConsultaEventoRelacionado} onChange={(e) => setNrConsultaEventoRelacionado(e.target.value)}>
+                        <option value="">ligada a qual evento de saúde?</option>
+                        {condicoes.map((c) => (
+                          <option key={c.id} value={c.id}>{c.nome}</option>
+                        ))}
+                      </select>
+                    )}
+                    <label className="flex items-center gap-2 text-sm text-slate-600">
+                      <input type="checkbox" checked={nrConsultaGerouMedicamento} onChange={(e) => setNrConsultaGerouMedicamento(e.target.checked)} />
+                      Gerou medicamento
+                    </label>
+                    {nrConsultaGerouMedicamento && (
+                      <div className="ml-2 space-y-2 border-l-2 border-teal-100 pl-3">
+                        <input className={inputClasse} placeholder="nome do remédio" value={nrSubMedNome} onChange={(e) => setNrSubMedNome(e.target.value)} />
+                        <input className={inputClasse} placeholder="dosagem (opcional)" value={nrSubMedDosagem} onChange={(e) => setNrSubMedDosagem(e.target.value)} />
+                        <label className="flex items-center gap-2 text-sm text-slate-600">
+                          <input type="checkbox" checked={nrSubMedUsoContinuo} onChange={(e) => setNrSubMedUsoContinuo(e.target.checked)} />
+                          Uso contínuo
+                        </label>
+                      </div>
+                    )}
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs text-slate-400">observação (opcional)</label>
+                        <button
+                          type="button"
+                          onClick={() => alternarReconhecimentoVoz('nrConsultaObs', setNrConsultaObs)}
+                          className={`shrink-0 rounded-full px-2 py-1 text-xs ${gravandoCampo === 'nrConsultaObs' ? 'bg-red-100 text-red-700 animate-pulse' : 'bg-slate-100 text-slate-600'}`}
+                        >
+                          🎤 {gravandoCampo === 'nrConsultaObs' ? 'Ouvindo...' : 'Falar'}
+                        </button>
+                      </div>
+                      <textarea className={inputClasse} rows={2} value={nrConsultaObs} onChange={(e) => setNrConsultaObs(e.target.value)} />
+                    </div>
+                    {erroNovoRegistro && <p className="text-sm text-red-600">{erroNovoRegistro}</p>}
+                    <button disabled={carregando} onClick={salvarNovoRegistro} className={botaoPrimario}>
+                      {carregando ? 'Salvando...' : 'Salvar'}
+                    </button>
+                  </div>
+                )}
+
+                {nrTipo === 'medicamento' && (
+                  <div className="space-y-3 rounded-xl border border-slate-100 p-4">
+                    <input
+                      className={inputClasse}
+                      placeholder="🔎 buscar medicamento já cadastrado"
+                      value={nrBusca}
+                      onChange={(e) => setNrBusca(e.target.value)}
+                    />
+                    {nrBusca.trim() && (
+                      <div className="space-y-1">
+                        {medicacoes
+                          .filter((m) => m.nome.toLowerCase().includes(nrBusca.trim().toLowerCase()))
+                          .slice(0, 5)
+                          .map((m) => (
+                            <button
+                              key={m.id}
+                              onClick={() => { setTelaDetalhe('medicacoes'); abrirEdicaoMedicacao(m); }}
+                              className="w-full text-left text-sm rounded-lg bg-slate-50 px-3 py-2 hover:bg-slate-100"
+                            >
+                              {m.nome}{m.dosagem && ` · ${m.dosagem}`}
+                            </button>
+                          ))}
+                      </div>
+                    )}
+                    <p className="text-xs font-medium text-slate-500 pt-1">Novo medicamento</p>
+                    <input className={inputClasse} placeholder="qual remédio" value={nrMedNome} onChange={(e) => setNrMedNome(e.target.value)} />
+                    <input className={inputClasse} placeholder="dosagem (opcional)" value={nrMedDosagem} onChange={(e) => setNrMedDosagem(e.target.value)} />
+                    <div>
+                      <label className="text-xs text-slate-400 mb-1 block">data de início</label>
+                      <input className={inputClasse} type="date" value={nrMedData} onChange={(e) => setNrMedData(e.target.value)} />
+                    </div>
+                    <label className="flex items-center gap-2 text-sm text-slate-600">
+                      <input type="checkbox" checked={nrMedUsoContinuo} onChange={(e) => setNrMedUsoContinuo(e.target.checked)} />
+                      Uso contínuo
+                    </label>
+                    {!nrMedUsoContinuo && (
+                      <div>
+                        <label className="text-xs text-slate-400 mb-1 block">data de término</label>
+                        <input className={inputClasse} type="date" value={nrMedDataFim} onChange={(e) => setNrMedDataFim(e.target.value)} />
+                      </div>
+                    )}
+                    <select className={inputClasse} value={nrMedEventoRelacionado} onChange={(e) => setNrMedEventoRelacionado(e.target.value)}>
+                      <option value="">relacionado a qual evento de saúde? (opcional)</option>
+                      {condicoes.map((c) => (
+                        <option key={c.id} value={c.id}>{c.nome}</option>
+                      ))}
+                    </select>
+                    <input
+                      className={inputClasse}
+                      placeholder="médico que receitou (opcional)"
+                      list="lista-medicos-cadastrados"
+                      value={nrMedMedicoReceitou}
+                      onChange={(e) => setNrMedMedicoReceitou(e.target.value)}
+                    />
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs text-slate-400">observação (opcional)</label>
+                        <button
+                          type="button"
+                          onClick={() => alternarReconhecimentoVoz('nrMedObs', setNrMedObs)}
+                          className={`shrink-0 rounded-full px-2 py-1 text-xs ${gravandoCampo === 'nrMedObs' ? 'bg-red-100 text-red-700 animate-pulse' : 'bg-slate-100 text-slate-600'}`}
+                        >
+                          🎤 {gravandoCampo === 'nrMedObs' ? 'Ouvindo...' : 'Falar'}
+                        </button>
+                      </div>
+                      <textarea className={inputClasse} rows={2} value={nrMedObs} onChange={(e) => setNrMedObs(e.target.value)} />
+                    </div>
+                    {erroNovoRegistro && <p className="text-sm text-red-600">{erroNovoRegistro}</p>}
+                    <button disabled={carregando} onClick={salvarNovoRegistro} className={botaoPrimario}>
+                      {carregando ? 'Salvando...' : 'Salvar'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
 
             {telaDetalhe === 'condicoes' && (
               <div className="space-y-3">
