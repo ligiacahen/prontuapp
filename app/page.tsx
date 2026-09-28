@@ -15,6 +15,7 @@ type Membro = {
   data_falecimento: string | null;
   parentesco: string | null;
   foto_url: string | null;
+  alergias: string | null;
 };
 
 const opcoesParentesco: { value: string; label: string }[] = [
@@ -198,7 +199,7 @@ type Medico = {
 };
 
 type Passo = 'login' | 'cadastro' | 'onboarding' | 'painel';
-type Aba = 'geral' | 'condicoes' | 'medicacoes' | 'consultas' | 'exames' | 'vacinas' | 'nascimento' | 'crescimento' | 'riscos' | 'medicos' | 'novoregistro';
+type Aba = 'geral' | 'condicoes' | 'medicacoes' | 'consultas' | 'exames' | 'vacinas' | 'nascimento' | 'crescimento' | 'riscos' | 'medicos' | 'novoregistro' | 'onboardingvoz';
 
 function calcularIdade(dataNascimento: string) {
   const nascimento = new Date(dataNascimento);
@@ -456,6 +457,7 @@ function paraNumeroTolerante(valor: string): number | null {
 const tipoCondicaoLabels: Record<string, string> = {
   doenca: 'Hipótese diagnóstica',
   cirurgia: 'Cirurgia',
+  internacao: 'Internação',
 };
 
 const statusCondicaoLabels: Record<string, string> = {
@@ -562,6 +564,8 @@ export default function Home() {
   const [valorTipoEdit, setValorTipoEdit] = useState('');
   const [editandoObs, setEditandoObs] = useState(false);
   const [valorObsEdit, setValorObsEdit] = useState('');
+  const [editandoAlergias, setEditandoAlergias] = useState(false);
+  const [valorAlergiasEdit, setValorAlergiasEdit] = useState('');
   const [erroEdicao, setErroEdicao] = useState('');
   const [enviandoFoto, setEnviandoFoto] = useState(false);
   const [erroFoto, setErroFoto] = useState('');
@@ -655,7 +659,8 @@ export default function Home() {
   const [nrEventoGerouConsulta, setNrEventoGerouConsulta] = useState(false);
   const [nrEventoGerouMedicamento, setNrEventoGerouMedicamento] = useState(false);
 
-  // Cirurgia
+  // Cirurgia / Internação
+  const [nrCirurgiaTipo, setNrCirurgiaTipo] = useState<'cirurgia' | 'internacao'>('cirurgia');
   const [nrCirurgiaNome, setNrCirurgiaNome] = useState('');
   const [nrCirurgiaData, setNrCirurgiaData] = useState('');
   const [nrCirurgiaMedico, setNrCirurgiaMedico] = useState('');
@@ -691,6 +696,15 @@ export default function Home() {
   const [nrSubMedNome, setNrSubMedNome] = useState('');
   const [nrSubMedDosagem, setNrSubMedDosagem] = useState('');
   const [nrSubMedUsoContinuo, setNrSubMedUsoContinuo] = useState(true);
+
+  // Estados do protótipo "contar por voz" no onboarding de um novo membro.
+  // Por enquanto o "entendimento" da fala é feito por um heurística simples (sem
+  // custo de IA) só pra validar o fluxo com a Roberta antes de ligar numa IA de verdade.
+  type ItemOnboardingVoz = { id: string; tipo: 'evento' | 'alergia' | 'cirurgia' | 'medicamento'; texto: string; incluir: boolean };
+  const [ovTexto, setOvTexto] = useState('');
+  const [ovItens, setOvItens] = useState<ItemOnboardingVoz[]>([]);
+  const [ovErro, setOvErro] = useState('');
+  const [ovSalvando, setOvSalvando] = useState(false);
 
   const [exames, setExames] = useState<Exame[]>([]);
   const [mostrarFormExame, setMostrarFormExame] = useState(false);
@@ -776,7 +790,7 @@ export default function Home() {
   async function carregarMembros() {
     const { data, error } = await supabase
       .from('membro')
-      .select('id, nome, data_nascimento, sexo_biologico, tipo_sanguineo, observacoes_gerais, data_falecimento, parentesco, foto_url')
+      .select('id, nome, data_nascimento, sexo_biologico, tipo_sanguineo, observacoes_gerais, data_falecimento, parentesco, foto_url, alergias')
       .is('data_falecimento', null)
       .order('nome');
     if (!error && data) setMembros(data);
@@ -989,7 +1003,7 @@ export default function Home() {
   function limparNovoRegistro() {
     setNrEventoNome(''); setNrEventoOutroNome(''); setNrEventoData(''); setNrEventoCronica(false);
     setNrEventoRelato(''); setNrEventoGerouConsulta(false); setNrEventoGerouMedicamento(false);
-    setNrCirurgiaNome(''); setNrCirurgiaData(''); setNrCirurgiaMedico(''); setNrCirurgiaRelato('');
+    setNrCirurgiaTipo('cirurgia'); setNrCirurgiaNome(''); setNrCirurgiaData(''); setNrCirurgiaMedico(''); setNrCirurgiaRelato('');
     setNrCirurgiaEventoRelacionado(''); setNrCirurgiaGerouMedicamento(false);
     setNrConsultaEspecialidade(''); setNrConsultaEspecialidadeOutro(''); setNrConsultaMedico('');
     setNrConsultaData(''); setNrConsultaRotina(false); setNrConsultaEventoRelacionado('');
@@ -1107,12 +1121,12 @@ export default function Home() {
           });
         }
       } else if (nrTipo === 'cirurgia') {
-        if (!nrCirurgiaNome.trim()) throw new Error('Escreva qual foi a cirurgia.');
+        if (!nrCirurgiaNome.trim()) throw new Error(nrCirurgiaTipo === 'internacao' ? 'Escreva o motivo da internação.' : 'Escreva qual foi a cirurgia.');
         const { data: novaCirurgia, error: erroCirurgia } = await supabase
           .from('condicao')
           .insert({
             membro_id: membroId,
-            tipo: 'cirurgia',
+            tipo: nrCirurgiaTipo,
             nome: nrCirurgiaNome.trim(),
             data_diagnostico_ou_procedimento: nrCirurgiaData || null,
             status: 'resolvida',
@@ -1184,6 +1198,110 @@ export default function Home() {
       setErroNovoRegistro(e.message || 'Erro ao salvar.');
     } finally {
       setCarregando(false);
+    }
+  }
+
+  // --- Protótipo "contar por voz" (onboarding de novo membro) ---
+
+  function limparOnboardingVoz() {
+    setOvTexto('');
+    setOvItens([]);
+    setOvErro('');
+  }
+
+  // Heurística simples só pra demonstrar o fluxo sem gastar com API de IA ainda.
+  // Quando ligarmos numa IA de verdade, essa função é o único lugar que muda —
+  // o resto (revisão, edição, confirmação e salvamento) continua igual.
+  function processarFalaOnboarding() {
+    setOvErro('');
+    const texto = ovTexto.trim();
+    if (!texto) return;
+    const frases = texto
+      .split(/,| e (?=\S)|\.|;/i)
+      .map((f) => f.trim())
+      .filter((f) => f.length > 2);
+    if (frases.length === 0) {
+      setOvErro('Não consegui separar nada dessa frase — tenta descrever em partes curtas.');
+      return;
+    }
+    const itens: ItemOnboardingVoz[] = frases.map((f, i) => {
+      const low = f.toLowerCase();
+      let tipo: ItemOnboardingVoz['tipo'] = 'evento';
+      if (low.includes('alerg')) tipo = 'alergia';
+      else if (low.includes('remédio') || low.includes('remedio') || low.includes('medicamento') || low.includes('mg') || low.includes('gotas') || low.includes('xarope') || low.includes('comprimido')) tipo = 'medicamento';
+      else if (low.includes('cirurgia') || low.includes('operad') || low.includes('internaç') || low.includes('internac') || low.includes('hospital')) tipo = 'cirurgia';
+      return { id: `ov-${Date.now()}-${i}`, tipo, texto: f, incluir: true };
+    });
+    setOvItens(itens);
+  }
+
+  function alternarIncluirItemOnboarding(id: string) {
+    setOvItens((itens) => itens.map((it) => (it.id === id ? { ...it, incluir: !it.incluir } : it)));
+  }
+
+  function atualizarTipoItemOnboarding(id: string, tipo: ItemOnboardingVoz['tipo']) {
+    setOvItens((itens) => itens.map((it) => (it.id === id ? { ...it, tipo } : it)));
+  }
+
+  function atualizarTextoItemOnboarding(id: string, texto: string) {
+    setOvItens((itens) => itens.map((it) => (it.id === id ? { ...it, texto } : it)));
+  }
+
+  async function confirmarOnboardingVoz() {
+    if (!membroSelecionado) return;
+    const membroId = membroSelecionado.id;
+    const itensIncluidos = ovItens.filter((it) => it.incluir && it.texto.trim());
+    if (itensIncluidos.length === 0) {
+      setOvErro('Marque ao menos um item pra salvar, ou pule por enquanto.');
+      return;
+    }
+    setOvSalvando(true);
+    setOvErro('');
+    try {
+      const alergiasNovas: string[] = [];
+      for (const item of itensIncluidos) {
+        if (item.tipo === 'evento') {
+          const { error } = await supabase.from('condicao').insert({
+            membro_id: membroId,
+            tipo: 'doenca',
+            nome: item.texto.trim(),
+            status: 'ativa',
+            relevante_geneticamente: false,
+          });
+          if (error) throw error;
+        } else if (item.tipo === 'cirurgia') {
+          const { error } = await supabase.from('condicao').insert({
+            membro_id: membroId,
+            tipo: 'cirurgia',
+            nome: item.texto.trim(),
+            status: 'resolvida',
+            relevante_geneticamente: false,
+          });
+          if (error) throw error;
+        } else if (item.tipo === 'medicamento') {
+          await criarMedicamentoRapido({
+            membroId,
+            nome: item.texto.trim(),
+            usoContinuo: false,
+            condicaoId: null,
+          });
+        } else if (item.tipo === 'alergia') {
+          alergiasNovas.push(item.texto.trim());
+        }
+      }
+      if (alergiasNovas.length > 0) {
+        const alergiasAtuais = membroSelecionado.alergias ? membroSelecionado.alergias + ', ' : '';
+        const novoValor = alergiasAtuais + alergiasNovas.join(', ');
+        const { error } = await supabase.from('membro').update({ alergias: novoValor }).eq('id', membroId);
+        if (error) throw error;
+      }
+      await Promise.all([carregarCondicoes(membroId), carregarMedicacoes(membroId), carregarMembros()]);
+      limparOnboardingVoz();
+      setTelaDetalhe(null);
+    } catch (e: any) {
+      setOvErro(e.message || 'Erro ao salvar.');
+    } finally {
+      setOvSalvando(false);
     }
   }
 
@@ -1284,6 +1402,17 @@ export default function Home() {
       .eq('id', userData.user?.id)
       .single();
 
+    const nomeSalvo = novoNome;
+    const dataSalva = novaData;
+
+    // Importante: inserimos SEM pedir os dados de volta na mesma operação
+    // (sem .select() encadeado). Em alguns bancos, pedir o registro de volta
+    // junto do insert obriga o Postgres a checar a política de LEITURA sobre
+    // a linha recém-criada no mesmo instante — e se essa política depender de
+    // algo que só fica visível um instante depois, o insert inteiro é
+    // rejeitado com "violates row-level security policy", mesmo a gravação
+    // em si sendo permitida. Buscamos o membro criado numa consulta separada,
+    // logo em seguida.
     const { error } = await supabase.from('membro').insert({
       familia_id: meuUsuario?.familia_id,
       criado_por: userData.user?.id,
@@ -1308,7 +1437,24 @@ export default function Home() {
     setNovoFalecido(false);
     setNovaDataFalecimento('');
     setMostrarFormMembro(false);
-    await carregarMembros();
+
+    const { data: membrosAtualizados } = await supabase
+      .from('membro')
+      .select('id, nome, data_nascimento, sexo_biologico, tipo_sanguineo, observacoes_gerais, data_falecimento, parentesco, foto_url, alergias')
+      .is('data_falecimento', null)
+      .order('nome');
+
+    if (membrosAtualizados) {
+      setMembros(membrosAtualizados);
+      // Leva direto pro protótipo de "contar por voz", já com o membro recém-criado
+      // selecionado — resolve a dor de ter que preencher tudo manualmente no primeiro
+      // cadastro. A pessoa pode pular a qualquer momento e preencher depois do jeito normal.
+      const membroCriado = membrosAtualizados.find((m) => m.nome === nomeSalvo && m.data_nascimento === dataSalva);
+      if (membroCriado) {
+        setMembroSelecionado(membroCriado as Membro);
+        setTelaDetalhe('onboardingvoz');
+      }
+    }
   }
 
   function abrirNovaCondicao() {
@@ -2161,6 +2307,25 @@ export default function Home() {
     await carregarMembros();
   }
 
+  async function salvarAlergias() {
+    if (!membroSelecionado) return;
+    setCarregando(true);
+    const { error } = await supabase
+      .from('membro')
+      .update({ alergias: valorAlergiasEdit || null })
+      .eq('id', membroSelecionado.id);
+
+    setCarregando(false);
+    if (error) {
+      setErroEdicao(error.message);
+      return;
+    }
+    setErroEdicao('');
+    setMembroSelecionado({ ...membroSelecionado, alergias: valorAlergiasEdit || null });
+    setEditandoAlergias(false);
+    await carregarMembros();
+  }
+
   const inputClasse =
     'w-full rounded-xl border border-slate-200 px-4 py-3 text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent';
   const botaoPrimario =
@@ -2444,11 +2609,82 @@ export default function Home() {
             </button>
 
             <div className="mb-4 flex items-center gap-2">
-              <span className="text-2xl">{secoes.find((s) => s.id === telaDetalhe)?.icone}</span>
+              <span className="text-2xl">{telaDetalhe === 'onboardingvoz' ? '🎤' : secoes.find((s) => s.id === telaDetalhe)?.icone}</span>
               <h2 className="text-lg font-semibold text-slate-800">
-                {secoes.find((s) => s.id === telaDetalhe)?.label}
+                {telaDetalhe === 'onboardingvoz' ? 'Contar sobre a saúde' : secoes.find((s) => s.id === telaDetalhe)?.label}
               </h2>
             </div>
+
+            {telaDetalhe === 'onboardingvoz' && (
+              <div className="space-y-4">
+                <div className="rounded-xl bg-amber-50 border border-amber-100 p-3">
+                  <p className="text-xs text-amber-700">
+                    🧪 Protótipo de teste — ainda sem IA de verdade ligada. Serve pra vocês experimentarem o fluxo; o "entendimento" da fala aqui é simplificado.
+                  </p>
+                </div>
+                <p className="text-sm text-slate-500">
+                  Conte rapidamente sobre a saúde de <strong>{membroSelecionado.nome}</strong>: doenças, alergias, cirurgias, remédios que usa. Fale tudo de uma vez, separando por vírgula ou "e".
+                </p>
+                <div className="rounded-xl border border-slate-100 p-4 space-y-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs text-slate-400">o que você quiser contar</label>
+                    <button
+                      type="button"
+                      onClick={() => alternarReconhecimentoVoz('ovFala', setOvTexto)}
+                      className={`shrink-0 rounded-full px-3 py-1.5 text-xs ${gravandoCampo === 'ovFala' ? 'bg-red-100 text-red-700 animate-pulse' : 'bg-teal-100 text-teal-700'}`}
+                    >
+                      🎤 {gravandoCampo === 'ovFala' ? 'Ouvindo...' : 'Falar'}
+                    </button>
+                  </div>
+                  <textarea
+                    className={inputClasse}
+                    rows={4}
+                    placeholder="ex: tem asma desde os 3 anos, é alérgico a amendoim, tomou amoxicilina semana passada por causa de uma otite"
+                    value={ovTexto}
+                    onChange={(e) => setOvTexto(e.target.value)}
+                  />
+                  {ovErro && <p className="text-sm text-red-600">{ovErro}</p>}
+                  <button disabled={!ovTexto.trim()} onClick={processarFalaOnboarding} className={botaoPrimario}>
+                    Processar
+                  </button>
+                </div>
+
+                {ovItens.length > 0 && (
+                  <div className="space-y-3">
+                    <p className="text-sm font-medium text-slate-600">Confira o que eu entendi — pode corrigir tudo antes de salvar:</p>
+                    {ovItens.map((item) => (
+                      <div key={item.id} className={`rounded-xl border p-3 space-y-2 ${item.incluir ? 'border-slate-200' : 'border-slate-100 opacity-50'}`}>
+                        <div className="flex items-center gap-2">
+                          <input type="checkbox" checked={item.incluir} onChange={() => alternarIncluirItemOnboarding(item.id)} />
+                          <select
+                            className="flex-1 rounded-lg border border-slate-200 px-2 py-1.5 text-sm text-slate-800"
+                            value={item.tipo}
+                            onChange={(e) => atualizarTipoItemOnboarding(item.id, e.target.value as typeof item.tipo)}
+                          >
+                            <option value="evento">Evento de saúde</option>
+                            <option value="alergia">Alergia</option>
+                            <option value="cirurgia">Cirurgia/Internação</option>
+                            <option value="medicamento">Medicamento</option>
+                          </select>
+                        </div>
+                        <input
+                          className={inputClasse}
+                          value={item.texto}
+                          onChange={(e) => atualizarTextoItemOnboarding(item.id, e.target.value)}
+                        />
+                      </div>
+                    ))}
+                    <button disabled={ovSalvando} onClick={confirmarOnboardingVoz} className={botaoPrimario}>
+                      {ovSalvando ? 'Salvando...' : 'Confirmar e salvar'}
+                    </button>
+                  </div>
+                )}
+
+                <button onClick={() => { setTelaDetalhe(null); limparOnboardingVoz(); }} className="w-full text-sm text-slate-400 pt-1">
+                  Pular por enquanto, prefiro preencher manualmente
+                </button>
+              </div>
+            )}
 
             {telaDetalhe === 'novoregistro' && (
               <div className="space-y-4">
@@ -2463,7 +2699,7 @@ export default function Home() {
                 <div className="grid grid-cols-2 gap-2">
                   {[
                     { id: 'evento' as const, label: 'Evento de Saúde', icone: '🩺' },
-                    { id: 'cirurgia' as const, label: 'Cirurgia', icone: '🔪' },
+                    { id: 'cirurgia' as const, label: 'Cirurgia/Internação', icone: '🏥' },
                     { id: 'consulta' as const, label: 'Consulta', icone: '📅' },
                     { id: 'medicamento' as const, label: 'Medicamento', icone: '💊' },
                   ].map((op) => (
@@ -2600,14 +2836,14 @@ export default function Home() {
                   <div className="space-y-3 rounded-xl border border-slate-100 p-4">
                     <input
                       className={inputClasse}
-                      placeholder="🔎 buscar cirurgia já cadastrada"
+                      placeholder="🔎 buscar cirurgia/internação já cadastrada"
                       value={nrBusca}
                       onChange={(e) => setNrBusca(e.target.value)}
                     />
                     {nrBusca.trim() && (
                       <div className="space-y-1">
                         {condicoes
-                          .filter((c) => c.tipo === 'cirurgia' && c.nome.toLowerCase().includes(nrBusca.trim().toLowerCase()))
+                          .filter((c) => (c.tipo === 'cirurgia' || c.tipo === 'internacao') && c.nome.toLowerCase().includes(nrBusca.trim().toLowerCase()))
                           .slice(0, 5)
                           .map((c) => (
                             <button
@@ -2615,16 +2851,37 @@ export default function Home() {
                               onClick={() => { setTelaDetalhe('condicoes'); abrirEdicaoCondicao(c); }}
                               className="w-full text-left text-sm rounded-lg bg-slate-50 px-3 py-2 hover:bg-slate-100"
                             >
-                              {c.nome}{c.data_diagnostico_ou_procedimento && ` · ${formatarData(c.data_diagnostico_ou_procedimento)}`}
+                              {tipoCondicaoLabels[c.tipo]}: {c.nome}{c.data_diagnostico_ou_procedimento && ` · ${formatarData(c.data_diagnostico_ou_procedimento)}`}
                             </button>
                           ))}
-                        {condicoes.filter((c) => c.tipo === 'cirurgia' && c.nome.toLowerCase().includes(nrBusca.trim().toLowerCase())).length === 0 && (
+                        {condicoes.filter((c) => (c.tipo === 'cirurgia' || c.tipo === 'internacao') && c.nome.toLowerCase().includes(nrBusca.trim().toLowerCase())).length === 0 && (
                           <p className="text-xs text-slate-400">Nenhuma encontrada — pode cadastrar uma nova abaixo.</p>
                         )}
                       </div>
                     )}
-                    <p className="text-xs font-medium text-slate-500 pt-1">Nova cirurgia</p>
-                    <input className={inputClasse} placeholder="qual cirurgia" value={nrCirurgiaNome} onChange={(e) => setNrCirurgiaNome(e.target.value)} />
+                    <p className="text-xs font-medium text-slate-500 pt-1">Nova cirurgia/internação</p>
+                    <div className="flex rounded-xl bg-slate-100 p-1">
+                      <button
+                        type="button"
+                        onClick={() => setNrCirurgiaTipo('cirurgia')}
+                        className={`flex-1 rounded-lg py-2 text-sm font-medium transition ${nrCirurgiaTipo === 'cirurgia' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500'}`}
+                      >
+                        Cirurgia
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNrCirurgiaTipo('internacao')}
+                        className={`flex-1 rounded-lg py-2 text-sm font-medium transition ${nrCirurgiaTipo === 'internacao' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500'}`}
+                      >
+                        Internação
+                      </button>
+                    </div>
+                    <input
+                      className={inputClasse}
+                      placeholder={nrCirurgiaTipo === 'internacao' ? 'motivo da internação (ex: Pneumonia)' : 'qual cirurgia'}
+                      value={nrCirurgiaNome}
+                      onChange={(e) => setNrCirurgiaNome(e.target.value)}
+                    />
                     <input className={inputClasse} type="date" value={nrCirurgiaData} onChange={(e) => setNrCirurgiaData(e.target.value)} />
                     <input
                       className={inputClasse}
@@ -2931,6 +3188,7 @@ export default function Home() {
                     >
                       <option value="doenca">Hipótese diagnóstica</option>
                       <option value="cirurgia">Cirurgia</option>
+                      <option value="internacao">Internação</option>
                     </select>
                     {novoTipoCondicao === 'doenca' ? (
                       <>
@@ -2960,7 +3218,7 @@ export default function Home() {
                     ) : (
                       <input
                         className={inputClasse}
-                        placeholder="nome da cirurgia (ex: Apendicectomia)"
+                        placeholder={novoTipoCondicao === 'internacao' ? 'motivo da internação (ex: Pneumonia)' : 'nome da cirurgia (ex: Apendicectomia)'}
                         value={novoNomeCondicao}
                         onChange={(e) => setNovoNomeCondicao(e.target.value)}
                       />
@@ -3953,6 +4211,61 @@ export default function Home() {
                     </div>
                   )}
                   {erroEdicao && <p className="text-sm text-red-600">{erroEdicao}</p>}
+
+                  {(() => {
+                    const condicoesAtivas = condicoes.filter((c) => c.tipo !== 'cirurgia' && (c.status === 'ativa' || c.status === 'cronica'));
+                    if (condicoesAtivas.length === 0) return null;
+                    return (
+                      <div className="rounded-xl bg-amber-50 p-3">
+                        <p className="text-xs text-amber-700 font-medium mb-1">Condições ativas/crônicas (de Evento de Saúde)</p>
+                        <p className="text-sm text-amber-900">
+                          {condicoesAtivas.map((c) => c.nome).join(', ')}
+                        </p>
+                      </div>
+                    );
+                  })()}
+
+                  {!editandoAlergias ? (
+                    <button
+                      onClick={() => {
+                        setValorAlergiasEdit(membroSelecionado.alergias || '');
+                        setEditandoAlergias(true);
+                      }}
+                      className="w-full rounded-xl bg-red-50 p-3 text-left transition hover:bg-red-100"
+                    >
+                      <p className="text-xs text-red-600 font-medium">⚠️ Alergias e condições importantes ✎</p>
+                      <p className="text-sm text-red-900">{membroSelecionado.alergias || 'toque para adicionar (ex: alergia a penicilina)'}</p>
+                    </button>
+                  ) : (
+                    <div className="rounded-xl bg-red-50 p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs text-red-600 font-medium">⚠️ Alergias e condições importantes</p>
+                        <button
+                          type="button"
+                          onClick={() => alternarReconhecimentoVoz('alergiasMembro', setValorAlergiasEdit)}
+                          className={`shrink-0 rounded-full px-2 py-1 text-xs ${gravandoCampo === 'alergiasMembro' ? 'bg-red-200 text-red-800 animate-pulse' : 'bg-white text-slate-600'}`}
+                        >
+                          🎤 {gravandoCampo === 'alergiasMembro' ? 'Ouvindo...' : 'Falar'}
+                        </button>
+                      </div>
+                      <textarea
+                        autoFocus
+                        className={inputClasse}
+                        rows={2}
+                        placeholder="ex: alergia a penicilina, alergia a amendoim..."
+                        value={valorAlergiasEdit}
+                        onChange={(e) => setValorAlergiasEdit(e.target.value)}
+                      />
+                      <div className="flex gap-2">
+                        <button disabled={carregando} onClick={salvarAlergias} className={botaoPrimario}>
+                          {carregando ? 'Salvando...' : 'Salvar'}
+                        </button>
+                        <button onClick={() => setEditandoAlergias(false)} className={botaoSecundario}>
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="border-t border-slate-100 pt-3">
