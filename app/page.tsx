@@ -2619,11 +2619,11 @@ export default function Home() {
               <div className="space-y-4">
                 <div className="rounded-xl bg-amber-50 border border-amber-100 p-3">
                   <p className="text-xs text-amber-700">
-                    🧪 Protótipo de teste — ainda sem IA de verdade ligada. Serve pra vocês experimentarem o fluxo; o "entendimento" da fala aqui é simplificado.
+                    🧪 Protótipo de teste — ainda sem IA de verdade ligada. Serve pra vocês experimentarem o fluxo; o “entendimento” da fala aqui é simplificado.
                   </p>
                 </div>
                 <p className="text-sm text-slate-500">
-                  Conte rapidamente sobre a saúde de <strong>{membroSelecionado.nome}</strong>: doenças, alergias, cirurgias, remédios que usa. Fale tudo de uma vez, separando por vírgula ou "e".
+                  Conte rapidamente sobre a saúde de <strong>{membroSelecionado.nome}</strong>: doenças, alergias, cirurgias, remédios que usa. Fale tudo de uma vez, separando por vírgula ou “e”.
                 </p>
                 <div className="rounded-xl border border-slate-100 p-4 space-y-3">
                   <div className="flex items-center justify-between mb-1">
