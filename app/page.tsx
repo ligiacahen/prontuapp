@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import anthro_zscores from 'anthro-js';
@@ -573,6 +573,16 @@ export default function Home() {
   const [membroSelecionado, setMembroSelecionado] = useState<Membro | null>(null);
   const [telaDetalhe, setTelaDetalhe] = useState<Aba | null>(null);
 
+  // Guarda qual membro está selecionado "agora", pra funções assíncronas
+  // (carregarCondicoes, carregarMedicacoes etc.) poderem conferir, quando a
+  // resposta do Supabase chega, se ainda é o membro atual antes de aplicar o
+  // resultado — evita que uma resposta atrasada de um membro antigo sobrescreva
+  // a tela de outro membro selecionado depois (race condition). Atualizado direto
+  // no corpo do componente (não num useEffect) pra já valer antes de qualquer
+  // efeito rodar, sem depender de ordem de execução entre efeitos.
+  const membroAtualRef = useRef<string | null>(null);
+  membroAtualRef.current = membroSelecionado?.id ?? null;
+
   const [condicoes, setCondicoes] = useState<Condicao[]>([]);
   const [mostrarFormCondicao, setMostrarFormCondicao] = useState(false);
   const [novoTipoCondicao, setNovoTipoCondicao] = useState('doenca');
@@ -705,6 +715,7 @@ export default function Home() {
   const [ovItens, setOvItens] = useState<ItemOnboardingVoz[]>([]);
   const [ovErro, setOvErro] = useState('');
   const [ovSalvando, setOvSalvando] = useState(false);
+  const [ovProcessando, setOvProcessando] = useState(false);
 
   const [exames, setExames] = useState<Exame[]>([]);
   const [mostrarFormExame, setMostrarFormExame] = useState(false);
@@ -802,7 +813,7 @@ export default function Home() {
       .select('id, tipo, nome, data_diagnostico_ou_procedimento, status, relevante_geneticamente, observacao, orientacoes, medico, evento_relacionado_id')
       .eq('membro_id', membroId)
       .order('data_diagnostico_ou_procedimento', { ascending: false });
-    if (!error && data) setCondicoes(data);
+    if (!error && data && membroAtualRef.current === membroId) setCondicoes(data);
   }
 
   async function carregarMedicacoes(membroId: string) {
@@ -811,7 +822,7 @@ export default function Home() {
       .select('id, nome, dosagem, frequencia, horario, data_inicio, data_fim, condicao_relacionada_id, consulta_relacionada_id, classe, observacao, medico_receitou')
       .eq('membro_id', membroId)
       .order('data_inicio', { ascending: false });
-    if (!error && data) setMedicacoes(data);
+    if (!error && data && membroAtualRef.current === membroId) setMedicacoes(data);
   }
 
   async function carregarConsultas(membroId: string) {
@@ -820,7 +831,7 @@ export default function Home() {
       .select('id, data_hora, local, motivo, anotacoes, status, especialidade(nome), profissional_saude(nome), data_retorno_sugerida, forma_atendimento, valor_pago, solicitou_reembolso, valor_reembolsado, incluir_ir, obs_financeira, condicao_relacionada_id')
       .eq('membro_id', membroId)
       .order('data_hora', { ascending: true });
-    if (!error && data) setConsultas(data as any);
+    if (!error && data && membroAtualRef.current === membroId) setConsultas(data as any);
   }
 
   async function carregarExames(membroId: string) {
@@ -829,7 +840,7 @@ export default function Home() {
       .select('id, nome, data_realizacao, laboratorio, resultado_resumo')
       .eq('membro_id', membroId)
       .order('data_realizacao', { ascending: false });
-    if (!error && data) setExames(data);
+    if (!error && data && membroAtualRef.current === membroId) setExames(data);
   }
 
   async function carregarVacinas(membroId: string) {
@@ -838,7 +849,7 @@ export default function Home() {
       .select('id, nome, dose, data_aplicacao, proxima_dose_data, observacoes')
       .eq('membro_id', membroId)
       .order('data_aplicacao', { ascending: false });
-    if (!error && data) setVacinas(data);
+    if (!error && data && membroAtualRef.current === membroId) setVacinas(data);
   }
 
   async function carregarNascimento(membroId: string) {
@@ -847,7 +858,7 @@ export default function Home() {
       .select('id, peso_nascimento, comprimento_nascimento, perimetro_cefalico, idade_gestacional_semanas, tipo_parto, apgar_1min, apgar_5min, uti_neonatal, intercorrencias, local_nascimento')
       .eq('membro_id', membroId)
       .maybeSingle();
-    if (!error) setNascimento(data);
+    if (!error && membroAtualRef.current === membroId) setNascimento(data);
   }
 
   async function carregarCrescimento(membroId: string) {
@@ -856,7 +867,7 @@ export default function Home() {
       .select('id, data_medicao, peso_kg, altura_cm')
       .eq('membro_id', membroId)
       .order('data_medicao', { ascending: true });
-    if (!error && data) setCrescimento(data);
+    if (!error && data && membroAtualRef.current === membroId) setCrescimento(data);
   }
 
   async function resolverEspecialidade(nome: string): Promise<string | null> {
@@ -1209,30 +1220,57 @@ export default function Home() {
     setOvErro('');
   }
 
-  // Heurística simples só pra demonstrar o fluxo sem gastar com API de IA ainda.
-  // Quando ligarmos numa IA de verdade, essa função é o único lugar que muda —
-  // o resto (revisão, edição, confirmação e salvamento) continua igual.
-  function processarFalaOnboarding() {
+  // Heurística simples que foi usada enquanto não tínhamos IA de verdade ligada —
+  // deixada aqui comentada só de referência/fallback caso a chamada de IA falhe.
+  // function processarFalaOnboardingHeuristica() {
+  //   const texto = ovTexto.trim();
+  //   const frases = texto
+  //     .split(/,| e (?=\S)|\.|;/i)
+  //     .map((f) => f.trim())
+  //     .filter((f) => f.length > 2);
+  //   return frases.map((f, i) => {
+  //     const low = f.toLowerCase();
+  //     let tipo: ItemOnboardingVoz['tipo'] = 'evento';
+  //     if (low.includes('alerg')) tipo = 'alergia';
+  //     else if (low.includes('remédio') || low.includes('remedio') || low.includes('medicamento') || low.includes('mg') || low.includes('gotas') || low.includes('xarope') || low.includes('comprimido')) tipo = 'medicamento';
+  //     else if (low.includes('cirurgia') || low.includes('operad') || low.includes('internaç') || low.includes('internac') || low.includes('hospital')) tipo = 'cirurgia';
+  //     return { id: `ov-${Date.now()}-${i}`, tipo, texto: f, incluir: true };
+  //   });
+  // }
+
+  // Chama a rota de API (/api/interpretar-fala), que usa IA de verdade (Claude) pra
+  // separar o texto em itens (evento/alergia/cirurgia/medicamento). O resto do fluxo
+  // (revisão, edição, confirmação e salvamento) continua exatamente igual.
+  async function processarFalaOnboarding() {
     setOvErro('');
     const texto = ovTexto.trim();
     if (!texto) return;
-    const frases = texto
-      .split(/,| e (?=\S)|\.|;/i)
-      .map((f) => f.trim())
-      .filter((f) => f.length > 2);
-    if (frases.length === 0) {
-      setOvErro('Não consegui separar nada dessa frase — tenta descrever em partes curtas.');
-      return;
+    setOvProcessando(true);
+    try {
+      const resposta = await fetch('/api/interpretar-fala', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ texto }),
+      });
+      const dados = await resposta.json();
+      if (!resposta.ok) throw new Error(dados.erro || 'Não consegui entender essa descrição, tenta de novo.');
+      const itensRecebidos: { tipo: ItemOnboardingVoz['tipo']; texto: string }[] = dados.itens || [];
+      if (itensRecebidos.length === 0) {
+        setOvErro('Não consegui separar nada dessa descrição — tenta contar em partes mais curtas.');
+        return;
+      }
+      const itens: ItemOnboardingVoz[] = itensRecebidos.map((it, i) => ({
+        id: `ov-${Date.now()}-${i}`,
+        tipo: it.tipo,
+        texto: it.texto,
+        incluir: true,
+      }));
+      setOvItens(itens);
+    } catch (e: any) {
+      setOvErro(e.message || 'Não consegui processar agora — tenta de novo em instantes.');
+    } finally {
+      setOvProcessando(false);
     }
-    const itens: ItemOnboardingVoz[] = frases.map((f, i) => {
-      const low = f.toLowerCase();
-      let tipo: ItemOnboardingVoz['tipo'] = 'evento';
-      if (low.includes('alerg')) tipo = 'alergia';
-      else if (low.includes('remédio') || low.includes('remedio') || low.includes('medicamento') || low.includes('mg') || low.includes('gotas') || low.includes('xarope') || low.includes('comprimido')) tipo = 'medicamento';
-      else if (low.includes('cirurgia') || low.includes('operad') || low.includes('internaç') || low.includes('internac') || low.includes('hospital')) tipo = 'cirurgia';
-      return { id: `ov-${Date.now()}-${i}`, tipo, texto: f, incluir: true };
-    });
-    setOvItens(itens);
   }
 
   function alternarIncluirItemOnboarding(id: string) {
@@ -2230,8 +2268,10 @@ export default function Home() {
 
   async function carregarRiscosGeneticos(membro: Membro) {
     if (!membro.parentesco) {
-      setRiscos(null);
-      setHistoricoGeral(null);
+      if (membroAtualRef.current === membro.id) {
+        setRiscos(null);
+        setHistoricoGeral(null);
+      }
       return;
     }
     const { data: userData } = await supabase.auth.getUser();
@@ -2242,8 +2282,10 @@ export default function Home() {
       .single();
     const familiaId = meuUsuario?.familia_id;
     if (!familiaId) {
-      setRiscos([]);
-      setHistoricoGeral([]);
+      if (membroAtualRef.current === membro.id) {
+        setRiscos([]);
+        setHistoricoGeral([]);
+      }
       return;
     }
 
@@ -2259,8 +2301,10 @@ export default function Home() {
       .map((m) => m.id);
 
     if (idsDeSangue.length === 0) {
-      setRiscos([]);
-      setHistoricoGeral([]);
+      if (membroAtualRef.current === membro.id) {
+        setRiscos([]);
+        setHistoricoGeral([]);
+      }
       return;
     }
 
@@ -2269,6 +2313,11 @@ export default function Home() {
       .select('nome')
       .in('membro_id', idsDeSangue)
       .eq('relevante_geneticamente', true);
+
+    // Confere de novo antes de aplicar: essas buscas fazem várias idas ao banco em
+    // sequência, então o usuário pode ter trocado de membro (ou de parentesco) antes
+    // de tudo voltar — nesse caso não aplicamos mais o resultado, que já não vale.
+    if (membroAtualRef.current !== membro.id) return;
 
     const nomes = (condicoesFamilia || []).map((c) => c.nome);
     setRiscos(calcularRiscosGeneticos(membro, nomes));
@@ -2617,9 +2666,9 @@ export default function Home() {
 
             {telaDetalhe === 'onboardingvoz' && (
               <div className="space-y-4">
-                <div className="rounded-xl bg-amber-50 border border-amber-100 p-3">
-                  <p className="text-xs text-amber-700">
-                    🧪 Protótipo de teste — ainda sem IA de verdade ligada. Serve pra vocês experimentarem o fluxo; o “entendimento” da fala aqui é simplificado.
+                <div className="rounded-xl bg-teal-50 border border-teal-100 p-3">
+                  <p className="text-xs text-teal-700">
+                    🤖 Usando IA pra interpretar o que você contar — sempre confira e corrija antes de salvar.
                   </p>
                 </div>
                 <p className="text-sm text-slate-500">
@@ -2644,8 +2693,8 @@ export default function Home() {
                     onChange={(e) => setOvTexto(e.target.value)}
                   />
                   {ovErro && <p className="text-sm text-red-600">{ovErro}</p>}
-                  <button disabled={!ovTexto.trim()} onClick={processarFalaOnboarding} className={botaoPrimario}>
-                    Processar
+                  <button disabled={!ovTexto.trim() || ovProcessando} onClick={processarFalaOnboarding} className={botaoPrimario}>
+                    {ovProcessando ? 'Entendendo...' : 'Processar'}
                   </button>
                 </div>
 
