@@ -685,6 +685,9 @@ export default function Home() {
   const [nrConsultaData, setNrConsultaData] = useState('');
   const [nrConsultaRotina, setNrConsultaRotina] = useState(false);
   const [nrConsultaEventoRelacionado, setNrConsultaEventoRelacionado] = useState('');
+  // Quando nrConsultaEventoRelacionado === '__novo__', esse é o nome do evento de
+  // saúde novo que vai ser criado junto (em vez de ligar a um já existente).
+  const [nrConsultaNovoEventoNome, setNrConsultaNovoEventoNome] = useState('');
   const [nrConsultaObs, setNrConsultaObs] = useState('');
   const [nrConsultaGerouMedicamento, setNrConsultaGerouMedicamento] = useState(false);
 
@@ -695,6 +698,8 @@ export default function Home() {
   const [nrMedUsoContinuo, setNrMedUsoContinuo] = useState(true);
   const [nrMedDataFim, setNrMedDataFim] = useState('');
   const [nrMedEventoRelacionado, setNrMedEventoRelacionado] = useState('');
+  // Mesma ideia do nrConsultaNovoEventoNome, mas pro fluxo de medicamento.
+  const [nrMedNovoEventoNome, setNrMedNovoEventoNome] = useState('');
   const [nrMedMedicoReceitou, setNrMedMedicoReceitou] = useState('');
   const [nrMedObs, setNrMedObs] = useState('');
 
@@ -1018,12 +1023,32 @@ export default function Home() {
     setNrCirurgiaEventoRelacionado(''); setNrCirurgiaGerouMedicamento(false);
     setNrConsultaEspecialidade(''); setNrConsultaEspecialidadeOutro(''); setNrConsultaMedico('');
     setNrConsultaData(''); setNrConsultaRotina(false); setNrConsultaEventoRelacionado('');
+    setNrConsultaNovoEventoNome('');
     setNrConsultaObs(''); setNrConsultaGerouMedicamento(false);
     setNrMedNome(''); setNrMedDosagem(''); setNrMedData(''); setNrMedUsoContinuo(true);
-    setNrMedDataFim(''); setNrMedEventoRelacionado(''); setNrMedMedicoReceitou(''); setNrMedObs('');
+    setNrMedDataFim(''); setNrMedEventoRelacionado(''); setNrMedNovoEventoNome(''); setNrMedMedicoReceitou(''); setNrMedObs('');
     setNrSubConsultaEspecialidade(''); setNrSubConsultaMedico(''); setNrSubConsultaData('');
     setNrSubMedNome(''); setNrSubMedDosagem(''); setNrSubMedUsoContinuo(true);
     setErroNovoRegistro('');
+  }
+
+  // Cria um evento de saúde "rápido" (só com nome) a partir do fluxo de Consulta ou
+  // Medicamento, pra quando a pessoa ainda não tinha cadastrado esse evento antes e
+  // não quer sair da tela de Novo Registro pra fazer isso separadamente.
+  async function criarEventoRapido(opts: { membroId: string; nome: string }): Promise<string> {
+    const { data: novaCondicao, error } = await supabase
+      .from('condicao')
+      .insert({
+        membro_id: opts.membroId,
+        tipo: 'doenca',
+        nome: opts.nome,
+        status: 'ativa',
+        relevante_geneticamente: false,
+      })
+      .select('id')
+      .single();
+    if (error) throw error;
+    return novaCondicao.id as string;
   }
 
   async function criarConsultaRapida(opts: {
@@ -1163,7 +1188,15 @@ export default function Home() {
       } else if (nrTipo === 'consulta') {
         const especialidadeFinal = nrConsultaEspecialidade === 'Outros' ? nrConsultaEspecialidadeOutro.trim() : nrConsultaEspecialidade;
         if (!especialidadeFinal || !nrConsultaData) throw new Error('Preencha ao menos a especialidade e a data.');
-        const condicaoEscolhida = nrConsultaRotina ? null : (nrConsultaEventoRelacionado || null);
+        let condicaoEscolhida: string | null = null;
+        if (!nrConsultaRotina) {
+          if (nrConsultaEventoRelacionado === '__novo__') {
+            if (!nrConsultaNovoEventoNome.trim()) throw new Error('Digite o nome do novo evento de saúde.');
+            condicaoEscolhida = await criarEventoRapido({ membroId, nome: nrConsultaNovoEventoNome.trim() });
+          } else {
+            condicaoEscolhida = nrConsultaEventoRelacionado || null;
+          }
+        }
         const consultaId = await criarConsultaRapida({
           membroId,
           especialidade: especialidadeFinal,
@@ -1185,6 +1218,13 @@ export default function Home() {
         }
       } else if (nrTipo === 'medicamento') {
         if (!nrMedNome.trim() || !nrMedData) throw new Error('Preencha ao menos o nome e a data de início.');
+        let condicaoEscolhidaMed: string | null = null;
+        if (nrMedEventoRelacionado === '__novo__') {
+          if (!nrMedNovoEventoNome.trim()) throw new Error('Digite o nome do novo evento de saúde.');
+          condicaoEscolhidaMed = await criarEventoRapido({ membroId, nome: nrMedNovoEventoNome.trim() });
+        } else {
+          condicaoEscolhidaMed = nrMedEventoRelacionado || null;
+        }
         await criarMedicamentoRapido({
           membroId,
           nome: nrMedNome,
@@ -1192,7 +1232,7 @@ export default function Home() {
           dataInicio: nrMedData,
           usoContinuo: nrMedUsoContinuo,
           dataFim: nrMedDataFim,
-          condicaoId: nrMedEventoRelacionado || null,
+          condicaoId: condicaoEscolhidaMed,
           medicoReceitou: nrMedMedicoReceitou,
           observacao: nrMedObs,
         });
@@ -3041,12 +3081,23 @@ export default function Home() {
                       Consulta de rotina (não ligada a nenhum evento de saúde)
                     </label>
                     {!nrConsultaRotina && (
-                      <select className={inputClasse} value={nrConsultaEventoRelacionado} onChange={(e) => setNrConsultaEventoRelacionado(e.target.value)}>
-                        <option value="">ligada a qual evento de saúde?</option>
-                        {condicoes.map((c) => (
-                          <option key={c.id} value={c.id}>{c.nome}</option>
-                        ))}
-                      </select>
+                      <>
+                        <select className={inputClasse} value={nrConsultaEventoRelacionado} onChange={(e) => setNrConsultaEventoRelacionado(e.target.value)}>
+                          <option value="">ligada a qual evento de saúde?</option>
+                          {condicoes.map((c) => (
+                            <option key={c.id} value={c.id}>{c.nome}</option>
+                          ))}
+                          <option value="__novo__">+ Criar novo evento de saúde</option>
+                        </select>
+                        {nrConsultaEventoRelacionado === '__novo__' && (
+                          <input
+                            className={inputClasse}
+                            placeholder="nome do novo evento de saúde"
+                            value={nrConsultaNovoEventoNome}
+                            onChange={(e) => setNrConsultaNovoEventoNome(e.target.value)}
+                          />
+                        )}
+                      </>
                     )}
                     <label className="flex items-center gap-2 text-sm text-slate-600">
                       <input type="checkbox" checked={nrConsultaGerouMedicamento} onChange={(e) => setNrConsultaGerouMedicamento(e.target.checked)} />
@@ -3128,7 +3179,16 @@ export default function Home() {
                       {condicoes.map((c) => (
                         <option key={c.id} value={c.id}>{c.nome}</option>
                       ))}
+                      <option value="__novo__">+ Criar novo evento de saúde</option>
                     </select>
+                    {nrMedEventoRelacionado === '__novo__' && (
+                      <input
+                        className={inputClasse}
+                        placeholder="nome do novo evento de saúde"
+                        value={nrMedNovoEventoNome}
+                        onChange={(e) => setNrMedNovoEventoNome(e.target.value)}
+                      />
+                    )}
                     <input
                       className={inputClasse}
                       placeholder="médico que receitou (opcional)"
