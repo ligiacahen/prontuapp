@@ -2514,14 +2514,27 @@ export default function Home() {
   const botaoPrimario =
     'w-full rounded-xl bg-teal-600 py-3 font-medium text-white transition hover:bg-teal-700 disabled:opacity-50';
   const botaoSecundario =
-    'w-full rounded-xl border border-slate-200 py-3 font-medium text-slate-600 transition hover:bg-slate-50';
+    'w-full rounded-xl border border-slate-200 py-3 font-medium text-slate-600 transition hover:bg-[#FAFAF8]';
 
   // Pendências do membro selecionado, mostradas na tela inicial do perfil (quando
   // nenhum ícone de categoria foi tocado ainda): próxima consulta agendada, próxima
   // dose de vacina prevista, e medicação de uso contínuo com horário cadastrado.
   // Usa os dados que já estão carregados em `consultas`/`vacinas`/`medicacoes` —
   // não faz nenhuma busca nova no banco.
-  type ItemPendencia = { id: string; icone: string; corFundo: string; titulo: string; detalhe: string };
+  type ItemPendencia = { id: string; tipo: 'consulta' | 'vacina' | 'medicacao'; titulo: string; detalhe: string };
+  function iconePendencia(tipo: ItemPendencia['tipo']) {
+    const props = { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: '#0F766E', strokeWidth: 2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
+    switch (tipo) {
+      case 'consulta':
+        return <svg {...props}><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>;
+      case 'vacina':
+        return <svg {...props}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>;
+      case 'medicacao':
+        return <svg {...props}><path d="M22 12h-4l-3 9L9 3l-3 9H2" /></svg>;
+      default:
+        return null;
+    }
+  }
   function obterPendencias(): ItemPendencia[] {
     const hoje = new Date();
     hoje.setHours(0, 0, 0, 0);
@@ -2534,8 +2547,7 @@ export default function Home() {
       const dh = new Date(proximaConsulta.data_hora);
       itens.push({
         id: `consulta-${proximaConsulta.id}`,
-        icone: '📅',
-        corFundo: 'bg-blue-50',
+        tipo: 'consulta',
         titulo: `Consulta: ${proximaConsulta.especialidade?.nome || 'a confirmar'}${proximaConsulta.profissional_saude?.nome ? ' — ' + proximaConsulta.profissional_saude.nome : ''}`,
         detalhe: `${dh.toLocaleDateString('pt-BR')}${proximaConsulta.local ? ' · ' + proximaConsulta.local : ''}`,
       });
@@ -2549,8 +2561,7 @@ export default function Home() {
       const diasRestantes = Math.round((dv.getTime() - hoje.getTime()) / 86400000);
       itens.push({
         id: `vacina-${proximaVacina.id}`,
-        icone: '💉',
-        corFundo: 'bg-amber-50',
+        tipo: 'vacina',
         titulo: `Vacina: ${proximaVacina.nome}${proximaVacina.dose ? ' — ' + proximaVacina.dose : ''}`,
         detalhe: diasRestantes < 0 ? `atrasada desde ${dv.toLocaleDateString('pt-BR')}` : diasRestantes === 0 ? 'hoje' : `vence em ${diasRestantes} dias`,
       });
@@ -2560,8 +2571,7 @@ export default function Home() {
     if (medicamentoContinuo) {
       itens.push({
         id: `medicacao-${medicamentoContinuo.id}`,
-        icone: '💊',
-        corFundo: 'bg-teal-50',
+        tipo: 'medicacao',
         titulo: `Medicação: ${medicamentoContinuo.nome}`,
         detalhe: medicamentoContinuo.horario ? `hoje às ${medicamentoContinuo.horario}` : 'uso contínuo',
       });
@@ -2570,24 +2580,54 @@ export default function Home() {
     return itens;
   }
 
-  const secoes: { id: Aba; label: string; icone: string }[] = [
-    { id: 'novoregistro', label: '+ Novo Registro', icone: '➕' },
-    { id: 'condicoes', label: 'Evento de Saúde', icone: '🩺' },
-    { id: 'medicacoes', label: 'Medicações', icone: '💊' },
-    { id: 'consultas', label: 'Consultas', icone: '📅' },
-    { id: 'medicos', label: 'Médicos', icone: '👨‍⚕️' },
-    { id: 'exames', label: 'Exames', icone: '🧪' },
-    { id: 'vacinas', label: 'Vacinas', icone: '💉' },
-    { id: 'nascimento', label: 'Ficha Pessoal', icone: '🪪' },
-    { id: 'crescimento', label: 'Crescimento', icone: '📈' },
-    { id: 'riscos', label: 'Cuidados Preventivos', icone: '🧬' },
+  const secoes: { id: Aba; label: string }[] = [
+    { id: 'novoregistro', label: '+ Novo Registro' },
+    { id: 'condicoes', label: 'Evento de Saúde' },
+    { id: 'medicacoes', label: 'Medicações' },
+    { id: 'consultas', label: 'Consultas' },
+    { id: 'medicos', label: 'Médicos' },
+    { id: 'exames', label: 'Exames' },
+    { id: 'vacinas', label: 'Vacinas' },
+    { id: 'nascimento', label: 'Ficha Pessoal' },
+    { id: 'crescimento', label: 'Crescimento' },
+    { id: 'riscos', label: 'Cuidados Preventivos' },
   ];
+
+  // Ícones de linha (estilo do protótipo) pra cada seção do hub do membro — substituem
+  // os emojis que eram usados antes, pra bater com a cara combinada com a Roberta.
+  function iconeSecao(id: Aba) {
+    const props = { width: 26, height: 26, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
+    switch (id) {
+      case 'novoregistro':
+        return <svg {...props}><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>;
+      case 'condicoes':
+        return <svg {...props}><rect x="8" y="2" width="8" height="4" rx="1" /><path d="M9 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-3" /></svg>;
+      case 'medicacoes':
+        return <svg {...props}><path d="M22 12h-4l-3 9L9 3l-3 9H2" /></svg>;
+      case 'consultas':
+        return <svg {...props}><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>;
+      case 'medicos':
+        return <svg {...props}><circle cx="12" cy="7" r="4" /><path d="M5.5 21a6.5 6.5 0 0 1 13 0" /></svg>;
+      case 'exames':
+        return <svg {...props}><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" /></svg>;
+      case 'vacinas':
+        return <svg {...props}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>;
+      case 'nascimento':
+        return <svg {...props}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /></svg>;
+      case 'crescimento':
+        return <svg {...props}><polyline points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline points="17 6 23 6 23 12" /></svg>;
+      case 'riscos':
+        return <svg {...props}><line x1="6" y1="3" x2="6" y2="15" /><circle cx="18" cy="6" r="3" /><circle cx="6" cy="18" r="3" /><path d="M18 9a9 9 0 0 1-9 9" /></svg>;
+      default:
+        return null;
+    }
+  }
 
   const larguraContainer = membroSelecionado ? 'max-w-2xl' : 'max-w-sm';
 
   return (
-    <main className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-      <div className={`w-full ${larguraContainer} rounded-2xl bg-white p-8 shadow-sm border border-slate-100 transition-all`}>
+    <main className="min-h-screen bg-[#FAFAF8] flex items-center justify-center p-4">
+      <div className={`w-full ${larguraContainer} rounded-2xl bg-white p-8 shadow-sm border border-[#E5E1DA] transition-all`}>
         {!membroSelecionado && (
           <div className="mb-8 text-center">
             <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl border-2 border-green-600 bg-green-50 text-green-700">
@@ -2679,7 +2719,7 @@ export default function Home() {
                 <button
                   key={m.id}
                   onClick={() => { setMembroSelecionado(m); setTelaDetalhe(null); }}
-                  className="flex w-full items-center gap-3 rounded-xl border border-slate-100 p-3 text-left transition hover:bg-slate-50"
+                  className="flex w-full items-center gap-3 rounded-xl border border-[#E5E1DA] p-3 text-left transition hover:bg-[#FAFAF8]"
                 >
                   {m.foto_url ? (
                     <img
@@ -2705,7 +2745,7 @@ export default function Home() {
                 + Adicionar membro
               </button>
             ) : (
-              <div className="space-y-3 rounded-xl border border-slate-100 p-4">
+              <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
                 <input className={inputClasse} placeholder="nome" value={novoNome} onChange={(e) => setNovoNome(e.target.value)} />
                 <input className={inputClasse} type="date" value={novaData} onChange={(e) => setNovaData(e.target.value)} />
                 <select className={inputClasse} value={novoSexo} onChange={(e) => setNovoSexo(e.target.value)}>
@@ -2755,7 +2795,7 @@ export default function Home() {
               </div>
             )}
 
-            <div className="border-t border-slate-100 pt-4 text-center space-y-2">
+            <div className="border-t border-[#E5E1DA] pt-4 text-center space-y-2">
               <button onClick={gerarConvite} className="text-sm text-teal-700">
                 Convidar alguém para a família
               </button>
@@ -2778,7 +2818,7 @@ export default function Home() {
               <button
                 onClick={() => setTelaDetalhe('nascimento')}
                 aria-label="Dados pessoais"
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-50 hover:text-slate-700"
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 hover:bg-[#FAFAF8] hover:text-slate-700"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" className="h-5 w-5">
                   <line x1="3" y1="6" x2="21" y2="6" />
@@ -2805,7 +2845,7 @@ export default function Home() {
 
             <button
               onClick={() => setTelaDetalhe('nascimento')}
-              className="mb-6 flex w-full items-center gap-3 rounded-xl p-2 text-left transition hover:bg-slate-50"
+              className="mb-6 flex w-full items-center gap-3 rounded-xl p-2 text-left transition hover:bg-[#FAFAF8]"
             >
               {membroSelecionado.foto_url ? (
                 <img
@@ -2831,8 +2871,8 @@ export default function Home() {
                   onClick={() => setTelaDetalhe(s.id)}
                   className="flex flex-col items-center gap-2 group"
                 >
-                  <div className="flex h-16 w-16 items-center justify-center rounded-full bg-teal-50 text-2xl transition group-hover:bg-teal-100">
-                    {s.icone}
+                  <div className="flex h-16 w-16 items-center justify-center rounded-full bg-teal-50 text-teal-700 transition group-hover:bg-teal-100">
+                    {iconeSecao(s.id)}
                   </div>
                   <span className="text-xs font-medium text-slate-600 text-center">{s.label}</span>
                 </button>
@@ -2850,9 +2890,9 @@ export default function Home() {
                 return (
                   <div className="space-y-2">
                     {pendencias.map((p) => (
-                      <div key={p.id} className="flex items-center gap-3 rounded-xl border border-slate-100 p-3">
-                        <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-base ${p.corFundo}`}>
-                          {p.icone}
+                      <div key={p.id} className="flex items-center gap-3 rounded-xl border border-[#E5E1DA] bg-white p-3">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#CCFBF1]">
+                          {iconePendencia(p.tipo)}
                         </div>
                         <div className="min-w-0">
                           <p className="truncate text-sm font-medium text-slate-800">{p.titulo}</p>
@@ -2865,7 +2905,7 @@ export default function Home() {
               })()}
             </div>
 
-            <div className="mt-8 border-t border-slate-100 pt-4">
+            <div className="mt-8 border-t border-[#E5E1DA] pt-4">
               {!confirmandoExclusaoMembro ? (
                 <button onClick={() => setConfirmandoExclusaoMembro(true)} className="w-full text-sm text-red-600">
                   Excluir este membro
@@ -2880,7 +2920,7 @@ export default function Home() {
                     <button disabled={carregando} onClick={excluirMembro} className="flex-1 rounded-xl bg-red-600 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50">
                       {carregando ? 'Excluindo...' : 'Sim, excluir'}
                     </button>
-                    <button onClick={() => setConfirmandoExclusaoMembro(false)} className="flex-1 rounded-xl border border-slate-200 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">
+                    <button onClick={() => setConfirmandoExclusaoMembro(false)} className="flex-1 rounded-xl border border-slate-200 py-2 text-sm font-medium text-slate-600 hover:bg-[#FAFAF8]">
                       Cancelar
                     </button>
                   </div>
@@ -2892,16 +2932,28 @@ export default function Home() {
 
         {passo === 'painel' && membroSelecionado && telaDetalhe !== null && (
           <div>
-            <button onClick={() => setTelaDetalhe(null)} className="mb-4 text-sm text-teal-700">
-              ← Voltar
-            </button>
+            {telaDetalhe !== 'eventoresumo' && (
+              <>
+                <button onClick={() => setTelaDetalhe(null)} className="mb-4 text-sm text-teal-700">
+                  ← Voltar
+                </button>
 
-            <div className="mb-4 flex items-center gap-2">
-              <span className="text-2xl">{telaDetalhe === 'onboardingvoz' ? '🎤' : secoes.find((s) => s.id === telaDetalhe)?.icone}</span>
-              <h2 className="text-lg font-semibold text-slate-800">
-                {telaDetalhe === 'onboardingvoz' ? 'Contar sobre a saúde' : secoes.find((s) => s.id === telaDetalhe)?.label}
-              </h2>
-            </div>
+                <div className="mb-4 flex items-center gap-2 text-teal-700">
+                  {telaDetalhe === 'onboardingvoz' ? (
+                    <svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                      <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                      <line x1="12" y1="19" x2="12" y2="23" />
+                    </svg>
+                  ) : (
+                    iconeSecao(telaDetalhe as Aba)
+                  )}
+                  <h2 className="text-lg font-semibold text-slate-800">
+                    {telaDetalhe === 'onboardingvoz' ? 'Contar sobre a saúde' : secoes.find((s) => s.id === telaDetalhe)?.label}
+                  </h2>
+                </div>
+              </>
+            )}
 
             {telaDetalhe === 'onboardingvoz' && (
               <div className="space-y-4">
@@ -2913,7 +2965,7 @@ export default function Home() {
                 <p className="text-sm text-slate-500">
                   Conte rapidamente sobre a saúde de <strong>{membroSelecionado.nome}</strong>: doenças, alergias, cirurgias, remédios que usa. Fale tudo de uma vez, separando por vírgula ou “e”.
                 </p>
-                <div className="rounded-xl border border-slate-100 p-4 space-y-3">
+                <div className="rounded-xl border border-[#E5E1DA] p-4 space-y-3">
                   <div className="flex items-center justify-between mb-1">
                     <label className="text-xs text-slate-400">o que você quiser contar</label>
                     <button
@@ -2941,7 +2993,7 @@ export default function Home() {
                   <div className="space-y-3">
                     <p className="text-sm font-medium text-slate-600">Confira o que eu entendi — pode corrigir tudo antes de salvar:</p>
                     {ovItens.map((item) => (
-                      <div key={item.id} className={`rounded-xl border p-3 space-y-2 ${item.incluir ? 'border-slate-200' : 'border-slate-100 opacity-50'}`}>
+                      <div key={item.id} className={`rounded-xl border p-3 space-y-2 ${item.incluir ? 'border-slate-200' : 'border-[#E5E1DA] opacity-50'}`}>
                         <div className="flex items-center gap-2">
                           <input type="checkbox" checked={item.incluir} onChange={() => alternarIncluirItemOnboarding(item.id)} />
                           <select
@@ -2986,10 +3038,10 @@ export default function Home() {
                 </datalist>
                 <div className="grid grid-cols-2 gap-2">
                   {[
-                    { id: 'evento' as const, label: 'Evento de Saúde', icone: '🩺' },
-                    { id: 'cirurgia' as const, label: 'Cirurgia/Internação', icone: '🏥' },
-                    { id: 'consulta' as const, label: 'Consulta', icone: '📅' },
-                    { id: 'medicamento' as const, label: 'Medicamento', icone: '💊' },
+                    { id: 'evento' as const, label: 'Evento de Saúde' },
+                    { id: 'cirurgia' as const, label: 'Cirurgia/Internação' },
+                    { id: 'consulta' as const, label: 'Consulta' },
+                    { id: 'medicamento' as const, label: 'Medicamento' },
                   ].map((op) => (
                     <button
                       key={op.id}
@@ -2999,9 +3051,22 @@ export default function Home() {
                         setNrSalvo(false);
                         setErroNovoRegistro('');
                       }}
-                      className={`rounded-xl border p-4 text-center transition ${nrTipo === op.id ? 'border-teal-500 bg-teal-50' : 'border-slate-200 hover:bg-slate-50'}`}
+                      className={`rounded-xl border p-4 text-center transition ${nrTipo === op.id ? 'border-teal-500 bg-teal-50' : 'border-slate-200 hover:bg-[#FAFAF8]'}`}
                     >
-                      <div className="text-2xl">{op.icone}</div>
+                      <div className="flex justify-center text-teal-700">
+                        {op.id === 'evento' && (
+                          <svg width={26} height={26} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><rect x="8" y="2" width="8" height="4" rx="1" /><path d="M9 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-3" /></svg>
+                        )}
+                        {op.id === 'cirurgia' && (
+                          <svg width={26} height={26} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M3 21l7-7" /><path d="M13.5 10.5l6-6a2.1 2.1 0 0 0-3-3l-6 6" /><path d="M9 12l6 6" /><path d="M13 15l3 3" /><path d="M10 18l3 3" /></svg>
+                        )}
+                        {op.id === 'consulta' && (
+                          <svg width={26} height={26} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
+                        )}
+                        {op.id === 'medicamento' && (
+                          <svg width={26} height={26} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2" /></svg>
+                        )}
+                      </div>
                       <div className="text-sm font-medium text-slate-700 mt-1">{op.label}</div>
                     </button>
                   ))}
@@ -3014,7 +3079,7 @@ export default function Home() {
                 )}
 
                 {nrTipo === 'evento' && (
-                  <div className="space-y-3 rounded-xl border border-slate-100 p-4">
+                  <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
                     <input
                       className={inputClasse}
                       placeholder="🔎 buscar evento de saúde já cadastrado"
@@ -3030,7 +3095,7 @@ export default function Home() {
                             <button
                               key={c.id}
                               onClick={() => { setTelaDetalhe('condicoes'); abrirEdicaoCondicao(c); }}
-                              className="w-full text-left text-sm rounded-lg bg-slate-50 px-3 py-2 hover:bg-slate-100"
+                              className="w-full text-left text-sm rounded-lg bg-[#FAFAF8] px-3 py-2 hover:bg-slate-100"
                             >
                               {c.nome}{c.data_diagnostico_ou_procedimento && ` · ${formatarData(c.data_diagnostico_ou_procedimento)}`}
                             </button>
@@ -3121,7 +3186,7 @@ export default function Home() {
                 )}
 
                 {nrTipo === 'cirurgia' && (
-                  <div className="space-y-3 rounded-xl border border-slate-100 p-4">
+                  <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
                     <input
                       className={inputClasse}
                       placeholder="🔎 buscar cirurgia/internação já cadastrada"
@@ -3137,7 +3202,7 @@ export default function Home() {
                             <button
                               key={c.id}
                               onClick={() => { setTelaDetalhe('condicoes'); abrirEdicaoCondicao(c); }}
-                              className="w-full text-left text-sm rounded-lg bg-slate-50 px-3 py-2 hover:bg-slate-100"
+                              className="w-full text-left text-sm rounded-lg bg-[#FAFAF8] px-3 py-2 hover:bg-slate-100"
                             >
                               {tipoCondicaoLabels[c.tipo]}: {c.nome}{c.data_diagnostico_ou_procedimento && ` · ${formatarData(c.data_diagnostico_ou_procedimento)}`}
                             </button>
@@ -3219,7 +3284,7 @@ export default function Home() {
                 )}
 
                 {nrTipo === 'consulta' && (
-                  <div className="space-y-3 rounded-xl border border-slate-100 p-4">
+                  <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
                     <input
                       className={inputClasse}
                       placeholder="🔎 buscar consulta já cadastrada"
@@ -3238,7 +3303,7 @@ export default function Home() {
                             <button
                               key={c.id}
                               onClick={() => { setTelaDetalhe('consultas'); abrirEdicaoConsulta(c); }}
-                              className="w-full text-left text-sm rounded-lg bg-slate-50 px-3 py-2 hover:bg-slate-100"
+                              className="w-full text-left text-sm rounded-lg bg-[#FAFAF8] px-3 py-2 hover:bg-slate-100"
                             >
                               {c.especialidade?.nome || 'Consulta'} · {new Date(c.data_hora).toLocaleDateString('pt-BR')}
                             </button>
@@ -3333,7 +3398,7 @@ export default function Home() {
                 )}
 
                 {nrTipo === 'medicamento' && (
-                  <div className="space-y-3 rounded-xl border border-slate-100 p-4">
+                  <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
                     <input
                       className={inputClasse}
                       placeholder="🔎 buscar medicamento já cadastrado"
@@ -3349,7 +3414,7 @@ export default function Home() {
                             <button
                               key={m.id}
                               onClick={() => { setTelaDetalhe('medicacoes'); abrirEdicaoMedicacao(m); }}
-                              className="w-full text-left text-sm rounded-lg bg-slate-50 px-3 py-2 hover:bg-slate-100"
+                              className="w-full text-left text-sm rounded-lg bg-[#FAFAF8] px-3 py-2 hover:bg-slate-100"
                             >
                               {m.nome}{m.dosagem && ` · ${m.dosagem}`}
                             </button>
@@ -3450,7 +3515,7 @@ export default function Home() {
                     role="button"
                     tabIndex={0}
                     onKeyDown={(e) => { if (e.key === 'Enter') abrirResumoEvento(c); }}
-                    className="w-full cursor-pointer rounded-xl border border-slate-100 p-3 text-left transition hover:bg-slate-50"
+                    className="w-full cursor-pointer rounded-xl border border-[#E5E1DA] p-3 text-left transition hover:bg-[#FAFAF8]"
                   >
                     <div className="flex items-center justify-between">
                       <p className="font-medium text-slate-800">{c.nome}</p>
@@ -3497,7 +3562,7 @@ export default function Home() {
                     + Adicionar condição
                   </button>
                 ) : (
-                  <div className="space-y-3 rounded-xl border border-slate-100 p-4">
+                  <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
                     <select
                       className={inputClasse}
                       value={novoTipoCondicao}
@@ -3650,7 +3715,7 @@ export default function Home() {
                     </div>
                     <button
                       onClick={() => { setTelaDetalhe('condicoes'); abrirEdicaoCondicao(evento); }}
-                      className="shrink-0 rounded-lg px-2 py-1 text-sm text-slate-400 hover:bg-slate-50 hover:text-teal-700"
+                      className="shrink-0 rounded-lg px-2 py-1 text-sm text-slate-400 hover:bg-[#FAFAF8] hover:text-teal-700"
                       aria-label="Editar evento"
                     >
                       ✎ editar
@@ -3675,7 +3740,7 @@ export default function Home() {
                           <button
                             key={m.id}
                             onClick={() => { setTelaDetalhe('medicacoes'); abrirEdicaoMedicacao(m); }}
-                            className="w-full rounded-xl border border-slate-100 p-3 text-left transition hover:bg-slate-50"
+                            className="w-full rounded-xl border border-[#E5E1DA] p-3 text-left transition hover:bg-[#FAFAF8]"
                           >
                             <p className="text-sm font-medium text-slate-800">{m.nome}</p>
                             <p className="text-xs text-slate-400">
@@ -3702,7 +3767,7 @@ export default function Home() {
                           <button
                             key={cs.id}
                             onClick={() => { setTelaDetalhe('consultas'); abrirEdicaoConsulta(cs); }}
-                            className="w-full rounded-xl border border-slate-100 p-3 text-left transition hover:bg-slate-50"
+                            className="w-full rounded-xl border border-[#E5E1DA] p-3 text-left transition hover:bg-[#FAFAF8]"
                           >
                             <p className="text-sm font-medium text-slate-800">{cs.especialidade?.nome || 'Consulta'}</p>
                             <p className="text-xs text-slate-400">{new Date(cs.data_hora).toLocaleDateString('pt-BR')}</p>
@@ -3727,7 +3792,7 @@ export default function Home() {
                           <button
                             key={e.id}
                             onClick={() => { setTelaDetalhe('exames'); abrirEdicaoExame(e); }}
-                            className="w-full rounded-xl border border-slate-100 p-3 text-left transition hover:bg-slate-50"
+                            className="w-full rounded-xl border border-[#E5E1DA] p-3 text-left transition hover:bg-[#FAFAF8]"
                           >
                             <p className="text-sm font-medium text-slate-800">{e.nome}</p>
                             <p className="text-xs text-slate-400">{formatarData(e.data_realizacao)}{e.laboratorio ? ` · ${e.laboratorio}` : ''}</p>
@@ -3752,7 +3817,7 @@ export default function Home() {
                           <button
                             key={v.id}
                             onClick={() => { setTelaDetalhe('vacinas'); abrirEdicaoVacina(v); }}
-                            className="w-full rounded-xl border border-slate-100 p-3 text-left transition hover:bg-slate-50"
+                            className="w-full rounded-xl border border-[#E5E1DA] p-3 text-left transition hover:bg-[#FAFAF8]"
                           >
                             <p className="text-sm font-medium text-slate-800">{v.nome}{v.dose ? ` — ${v.dose}` : ''}</p>
                             <p className="text-xs text-slate-400">{formatarData(v.data_aplicacao)}</p>
@@ -3777,7 +3842,7 @@ export default function Home() {
                           <button
                             key={m.id}
                             onClick={() => { setTelaDetalhe('crescimento'); abrirEdicaoCrescimento(m); }}
-                            className="w-full rounded-xl border border-slate-100 p-3 text-left transition hover:bg-slate-50"
+                            className="w-full rounded-xl border border-[#E5E1DA] p-3 text-left transition hover:bg-[#FAFAF8]"
                           >
                             <p className="text-sm font-medium text-slate-800">
                               {m.peso_kg != null ? `${m.peso_kg} kg` : ''}{m.peso_kg != null && m.altura_cm != null ? ' · ' : ''}{m.altura_cm != null ? `${m.altura_cm} cm` : ''}
@@ -3821,7 +3886,7 @@ export default function Home() {
                     <button
                       key={m.id}
                       onClick={() => abrirEdicaoMedicacao(m)}
-                      className="w-full rounded-xl border border-slate-100 p-3 text-left transition hover:bg-slate-50"
+                      className="w-full rounded-xl border border-[#E5E1DA] p-3 text-left transition hover:bg-[#FAFAF8]"
                     >
                       <div className="flex items-center justify-between">
                         <p className="font-medium text-slate-800">{m.nome} ✎</p>
@@ -3855,7 +3920,7 @@ export default function Home() {
                     + Adicionar medicação
                   </button>
                 ) : (
-                  <div className="space-y-3 rounded-xl border border-slate-100 p-4">
+                  <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
                     <input
                       className={inputClasse}
                       placeholder="nome do remédio"
@@ -4020,7 +4085,7 @@ export default function Home() {
                     <button
                       key={c.id}
                       onClick={() => abrirEdicaoConsulta(c)}
-                      className="w-full rounded-xl border border-slate-100 p-3 text-left transition hover:bg-slate-50"
+                      className="w-full rounded-xl border border-[#E5E1DA] p-3 text-left transition hover:bg-[#FAFAF8]"
                     >
                       <div className="flex items-center justify-between">
                         <p className="font-medium text-slate-800">{c.especialidade?.nome || 'Especialidade'} ✎</p>
@@ -4059,7 +4124,7 @@ export default function Home() {
                     + Adicionar consulta
                   </button>
                 ) : (
-                  <div className="space-y-3 rounded-xl border border-slate-100 p-4">
+                  <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
                     <select
                       className={inputClasse}
                       value={novaEspecialidadeConsulta}
@@ -4164,7 +4229,7 @@ export default function Home() {
                       />
                     </div>
 
-                    <div className="rounded-xl border border-slate-100 p-3 space-y-3">
+                    <div className="rounded-xl border border-[#E5E1DA] p-3 space-y-3">
                       <p className="text-xs font-medium text-slate-500">Financeiro / reembolso</p>
                       <div className="flex rounded-xl bg-slate-100 p-1">
                         <button
@@ -4252,7 +4317,7 @@ export default function Home() {
                   <button
                     key={m.id}
                     onClick={() => abrirEdicaoMedico(m)}
-                    className="w-full rounded-xl border border-slate-100 p-3 text-left transition hover:bg-slate-50"
+                    className="w-full rounded-xl border border-[#E5E1DA] p-3 text-left transition hover:bg-[#FAFAF8]"
                   >
                     <p className="font-medium text-slate-800">{m.nome} ✎</p>
                     <p className="text-xs text-slate-400">
@@ -4267,7 +4332,7 @@ export default function Home() {
                     + Adicionar médico
                   </button>
                 ) : (
-                  <div className="space-y-3 rounded-xl border border-slate-100 p-4">
+                  <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
                     <input
                       className={inputClasse}
                       placeholder="nome (ex: Dr. João Silva)"
@@ -4339,7 +4404,7 @@ export default function Home() {
                   <button
                     key={e.id}
                     onClick={() => abrirEdicaoExame(e)}
-                    className="w-full rounded-xl border border-slate-100 p-3 text-left transition hover:bg-slate-50"
+                    className="w-full rounded-xl border border-[#E5E1DA] p-3 text-left transition hover:bg-[#FAFAF8]"
                   >
                     <div className="flex items-center justify-between">
                       <p className="font-medium text-slate-800">{e.nome} ✎</p>
@@ -4355,7 +4420,7 @@ export default function Home() {
                     + Adicionar exame
                   </button>
                 ) : (
-                  <div className="space-y-3 rounded-xl border border-slate-100 p-4">
+                  <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
                     <input
                       className={inputClasse}
                       placeholder="nome do exame (ex: Hemograma completo)"
@@ -4432,7 +4497,7 @@ export default function Home() {
                     <button
                       key={v.id}
                       onClick={() => abrirEdicaoVacina(v)}
-                      className="w-full rounded-xl border border-slate-100 p-3 text-left transition hover:bg-slate-50"
+                      className="w-full rounded-xl border border-[#E5E1DA] p-3 text-left transition hover:bg-[#FAFAF8]"
                     >
                       <div className="flex items-center justify-between">
                         <p className="font-medium text-slate-800">{v.nome} ✎</p>
@@ -4456,7 +4521,7 @@ export default function Home() {
                     + Adicionar vacina
                   </button>
                 ) : (
-                  <div className="space-y-3 rounded-xl border border-slate-100 p-4">
+                  <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
                     <select
                       className={inputClasse}
                       value={novoNomeVacina}
@@ -4548,7 +4613,7 @@ export default function Home() {
 
             {telaDetalhe === 'nascimento' && (
               <div className="space-y-3">
-                <div className="flex items-center gap-4 rounded-xl bg-slate-50 p-3 mb-2">
+                <div className="flex items-center gap-4 rounded-xl bg-[#FAFAF8] p-3 mb-2">
                   {membroSelecionado.foto_url ? (
                     <img
                       src={membroSelecionado.foto_url}
@@ -4594,11 +4659,11 @@ export default function Home() {
 
                 <div className="space-y-3 mb-2">
                   <div className="grid grid-cols-2 gap-3">
-                    <div className="rounded-xl bg-slate-50 p-3">
+                    <div className="rounded-xl bg-[#FAFAF8] p-3">
                       <p className="text-xs text-slate-400">Data de nascimento</p>
                       <p className="text-sm font-medium text-slate-800">{formatarData(membroSelecionado.data_nascimento)}</p>
                     </div>
-                    <div className="rounded-xl bg-slate-50 p-3">
+                    <div className="rounded-xl bg-[#FAFAF8] p-3">
                       <p className="text-xs text-slate-400">Sexo biológico</p>
                       <p className="text-sm font-medium text-slate-800 capitalize">{membroSelecionado.sexo_biologico}</p>
                     </div>
@@ -4609,13 +4674,13 @@ export default function Home() {
                           setValorTipoEdit(membroSelecionado.tipo_sanguineo || '');
                           setEditandoTipo(true);
                         }}
-                        className="rounded-xl bg-slate-50 p-3 text-left transition hover:bg-slate-100"
+                        className="rounded-xl bg-[#FAFAF8] p-3 text-left transition hover:bg-slate-100"
                       >
                         <p className="text-xs text-slate-400">Tipo sanguíneo ✎</p>
                         <p className="text-sm font-medium text-slate-800">{membroSelecionado.tipo_sanguineo || 'toque para informar'}</p>
                       </button>
                     ) : (
-                      <div className="rounded-xl bg-slate-50 p-3">
+                      <div className="rounded-xl bg-[#FAFAF8] p-3">
                         <p className="text-xs text-slate-400 mb-1">Tipo sanguíneo</p>
                         <select
                           autoFocus
@@ -4637,7 +4702,7 @@ export default function Home() {
                       </div>
                     )}
 
-                    <div className="rounded-xl bg-slate-50 p-3">
+                    <div className="rounded-xl bg-[#FAFAF8] p-3">
                       <p className="text-xs text-slate-400">Idade</p>
                       <p className="text-sm font-medium text-slate-800">{calcularIdade(membroSelecionado.data_nascimento)} anos</p>
                     </div>
@@ -4648,7 +4713,7 @@ export default function Home() {
                           setValorParentescoEdit(membroSelecionado.parentesco || '');
                           setEditandoParentesco(true);
                         }}
-                        className="col-span-2 rounded-xl bg-slate-50 p-3 text-left transition hover:bg-slate-100"
+                        className="col-span-2 rounded-xl bg-[#FAFAF8] p-3 text-left transition hover:bg-slate-100"
                       >
                         <p className="text-xs text-slate-400">Grau de parentesco ✎</p>
                         <p className="text-sm font-medium text-slate-800">
@@ -4656,7 +4721,7 @@ export default function Home() {
                         </p>
                       </button>
                     ) : (
-                      <div className="col-span-2 rounded-xl bg-slate-50 p-3">
+                      <div className="col-span-2 rounded-xl bg-[#FAFAF8] p-3">
                         <p className="text-xs text-slate-400 mb-1">Grau de parentesco</p>
                         <select
                           autoFocus
@@ -4680,13 +4745,13 @@ export default function Home() {
                         setValorObsEdit(membroSelecionado.observacoes_gerais || '');
                         setEditandoObs(true);
                       }}
-                      className="w-full rounded-xl bg-slate-50 p-3 text-left transition hover:bg-slate-100"
+                      className="w-full rounded-xl bg-[#FAFAF8] p-3 text-left transition hover:bg-slate-100"
                     >
                       <p className="text-xs text-slate-400">Observações ✎</p>
                       <p className="text-sm text-slate-700">{membroSelecionado.observacoes_gerais || 'toque para adicionar'}</p>
                     </button>
                   ) : (
-                    <div className="rounded-xl bg-slate-50 p-3 space-y-2">
+                    <div className="rounded-xl bg-[#FAFAF8] p-3 space-y-2">
                       <div className="flex items-center justify-between">
                         <p className="text-xs text-slate-400">Observações</p>
                         <button
@@ -4772,7 +4837,7 @@ export default function Home() {
                   )}
                 </div>
 
-                <div className="border-t border-slate-100 pt-3">
+                <div className="border-t border-[#E5E1DA] pt-3">
                   <p className="text-xs font-medium text-slate-500 mb-2">Informações de nascimento</p>
                 </div>
 
@@ -4782,27 +4847,27 @@ export default function Home() {
                       <p className="text-sm text-slate-400 text-center py-2">Nenhuma informação de nascimento registrada ainda.</p>
                     ) : (
                       <div className="grid grid-cols-2 gap-3">
-                        <div className="rounded-xl bg-slate-50 p-3">
+                        <div className="rounded-xl bg-[#FAFAF8] p-3">
                           <p className="text-xs text-slate-400">Peso ao nascer</p>
                           <p className="text-sm font-medium text-slate-800">{nascimento.peso_nascimento != null ? `${nascimento.peso_nascimento} kg` : '—'}</p>
                         </div>
-                        <div className="rounded-xl bg-slate-50 p-3">
+                        <div className="rounded-xl bg-[#FAFAF8] p-3">
                           <p className="text-xs text-slate-400">Comprimento ao nascer</p>
                           <p className="text-sm font-medium text-slate-800">{nascimento.comprimento_nascimento != null ? `${nascimento.comprimento_nascimento} cm` : '—'}</p>
                         </div>
-                        <div className="rounded-xl bg-slate-50 p-3">
+                        <div className="rounded-xl bg-[#FAFAF8] p-3">
                           <p className="text-xs text-slate-400">Perímetro cefálico</p>
                           <p className="text-sm font-medium text-slate-800">{nascimento.perimetro_cefalico != null ? `${nascimento.perimetro_cefalico} cm` : '—'}</p>
                         </div>
-                        <div className="rounded-xl bg-slate-50 p-3">
+                        <div className="rounded-xl bg-[#FAFAF8] p-3">
                           <p className="text-xs text-slate-400">Idade gestacional</p>
                           <p className="text-sm font-medium text-slate-800">{nascimento.idade_gestacional_semanas != null ? `${nascimento.idade_gestacional_semanas} semanas` : '—'}</p>
                         </div>
-                        <div className="rounded-xl bg-slate-50 p-3">
+                        <div className="rounded-xl bg-[#FAFAF8] p-3">
                           <p className="text-xs text-slate-400">Tipo de parto</p>
                           <p className="text-sm font-medium text-slate-800 capitalize">{nascimento.tipo_parto || '—'}</p>
                         </div>
-                        <div className="rounded-xl bg-slate-50 p-3">
+                        <div className="rounded-xl bg-[#FAFAF8] p-3">
                           <p className="text-xs text-slate-400">Apgar</p>
                           <p className="text-sm font-medium text-slate-800">
                             {nascimento.apgar_1min != null || nascimento.apgar_5min != null
@@ -4810,16 +4875,16 @@ export default function Home() {
                               : '—'}
                           </p>
                         </div>
-                        <div className="rounded-xl bg-slate-50 p-3">
+                        <div className="rounded-xl bg-[#FAFAF8] p-3">
                           <p className="text-xs text-slate-400">UTI neonatal</p>
                           <p className="text-sm font-medium text-slate-800">{nascimento.uti_neonatal ? 'Sim' : 'Não'}</p>
                         </div>
-                        <div className="rounded-xl bg-slate-50 p-3">
+                        <div className="rounded-xl bg-[#FAFAF8] p-3">
                           <p className="text-xs text-slate-400">Local de nascimento</p>
                           <p className="text-sm font-medium text-slate-800">{nascimento.local_nascimento || '—'}</p>
                         </div>
                         {nascimento.intercorrencias && (
-                          <div className="col-span-2 rounded-xl bg-slate-50 p-3">
+                          <div className="col-span-2 rounded-xl bg-[#FAFAF8] p-3">
                             <p className="text-xs text-slate-400">Intercorrências</p>
                             <p className="text-sm text-slate-700">{nascimento.intercorrencias}</p>
                           </div>
@@ -4831,7 +4896,7 @@ export default function Home() {
                     </button>
                   </>
                 ) : (
-                  <div className="space-y-3 rounded-xl border border-slate-100 p-4">
+                  <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
                     <input
                       className={inputClasse}
                       placeholder="peso ao nascer (kg, ex: 3,250)"
@@ -4930,7 +4995,7 @@ export default function Home() {
             {telaDetalhe === 'crescimento' && (
               <div className="space-y-3">
                 {crescimento.length >= 2 && (
-                  <div className="rounded-xl border border-slate-100 p-3">
+                  <div className="rounded-xl border border-[#E5E1DA] p-3">
                     <p className="text-xs font-medium text-slate-500 mb-2">Peso (kg) ao longo do tempo</p>
                     <ResponsiveContainer width="100%" height={180}>
                       <LineChart data={crescimento.map((m) => ({
@@ -4971,7 +5036,7 @@ export default function Home() {
                     <button
                       key={m.id}
                       onClick={() => abrirEdicaoCrescimento(m)}
-                      className="w-full rounded-xl border border-slate-100 p-3 text-left transition hover:bg-slate-50"
+                      className="w-full rounded-xl border border-[#E5E1DA] p-3 text-left transition hover:bg-[#FAFAF8]"
                     >
                       <div className="flex items-center justify-between">
                         <p className="font-medium text-slate-800">{formatarData(m.data_medicao)} ✎</p>
@@ -5003,7 +5068,7 @@ export default function Home() {
                     + Adicionar medição
                   </button>
                 ) : (
-                  <div className="space-y-3 rounded-xl border border-slate-100 p-4">
+                  <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
                     <div>
                       <label className="text-xs text-slate-400 mb-1 block">data da medição</label>
                       <input
@@ -5090,7 +5155,7 @@ export default function Home() {
                 {membroSelecionado.parentesco && riscos != null && riscos
                   .filter((r) => !filtroEspecialidadeRisco || r.categoria === filtroEspecialidadeRisco)
                   .map((r) => (
-                  <div key={r.id} className="rounded-xl border border-slate-100 p-3">
+                  <div key={r.id} className="rounded-xl border border-[#E5E1DA] p-3">
                     <div className="flex items-start justify-between gap-2">
                       <div>
                         <span className="inline-block mb-1 text-xs bg-slate-100 text-slate-600 rounded-full px-2 py-0.5">
@@ -5118,7 +5183,7 @@ export default function Home() {
                       {historicoGeral
                         .filter((nome) => !filtroEspecialidadeRisco || obterCategoriaDoenca(nome) === filtroEspecialidadeRisco)
                         .map((nome) => (
-                        <div key={nome} className="rounded-xl border border-slate-100 p-3">
+                        <div key={nome} className="rounded-xl border border-[#E5E1DA] p-3">
                           <span className="inline-block mb-1 text-xs bg-slate-100 text-slate-600 rounded-full px-2 py-0.5">
                             {obterCategoriaDoenca(nome)}
                           </span>
