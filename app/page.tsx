@@ -3484,7 +3484,20 @@ export default function Home() {
 
             {telaDetalhe === 'condicoes' && (
               <div className="space-y-3">
-                {condicoes.length > 0 && (
+                {!mostrarFormCondicao && (
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-slate-400">{condicoes.length} registrado{condicoes.length === 1 ? '' : 's'}</p>
+                    <button
+                      onClick={abrirNovaCondicao}
+                      aria-label="Novo evento de saúde"
+                      className="flex items-center gap-1 text-sm font-semibold text-teal-700"
+                    >
+                      <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+                      novo
+                    </button>
+                  </div>
+                )}
+                {!mostrarFormCondicao && condicoes.length > 0 && (
                   <input
                     className={inputClasse}
                     placeholder="🔎 buscar por nome, tipo ou status"
@@ -3492,10 +3505,10 @@ export default function Home() {
                     onChange={(e) => setBuscaCondicao(e.target.value)}
                   />
                 )}
-                {condicoes.length === 0 && (
+                {!mostrarFormCondicao && condicoes.length === 0 && (
                   <p className="text-sm text-slate-400 text-center py-2">Nenhum evento de saúde registrado ainda.</p>
                 )}
-                {condicoes
+                {!mostrarFormCondicao && condicoes
                   .filter((c) => {
                     const termo = buscaCondicao.trim().toLowerCase();
                     if (!termo) return true;
@@ -3557,12 +3570,12 @@ export default function Home() {
                   );
                 })}
 
-                {!mostrarFormCondicao ? (
-                  <button onClick={abrirNovaCondicao} className={botaoPrimario}>
-                    + Adicionar condição
-                  </button>
-                ) : (
-                  <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
+                {mostrarFormCondicao && (
+                  <>
+                    <button onClick={() => setMostrarFormCondicao(false)} className="text-sm text-teal-700">
+                      ← Voltar
+                    </button>
+                    <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
                     <select
                       className={inputClasse}
                       value={novoTipoCondicao}
@@ -3681,7 +3694,8 @@ export default function Home() {
                         Excluir esta condição
                       </button>
                     )}
-                  </div>
+                    </div>
+                  </>
                 )}
               </div>
             )}
@@ -3859,68 +3873,81 @@ export default function Home() {
 
             {telaDetalhe === 'medicacoes' && (
               <div className="space-y-3">
-                {medicacoes.length > 0 && (
-                  <input
-                    className={inputClasse}
-                    placeholder="🔎 buscar por nome ou classe (ex: antibiótico)"
-                    value={buscaMedicacao}
-                    onChange={(e) => setBuscaMedicacao(e.target.value)}
-                  />
-                )}
-                {medicacoes.length === 0 && (
-                  <p className="text-sm text-slate-400 text-center py-2">Nenhuma medicação registrada ainda.</p>
-                )}
-                {medicacoes
-                  .filter((m) => {
-                    const termo = buscaMedicacao.trim().toLowerCase();
-                    if (!termo) return true;
-                    const labelClasse = classesMedicamento.find((c) => c.value === m.classe)?.label || '';
-                    return m.nome.toLowerCase().includes(termo) || labelClasse.toLowerCase().includes(termo);
-                  })
-                  .map((m) => {
-                  const ativa = !m.data_fim || m.data_fim >= new Date().toISOString().slice(0, 10);
-                  const condicaoNome = condicoes.find((c) => c.id === m.condicao_relacionada_id)?.nome;
-                  const consultaLigada = consultas.find((cs) => cs.id === m.consulta_relacionada_id);
-                  const labelClasse = classesMedicamento.find((c) => c.value === m.classe)?.label;
-                  return (
-                    <button
-                      key={m.id}
-                      onClick={() => abrirEdicaoMedicacao(m)}
-                      className="w-full rounded-xl border border-[#E5E1DA] p-3 text-left transition hover:bg-[#FAFAF8]"
-                    >
-                      <div className="flex items-center justify-between">
-                        <p className="font-medium text-slate-800">{m.nome} ✎</p>
-                        <span className={`text-xs rounded-full px-2 py-0.5 ${ativa ? 'bg-teal-100 text-teal-700' : 'bg-slate-100 text-slate-500'}`}>
-                          {ativa ? 'ativa' : 'encerrada'}
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-400">
-                        {[m.dosagem, m.frequencia, m.horario && `às ${m.horario}`].filter(Boolean).join(' · ')}
-                      </p>
-                      {labelClasse && (
-                        <span className="inline-block mt-1 text-xs bg-slate-100 text-slate-600 rounded-full px-2 py-0.5">
-                          {labelClasse}
-                        </span>
-                      )}
-                      {condicaoNome && (
-                        <p className="text-xs text-slate-400 mt-1">Para: {condicaoNome}</p>
-                      )}
-                      {consultaLigada && (
-                        <p className="text-xs text-slate-400 mt-1">
-                          Receitada em: {consultaLigada.especialidade?.nome || 'consulta'} de {new Date(consultaLigada.data_hora).toLocaleDateString('pt-BR')}
-                        </p>
-                      )}
-                      {m.observacao && <p className="text-xs text-slate-500 mt-1">📝 {m.observacao}</p>}
-                    </button>
-                  );
-                })}
-
                 {!mostrarFormMedicacao ? (
-                  <button onClick={abrirNovaMedicacao} className={botaoPrimario}>
-                    + Adicionar medicação
-                  </button>
+                  <>
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs text-slate-400">{medicacoes.length} registrada{medicacoes.length === 1 ? '' : 's'}</p>
+                      <button
+                        onClick={abrirNovaMedicacao}
+                        aria-label="Nova medicação"
+                        className="flex items-center gap-1 text-sm font-semibold text-teal-700"
+                      >
+                        <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+                        nova
+                      </button>
+                    </div>
+                    {medicacoes.length > 0 && (
+                      <input
+                        className={inputClasse}
+                        placeholder="🔎 buscar por nome ou classe (ex: antibiótico)"
+                        value={buscaMedicacao}
+                        onChange={(e) => setBuscaMedicacao(e.target.value)}
+                      />
+                    )}
+                    {medicacoes.length === 0 && (
+                      <p className="text-sm text-slate-400 text-center py-2">Nenhuma medicação registrada ainda.</p>
+                    )}
+                    {medicacoes
+                      .filter((m) => {
+                        const termo = buscaMedicacao.trim().toLowerCase();
+                        if (!termo) return true;
+                        const labelClasse = classesMedicamento.find((c) => c.value === m.classe)?.label || '';
+                        return m.nome.toLowerCase().includes(termo) || labelClasse.toLowerCase().includes(termo);
+                      })
+                      .map((m) => {
+                      const ativa = !m.data_fim || m.data_fim >= new Date().toISOString().slice(0, 10);
+                      const condicaoNome = condicoes.find((c) => c.id === m.condicao_relacionada_id)?.nome;
+                      const consultaLigada = consultas.find((cs) => cs.id === m.consulta_relacionada_id);
+                      const labelClasse = classesMedicamento.find((c) => c.value === m.classe)?.label;
+                      return (
+                        <button
+                          key={m.id}
+                          onClick={() => abrirEdicaoMedicacao(m)}
+                          className="w-full rounded-xl border border-[#E5E1DA] p-3 text-left transition hover:bg-[#FAFAF8]"
+                        >
+                          <div className="flex items-center justify-between">
+                            <p className="font-medium text-slate-800">{m.nome} ✎</p>
+                            <span className={`text-xs rounded-full px-2 py-0.5 ${ativa ? 'bg-teal-100 text-teal-700' : 'bg-slate-100 text-slate-500'}`}>
+                              {ativa ? 'ativa' : 'encerrada'}
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-400">
+                            {[m.dosagem, m.frequencia, m.horario && `às ${m.horario}`].filter(Boolean).join(' · ')}
+                          </p>
+                          {labelClasse && (
+                            <span className="inline-block mt-1 text-xs bg-slate-100 text-slate-600 rounded-full px-2 py-0.5">
+                              {labelClasse}
+                            </span>
+                          )}
+                          {condicaoNome && (
+                            <p className="text-xs text-slate-400 mt-1">Para: {condicaoNome}</p>
+                          )}
+                          {consultaLigada && (
+                            <p className="text-xs text-slate-400 mt-1">
+                              Receitada em: {consultaLigada.especialidade?.nome || 'consulta'} de {new Date(consultaLigada.data_hora).toLocaleDateString('pt-BR')}
+                            </p>
+                          )}
+                          {m.observacao && <p className="text-xs text-slate-500 mt-1">📝 {m.observacao}</p>}
+                        </button>
+                      );
+                    })}
+                  </>
                 ) : (
-                  <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
+                  <>
+                    <button onClick={() => setMostrarFormMedicacao(false)} className="text-sm text-teal-700">
+                      ← Voltar
+                    </button>
+                    <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
                     <input
                       className={inputClasse}
                       placeholder="nome do remédio"
@@ -4043,88 +4070,102 @@ export default function Home() {
                         Excluir esta medicação
                       </button>
                     )}
-                  </div>
+                    </div>
+                  </>
                 )}
               </div>
             )}
 
             {telaDetalhe === 'consultas' && (
               <div className="space-y-3">
-                {consultas.length > 0 && (
-                  <input
-                    className={inputClasse}
-                    placeholder="🔎 buscar por especialidade ou profissional"
-                    value={buscaConsulta}
-                    onChange={(e) => setBuscaConsulta(e.target.value)}
-                  />
-                )}
-                {consultas.length === 0 && (
-                  <p className="text-sm text-slate-400 text-center py-2">Nenhuma consulta registrada ainda.</p>
-                )}
-                {consultas
-                  .filter((c) => {
-                    const termo = buscaConsulta.trim().toLowerCase();
-                    if (!termo) return true;
-                    return (
-                      (c.especialidade?.nome || '').toLowerCase().includes(termo) ||
-                      (c.profissional_saude?.nome || '').toLowerCase().includes(termo)
-                    );
-                  })
-                  .map((c) => {
-                  const dh = new Date(c.data_hora);
-                  const dataFormatada = dh.toLocaleDateString('pt-BR');
-                  const horaFormatada = dh.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-                  const statusEstilo =
-                    c.status === 'realizada'
-                      ? 'bg-teal-100 text-teal-700'
-                      : c.status === 'cancelada'
-                      ? 'bg-slate-100 text-slate-500'
-                      : 'bg-amber-100 text-amber-700';
-                  const condicaoLigadaNome = condicoes.find((cd) => cd.id === c.condicao_relacionada_id)?.nome;
-                  return (
-                    <button
-                      key={c.id}
-                      onClick={() => abrirEdicaoConsulta(c)}
-                      className="w-full rounded-xl border border-[#E5E1DA] p-3 text-left transition hover:bg-[#FAFAF8]"
-                    >
-                      <div className="flex items-center justify-between">
-                        <p className="font-medium text-slate-800">{c.especialidade?.nome || 'Especialidade'} ✎</p>
-                        <span className={`text-xs rounded-full px-2 py-0.5 ${statusEstilo}`}>
-                          {c.status}
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-400">
-                        {dataFormatada} às {horaFormatada}
-                        {c.profissional_saude?.nome && ` · ${c.profissional_saude.nome}`}
-                        {c.local && ` · ${c.local}`}
-                      </p>
-                      {c.motivo && <p className="text-xs text-slate-400 mt-1">Motivo: {c.motivo}</p>}
-                      {condicaoLigadaNome && (
-                        <p className="text-xs text-slate-400 mt-1">Sobre: {condicaoLigadaNome}</p>
-                      )}
-                      {c.anotacoes && <p className="text-xs text-slate-500 mt-1">📝 {c.anotacoes}</p>}
-                      {c.data_retorno_sugerida && (
-                        <span className="inline-block mt-1 mr-1 text-xs bg-teal-50 text-teal-700 rounded-full px-2 py-0.5">
-                          retorno: {formatarData(c.data_retorno_sugerida)}
-                        </span>
-                      )}
-                      {c.forma_atendimento && (
-                        <span className="inline-block mt-1 text-xs bg-slate-100 text-slate-600 rounded-full px-2 py-0.5">
-                          {c.forma_atendimento === 'particular' ? `Particular${c.valor_pago ? ` · R$ ${c.valor_pago.toFixed(2)}` : ''}` : 'Plano de saúde'}
-                          {c.solicitou_reembolso ? ' · reembolso' : ''}
-                          {c.incluir_ir ? ' · IR' : ''}
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-
                 {!mostrarFormConsulta ? (
-                  <button onClick={abrirNovaConsulta} className={botaoPrimario}>
-                    + Adicionar consulta
-                  </button>
+                  <>
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs text-slate-400">{consultas.length} registrada{consultas.length === 1 ? '' : 's'}</p>
+                      <button
+                        onClick={abrirNovaConsulta}
+                        aria-label="Nova consulta"
+                        className="flex items-center gap-1 text-sm font-semibold text-teal-700"
+                      >
+                        <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+                        nova
+                      </button>
+                    </div>
+                    {consultas.length > 0 && (
+                      <input
+                        className={inputClasse}
+                        placeholder="🔎 buscar por especialidade ou profissional"
+                        value={buscaConsulta}
+                        onChange={(e) => setBuscaConsulta(e.target.value)}
+                      />
+                    )}
+                    {consultas.length === 0 && (
+                      <p className="text-sm text-slate-400 text-center py-2">Nenhuma consulta registrada ainda.</p>
+                    )}
+                    {consultas
+                      .filter((c) => {
+                        const termo = buscaConsulta.trim().toLowerCase();
+                        if (!termo) return true;
+                        return (
+                          (c.especialidade?.nome || '').toLowerCase().includes(termo) ||
+                          (c.profissional_saude?.nome || '').toLowerCase().includes(termo)
+                        );
+                      })
+                      .map((c) => {
+                      const dh = new Date(c.data_hora);
+                      const dataFormatada = dh.toLocaleDateString('pt-BR');
+                      const horaFormatada = dh.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+                      const statusEstilo =
+                        c.status === 'realizada'
+                          ? 'bg-teal-100 text-teal-700'
+                          : c.status === 'cancelada'
+                          ? 'bg-slate-100 text-slate-500'
+                          : 'bg-amber-100 text-amber-700';
+                      const condicaoLigadaNome = condicoes.find((cd) => cd.id === c.condicao_relacionada_id)?.nome;
+                      return (
+                        <button
+                          key={c.id}
+                          onClick={() => abrirEdicaoConsulta(c)}
+                          className="w-full rounded-xl border border-[#E5E1DA] p-3 text-left transition hover:bg-[#FAFAF8]"
+                        >
+                          <div className="flex items-center justify-between">
+                            <p className="font-medium text-slate-800">{c.especialidade?.nome || 'Especialidade'} ✎</p>
+                            <span className={`text-xs rounded-full px-2 py-0.5 ${statusEstilo}`}>
+                              {c.status}
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-400">
+                            {dataFormatada} às {horaFormatada}
+                            {c.profissional_saude?.nome && ` · ${c.profissional_saude.nome}`}
+                            {c.local && ` · ${c.local}`}
+                          </p>
+                          {c.motivo && <p className="text-xs text-slate-400 mt-1">Motivo: {c.motivo}</p>}
+                          {condicaoLigadaNome && (
+                            <p className="text-xs text-slate-400 mt-1">Sobre: {condicaoLigadaNome}</p>
+                          )}
+                          {c.anotacoes && <p className="text-xs text-slate-500 mt-1">📝 {c.anotacoes}</p>}
+                          {c.data_retorno_sugerida && (
+                            <span className="inline-block mt-1 mr-1 text-xs bg-teal-50 text-teal-700 rounded-full px-2 py-0.5">
+                              retorno: {formatarData(c.data_retorno_sugerida)}
+                            </span>
+                          )}
+                          {c.forma_atendimento && (
+                            <span className="inline-block mt-1 text-xs bg-slate-100 text-slate-600 rounded-full px-2 py-0.5">
+                              {c.forma_atendimento === 'particular' ? `Particular${c.valor_pago ? ` · R$ ${c.valor_pago.toFixed(2)}` : ''}` : 'Plano de saúde'}
+                              {c.solicitou_reembolso ? ' · reembolso' : ''}
+                              {c.incluir_ir ? ' · IR' : ''}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </>
                 ) : (
-                  <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
+                  <>
+                    <button onClick={() => setMostrarFormConsulta(false)} className="text-sm text-teal-700">
+                      ← Voltar
+                    </button>
+                    <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
                     <select
                       className={inputClasse}
                       value={novaEspecialidadeConsulta}
@@ -4300,39 +4341,55 @@ export default function Home() {
                         Excluir esta consulta
                       </button>
                     )}
-                  </div>
+                    </div>
+                  </>
                 )}
               </div>
             )}
 
             {telaDetalhe === 'medicos' && (
               <div className="space-y-3">
-                <p className="text-xs text-slate-400">
-                  Esses profissionais ficam disponíveis para todos os membros da família — não precisa cadastrar de novo para um irmão que usa o mesmo médico.
-                </p>
-                {medicos.length === 0 && (
-                  <p className="text-sm text-slate-400 text-center py-2">Nenhum médico cadastrado ainda.</p>
-                )}
-                {medicos.map((m) => (
-                  <button
-                    key={m.id}
-                    onClick={() => abrirEdicaoMedico(m)}
-                    className="w-full rounded-xl border border-[#E5E1DA] p-3 text-left transition hover:bg-[#FAFAF8]"
-                  >
-                    <p className="font-medium text-slate-800">{m.nome} ✎</p>
+                {!mostrarFormMedico && (
+                  <>
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs text-slate-400">{medicos.length} cadastrado{medicos.length === 1 ? '' : 's'}</p>
+                      <button
+                        onClick={abrirNovoMedico}
+                        aria-label="Novo médico"
+                        className="flex items-center gap-1 text-sm font-semibold text-teal-700"
+                      >
+                        <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+                        novo
+                      </button>
+                    </div>
                     <p className="text-xs text-slate-400">
-                      {[m.especialidade, m.telefone, m.local].filter(Boolean).join(' · ')}
+                      Esses profissionais ficam disponíveis para todos os membros da família — não precisa cadastrar de novo para um irmão que usa o mesmo médico.
                     </p>
-                    {m.observacao && <p className="text-xs text-slate-500 mt-1">📝 {m.observacao}</p>}
-                  </button>
-                ))}
+                    {medicos.length === 0 && (
+                      <p className="text-sm text-slate-400 text-center py-2">Nenhum médico cadastrado ainda.</p>
+                    )}
+                    {medicos.map((m) => (
+                      <button
+                        key={m.id}
+                        onClick={() => abrirEdicaoMedico(m)}
+                        className="w-full rounded-xl border border-[#E5E1DA] p-3 text-left transition hover:bg-[#FAFAF8]"
+                      >
+                        <p className="font-medium text-slate-800">{m.nome} ✎</p>
+                        <p className="text-xs text-slate-400">
+                          {[m.especialidade, m.telefone, m.local].filter(Boolean).join(' · ')}
+                        </p>
+                        {m.observacao && <p className="text-xs text-slate-500 mt-1">📝 {m.observacao}</p>}
+                      </button>
+                    ))}
+                  </>
+                )}
 
-                {!mostrarFormMedico ? (
-                  <button onClick={abrirNovoMedico} className={botaoPrimario}>
-                    + Adicionar médico
-                  </button>
-                ) : (
-                  <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
+                {mostrarFormMedico && (
+                  <>
+                    <button onClick={() => setMostrarFormMedico(false)} className="text-sm text-teal-700">
+                      ← Voltar
+                    </button>
+                    <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
                     <input
                       className={inputClasse}
                       placeholder="nome (ex: Dr. João Silva)"
@@ -4390,37 +4447,53 @@ export default function Home() {
                         Excluir este médico
                       </button>
                     )}
-                  </div>
+                    </div>
+                  </>
                 )}
               </div>
             )}
 
             {telaDetalhe === 'exames' && (
               <div className="space-y-3">
-                {exames.length === 0 && (
-                  <p className="text-sm text-slate-400 text-center py-2">Nenhum exame registrado ainda.</p>
-                )}
-                {exames.map((e) => (
-                  <button
-                    key={e.id}
-                    onClick={() => abrirEdicaoExame(e)}
-                    className="w-full rounded-xl border border-[#E5E1DA] p-3 text-left transition hover:bg-[#FAFAF8]"
-                  >
+                {!mostrarFormExame && (
+                  <>
                     <div className="flex items-center justify-between">
-                      <p className="font-medium text-slate-800">{e.nome} ✎</p>
-                      <span className="text-xs text-slate-400">{formatarData(e.data_realizacao)}</span>
+                      <p className="text-xs text-slate-400">{exames.length} registrado{exames.length === 1 ? '' : 's'}</p>
+                      <button
+                        onClick={abrirNovoExame}
+                        aria-label="Novo exame"
+                        className="flex items-center gap-1 text-sm font-semibold text-teal-700"
+                      >
+                        <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+                        novo
+                      </button>
                     </div>
-                    {e.laboratorio && <p className="text-xs text-slate-400">{e.laboratorio}</p>}
-                    {e.resultado_resumo && <p className="text-xs text-slate-500 mt-1">📋 {e.resultado_resumo}</p>}
-                  </button>
-                ))}
+                    {exames.length === 0 && (
+                      <p className="text-sm text-slate-400 text-center py-2">Nenhum exame registrado ainda.</p>
+                    )}
+                    {exames.map((e) => (
+                      <button
+                        key={e.id}
+                        onClick={() => abrirEdicaoExame(e)}
+                        className="w-full rounded-xl border border-[#E5E1DA] p-3 text-left transition hover:bg-[#FAFAF8]"
+                      >
+                        <div className="flex items-center justify-between">
+                          <p className="font-medium text-slate-800">{e.nome} ✎</p>
+                          <span className="text-xs text-slate-400">{formatarData(e.data_realizacao)}</span>
+                        </div>
+                        {e.laboratorio && <p className="text-xs text-slate-400">{e.laboratorio}</p>}
+                        {e.resultado_resumo && <p className="text-xs text-slate-500 mt-1">📋 {e.resultado_resumo}</p>}
+                      </button>
+                    ))}
+                  </>
+                )}
 
-                {!mostrarFormExame ? (
-                  <button onClick={abrirNovoExame} className={botaoPrimario}>
-                    + Adicionar exame
-                  </button>
-                ) : (
-                  <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
+                {mostrarFormExame && (
+                  <>
+                    <button onClick={() => setMostrarFormExame(false)} className="text-sm text-teal-700">
+                      ← Voltar
+                    </button>
+                    <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
                     <input
                       className={inputClasse}
                       placeholder="nome do exame (ex: Hemograma completo)"
@@ -4481,47 +4554,63 @@ export default function Home() {
                         Excluir este exame
                       </button>
                     )}
-                  </div>
+                    </div>
+                  </>
                 )}
               </div>
             )}
 
             {telaDetalhe === 'vacinas' && (
               <div className="space-y-3">
-                {vacinas.length === 0 && (
-                  <p className="text-sm text-slate-400 text-center py-2">Nenhuma vacina registrada ainda.</p>
+                {!mostrarFormVacina && (
+                  <>
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs text-slate-400">{vacinas.length} registrada{vacinas.length === 1 ? '' : 's'}</p>
+                      <button
+                        onClick={abrirNovaVacina}
+                        aria-label="Nova vacina"
+                        className="flex items-center gap-1 text-sm font-semibold text-teal-700"
+                      >
+                        <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+                        nova
+                      </button>
+                    </div>
+                    {vacinas.length === 0 && (
+                      <p className="text-sm text-slate-400 text-center py-2">Nenhuma vacina registrada ainda.</p>
+                    )}
+                    {vacinas.map((v) => {
+                      const proximaVencida = !!v.proxima_dose_data && v.proxima_dose_data < new Date().toISOString().slice(0, 10);
+                      return (
+                        <button
+                          key={v.id}
+                          onClick={() => abrirEdicaoVacina(v)}
+                          className="w-full rounded-xl border border-[#E5E1DA] p-3 text-left transition hover:bg-[#FAFAF8]"
+                        >
+                          <div className="flex items-center justify-between">
+                            <p className="font-medium text-slate-800">{v.nome} ✎</p>
+                            <span className="text-xs text-slate-400">{formatarData(v.data_aplicacao)}</span>
+                          </div>
+                          <p className="text-xs text-slate-400">
+                            {[v.dose, v.proxima_dose_data && `próxima dose: ${formatarData(v.proxima_dose_data)}`].filter(Boolean).join(' · ')}
+                          </p>
+                          {proximaVencida && (
+                            <span className="inline-block mt-1 text-xs bg-amber-100 text-amber-700 rounded-full px-2 py-0.5">
+                              próxima dose atrasada
+                            </span>
+                          )}
+                          {v.observacoes && <p className="text-xs text-slate-500 mt-1">📝 {v.observacoes}</p>}
+                        </button>
+                      );
+                    })}
+                  </>
                 )}
-                {vacinas.map((v) => {
-                  const proximaVencida = !!v.proxima_dose_data && v.proxima_dose_data < new Date().toISOString().slice(0, 10);
-                  return (
-                    <button
-                      key={v.id}
-                      onClick={() => abrirEdicaoVacina(v)}
-                      className="w-full rounded-xl border border-[#E5E1DA] p-3 text-left transition hover:bg-[#FAFAF8]"
-                    >
-                      <div className="flex items-center justify-between">
-                        <p className="font-medium text-slate-800">{v.nome} ✎</p>
-                        <span className="text-xs text-slate-400">{formatarData(v.data_aplicacao)}</span>
-                      </div>
-                      <p className="text-xs text-slate-400">
-                        {[v.dose, v.proxima_dose_data && `próxima dose: ${formatarData(v.proxima_dose_data)}`].filter(Boolean).join(' · ')}
-                      </p>
-                      {proximaVencida && (
-                        <span className="inline-block mt-1 text-xs bg-amber-100 text-amber-700 rounded-full px-2 py-0.5">
-                          próxima dose atrasada
-                        </span>
-                      )}
-                      {v.observacoes && <p className="text-xs text-slate-500 mt-1">📝 {v.observacoes}</p>}
-                    </button>
-                  );
-                })}
 
-                {!mostrarFormVacina ? (
-                  <button onClick={abrirNovaVacina} className={botaoPrimario}>
-                    + Adicionar vacina
-                  </button>
-                ) : (
-                  <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
+                {mostrarFormVacina && (
+                  <>
+                    <button onClick={() => setMostrarFormVacina(false)} className="text-sm text-teal-700">
+                      ← Voltar
+                    </button>
+                    <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
                     <select
                       className={inputClasse}
                       value={novoNomeVacina}
@@ -4606,7 +4695,8 @@ export default function Home() {
                         Excluir esta vacina
                       </button>
                     )}
-                  </div>
+                    </div>
+                  </>
                 )}
               </div>
             )}
@@ -4994,7 +5084,20 @@ export default function Home() {
 
             {telaDetalhe === 'crescimento' && (
               <div className="space-y-3">
-                {crescimento.length >= 2 && (
+                {!mostrarFormCrescimento && (
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-slate-400">{crescimento.length} registrada{crescimento.length === 1 ? '' : 's'}</p>
+                    <button
+                      onClick={abrirNovaMedicaoCrescimento}
+                      aria-label="Nova medição"
+                      className="flex items-center gap-1 text-sm font-semibold text-teal-700"
+                    >
+                      <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+                      nova
+                    </button>
+                  </div>
+                )}
+                {!mostrarFormCrescimento && crescimento.length >= 2 && (
                   <div className="rounded-xl border border-[#E5E1DA] p-3">
                     <p className="text-xs font-medium text-slate-500 mb-2">Peso (kg) ao longo do tempo</p>
                     <ResponsiveContainer width="100%" height={180}>
@@ -5025,11 +5128,11 @@ export default function Home() {
                   </div>
                 )}
 
-                {crescimento.length === 0 && (
+                {!mostrarFormCrescimento && crescimento.length === 0 && (
                   <p className="text-sm text-slate-400 text-center py-2">Nenhuma medição registrada ainda.</p>
                 )}
 
-                {[...crescimento].reverse().map((m) => {
+                {!mostrarFormCrescimento && [...crescimento].reverse().map((m) => {
                   const idadeMeses = calcularIdadeEmMeses(membroSelecionado.data_nascimento, m.data_medicao);
                   const zscores = calcularZScoresOMS(membroSelecionado.sexo_biologico, idadeMeses, m.peso_kg, m.altura_cm);
                   return (
@@ -5063,12 +5166,12 @@ export default function Home() {
                   );
                 })}
 
-                {!mostrarFormCrescimento ? (
-                  <button onClick={abrirNovaMedicaoCrescimento} className={botaoPrimario}>
-                    + Adicionar medição
-                  </button>
-                ) : (
-                  <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
+                {mostrarFormCrescimento && (
+                  <>
+                    <button onClick={() => setMostrarFormCrescimento(false)} className="text-sm text-teal-700">
+                      ← Voltar
+                    </button>
+                    <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
                     <div>
                       <label className="text-xs text-slate-400 mb-1 block">data da medição</label>
                       <input
@@ -5110,7 +5213,8 @@ export default function Home() {
                         Excluir esta medição
                       </button>
                     )}
-                  </div>
+                    </div>
+                  </>
                 )}
               </div>
             )}
