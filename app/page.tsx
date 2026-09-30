@@ -157,6 +157,7 @@ type Exame = {
   data_realizacao: string;
   laboratorio: string | null;
   resultado_resumo: string | null;
+  condicao_relacionada_id: string | null;
 };
 
 type Vacina = {
@@ -166,6 +167,7 @@ type Vacina = {
   data_aplicacao: string;
   proxima_dose_data: string | null;
   observacoes: string | null;
+  condicao_relacionada_id: string | null;
 };
 
 type InformacaoNascimento = {
@@ -187,6 +189,7 @@ type MedicaoCrescimento = {
   data_medicao: string;
   peso_kg: number | null;
   altura_cm: number | null;
+  condicao_relacionada_id: string | null;
 };
 
 type Medico = {
@@ -199,7 +202,7 @@ type Medico = {
 };
 
 type Passo = 'login' | 'cadastro' | 'onboarding' | 'painel';
-type Aba = 'geral' | 'condicoes' | 'medicacoes' | 'consultas' | 'exames' | 'vacinas' | 'nascimento' | 'crescimento' | 'riscos' | 'medicos' | 'novoregistro' | 'onboardingvoz';
+type Aba = 'geral' | 'condicoes' | 'medicacoes' | 'consultas' | 'exames' | 'vacinas' | 'nascimento' | 'crescimento' | 'riscos' | 'medicos' | 'novoregistro' | 'onboardingvoz' | 'eventoresumo';
 
 function calcularIdade(dataNascimento: string) {
   const nascimento = new Date(dataNascimento);
@@ -595,6 +598,11 @@ export default function Home() {
   const [doencaOutraNome, setDoencaOutraNome] = useState('');
   const [erroCondicao, setErroCondicao] = useState('');
   const [condicaoEditandoId, setCondicaoEditandoId] = useState<string | null>(null);
+  // Tela de "resumo do evento": qual condição está sendo vista, e (quando a pessoa
+  // clica em "+ nova consulta/medicação" de dentro do resumo) pra onde voltar depois
+  // de salvar, já ligado a esse evento.
+  const [condicaoResumoId, setCondicaoResumoId] = useState<string | null>(null);
+  const [voltarResumoEventoId, setVoltarResumoEventoId] = useState<string | null>(null);
   const [buscaCondicao, setBuscaCondicao] = useState('');
 
   const [medicacoes, setMedicacoes] = useState<Medicacao[]>([]);
@@ -730,6 +738,7 @@ export default function Home() {
   const [novoResultadoExame, setNovoResultadoExame] = useState('');
   const [erroExame, setErroExame] = useState('');
   const [exameEditandoId, setExameEditandoId] = useState<string | null>(null);
+  const [novaCondicaoRelacionadaExame, setNovaCondicaoRelacionadaExame] = useState('');
 
   const [vacinas, setVacinas] = useState<Vacina[]>([]);
   const [mostrarFormVacina, setMostrarFormVacina] = useState(false);
@@ -741,6 +750,7 @@ export default function Home() {
   const [novaObsVacina, setNovaObsVacina] = useState('');
   const [erroVacina, setErroVacina] = useState('');
   const [vacinaEditandoId, setVacinaEditandoId] = useState<string | null>(null);
+  const [novaCondicaoRelacionadaVacina, setNovaCondicaoRelacionadaVacina] = useState('');
 
   const [nascimento, setNascimento] = useState<InformacaoNascimento | null>(null);
   const [mostrarFormNascimento, setMostrarFormNascimento] = useState(false);
@@ -763,6 +773,7 @@ export default function Home() {
   const [novaAlturaCrescimento, setNovaAlturaCrescimento] = useState('');
   const [erroCrescimento, setErroCrescimento] = useState('');
   const [crescimentoEditandoId, setCrescimentoEditandoId] = useState<string | null>(null);
+  const [novaCondicaoRelacionadaCrescimento, setNovaCondicaoRelacionadaCrescimento] = useState('');
 
   const [editandoParentesco, setEditandoParentesco] = useState(false);
   const [valorParentescoEdit, setValorParentescoEdit] = useState('');
@@ -842,7 +853,7 @@ export default function Home() {
   async function carregarExames(membroId: string) {
     const { data, error } = await supabase
       .from('exame')
-      .select('id, nome, data_realizacao, laboratorio, resultado_resumo')
+      .select('id, nome, data_realizacao, laboratorio, resultado_resumo, condicao_relacionada_id')
       .eq('membro_id', membroId)
       .order('data_realizacao', { ascending: false });
     if (!error && data && membroAtualRef.current === membroId) setExames(data);
@@ -851,7 +862,7 @@ export default function Home() {
   async function carregarVacinas(membroId: string) {
     const { data, error } = await supabase
       .from('vacina')
-      .select('id, nome, dose, data_aplicacao, proxima_dose_data, observacoes')
+      .select('id, nome, dose, data_aplicacao, proxima_dose_data, observacoes, condicao_relacionada_id')
       .eq('membro_id', membroId)
       .order('data_aplicacao', { ascending: false });
     if (!error && data && membroAtualRef.current === membroId) setVacinas(data);
@@ -869,7 +880,7 @@ export default function Home() {
   async function carregarCrescimento(membroId: string) {
     const { data, error } = await supabase
       .from('medicao_crescimento')
-      .select('id, data_medicao, peso_kg, altura_cm')
+      .select('id, data_medicao, peso_kg, altura_cm, condicao_relacionada_id')
       .eq('membro_id', membroId)
       .order('data_medicao', { ascending: true });
     if (!error && data && membroAtualRef.current === membroId) setCrescimento(data);
@@ -1568,6 +1579,31 @@ export default function Home() {
     setMostrarFormCondicao(true);
   }
 
+  // Abre a tela de "resumo" de um evento de saúde: mostra tudo que está ligado a
+  // ele (consultas, medicações — e no futuro exames/vacinas/crescimento, quando o
+  // banco tiver o campo de vínculo) com um "+ novo" que já cria o registro ligado.
+  function abrirResumoEvento(c: Condicao) {
+    setCondicaoResumoId(c.id);
+    setTelaDetalhe('eventoresumo');
+  }
+
+  // Chamadas pelos botões "+ nova consulta" / "+ nova medicação" de dentro do
+  // resumo do evento: abrem o formulário de sempre, já com o evento pré-selecionado,
+  // e marcam pra onde voltar depois de salvar (de volta pro resumo desse evento).
+  function abrirNovaMedicacaoParaEvento(condicaoId: string) {
+    abrirNovaMedicacao();
+    setNovaCondicaoRelacionada(condicaoId);
+    setVoltarResumoEventoId(condicaoId);
+    setTelaDetalhe('medicacoes');
+  }
+
+  function abrirNovaConsultaParaEvento(condicaoId: string) {
+    abrirNovaConsulta();
+    setNovaCondicaoRelacionadaConsulta(condicaoId);
+    setVoltarResumoEventoId(condicaoId);
+    setTelaDetalhe('consultas');
+  }
+
   async function salvarCondicao() {
     setErroCondicao('');
     const nomeFinal =
@@ -1706,6 +1742,11 @@ export default function Home() {
     setNovaObservacaoMedicacao('');
     setMostrarFormMedicacao(false);
     await carregarMedicacoes(membroSelecionado.id);
+    if (voltarResumoEventoId) {
+      setCondicaoResumoId(voltarResumoEventoId);
+      setVoltarResumoEventoId(null);
+      setTelaDetalhe('eventoresumo');
+    }
   }
 
   async function excluirMedicacao() {
@@ -1843,6 +1884,11 @@ export default function Home() {
       setNovaCondicaoRelacionadaConsulta('');
       setMostrarFormConsulta(false);
       await carregarConsultas(membroSelecionado.id);
+      if (voltarResumoEventoId) {
+        setCondicaoResumoId(voltarResumoEventoId);
+        setVoltarResumoEventoId(null);
+        setTelaDetalhe('eventoresumo');
+      }
     } catch (e: any) {
       setErroConsulta(e.message || 'Erro ao salvar consulta.');
     }
@@ -1927,6 +1973,7 @@ export default function Home() {
     setNovaDataExame('');
     setNovoLaboratorioExame('');
     setNovoResultadoExame('');
+    setNovaCondicaoRelacionadaExame('');
     setErroExame('');
     setMostrarFormExame(true);
   }
@@ -1937,8 +1984,16 @@ export default function Home() {
     setNovaDataExame(e.data_realizacao);
     setNovoLaboratorioExame(e.laboratorio || '');
     setNovoResultadoExame(e.resultado_resumo || '');
+    setNovaCondicaoRelacionadaExame(e.condicao_relacionada_id || '');
     setErroExame('');
     setMostrarFormExame(true);
+  }
+
+  function abrirNovoExameParaEvento(condicaoId: string) {
+    abrirNovoExame();
+    setNovaCondicaoRelacionadaExame(condicaoId);
+    setVoltarResumoEventoId(condicaoId);
+    setTelaDetalhe('exames');
   }
 
   async function salvarExame() {
@@ -1955,6 +2010,7 @@ export default function Home() {
       data_realizacao: novaDataExame,
       laboratorio: novoLaboratorioExame || null,
       resultado_resumo: novoResultadoExame || null,
+      condicao_relacionada_id: novaCondicaoRelacionadaExame || null,
     };
 
     const { error } = exameEditandoId
@@ -1971,8 +2027,14 @@ export default function Home() {
     setNovaDataExame('');
     setNovoLaboratorioExame('');
     setNovoResultadoExame('');
+    setNovaCondicaoRelacionadaExame('');
     setMostrarFormExame(false);
     await carregarExames(membroSelecionado.id);
+    if (voltarResumoEventoId) {
+      setCondicaoResumoId(voltarResumoEventoId);
+      setVoltarResumoEventoId(null);
+      setTelaDetalhe('eventoresumo');
+    }
   }
 
   async function excluirExame() {
@@ -1997,6 +2059,7 @@ export default function Home() {
     setNovaDataVacina('');
     setNovaProximaDoseVacina('');
     setNovaObsVacina('');
+    setNovaCondicaoRelacionadaVacina('');
     setErroVacina('');
     setMostrarFormVacina(true);
   }
@@ -2014,8 +2077,16 @@ export default function Home() {
     setNovaDataVacina(v.data_aplicacao);
     setNovaProximaDoseVacina(v.proxima_dose_data || '');
     setNovaObsVacina(v.observacoes || '');
+    setNovaCondicaoRelacionadaVacina(v.condicao_relacionada_id || '');
     setErroVacina('');
     setMostrarFormVacina(true);
+  }
+
+  function abrirNovaVacinaParaEvento(condicaoId: string) {
+    abrirNovaVacina();
+    setNovaCondicaoRelacionadaVacina(condicaoId);
+    setVoltarResumoEventoId(condicaoId);
+    setTelaDetalhe('vacinas');
   }
 
   async function salvarVacina() {
@@ -2034,6 +2105,7 @@ export default function Home() {
       data_aplicacao: novaDataVacina,
       proxima_dose_data: novaProximaDoseVacina || null,
       observacoes: novaObsVacina || null,
+      condicao_relacionada_id: novaCondicaoRelacionadaVacina || null,
     };
 
     const { error } = vacinaEditandoId
@@ -2052,8 +2124,14 @@ export default function Home() {
     setNovaDataVacina('');
     setNovaProximaDoseVacina('');
     setNovaObsVacina('');
+    setNovaCondicaoRelacionadaVacina('');
     setMostrarFormVacina(false);
     await carregarVacinas(membroSelecionado.id);
+    if (voltarResumoEventoId) {
+      setCondicaoResumoId(voltarResumoEventoId);
+      setVoltarResumoEventoId(null);
+      setTelaDetalhe('eventoresumo');
+    }
   }
 
   async function excluirVacina() {
@@ -2143,6 +2221,7 @@ export default function Home() {
     setNovaDataCrescimento('');
     setNovoPesoCrescimento('');
     setNovaAlturaCrescimento('');
+    setNovaCondicaoRelacionadaCrescimento('');
     setErroCrescimento('');
     setMostrarFormCrescimento(true);
   }
@@ -2152,8 +2231,16 @@ export default function Home() {
     setNovaDataCrescimento(m.data_medicao);
     setNovoPesoCrescimento(m.peso_kg != null ? String(m.peso_kg) : '');
     setNovaAlturaCrescimento(m.altura_cm != null ? String(m.altura_cm) : '');
+    setNovaCondicaoRelacionadaCrescimento(m.condicao_relacionada_id || '');
     setErroCrescimento('');
     setMostrarFormCrescimento(true);
+  }
+
+  function abrirNovaMedicaoCrescimentoParaEvento(condicaoId: string) {
+    abrirNovaMedicaoCrescimento();
+    setNovaCondicaoRelacionadaCrescimento(condicaoId);
+    setVoltarResumoEventoId(condicaoId);
+    setTelaDetalhe('crescimento');
   }
 
   async function salvarMedicaoCrescimento() {
@@ -2179,6 +2266,7 @@ export default function Home() {
       data_medicao: novaDataCrescimento,
       peso_kg: peso,
       altura_cm: altura,
+      condicao_relacionada_id: novaCondicaoRelacionadaCrescimento || null,
     };
 
     const { error } = crescimentoEditandoId
@@ -2191,8 +2279,14 @@ export default function Home() {
       return;
     }
     setCrescimentoEditandoId(null);
+    setNovaCondicaoRelacionadaCrescimento('');
     setMostrarFormCrescimento(false);
     await carregarCrescimento(membroSelecionado.id);
+    if (voltarResumoEventoId) {
+      setCondicaoResumoId(voltarResumoEventoId);
+      setVoltarResumoEventoId(null);
+      setTelaDetalhe('eventoresumo');
+    }
   }
 
   async function excluirMedicaoCrescimento() {
@@ -2422,6 +2516,60 @@ export default function Home() {
   const botaoSecundario =
     'w-full rounded-xl border border-slate-200 py-3 font-medium text-slate-600 transition hover:bg-slate-50';
 
+  // Pendências do membro selecionado, mostradas na tela inicial do perfil (quando
+  // nenhum ícone de categoria foi tocado ainda): próxima consulta agendada, próxima
+  // dose de vacina prevista, e medicação de uso contínuo com horário cadastrado.
+  // Usa os dados que já estão carregados em `consultas`/`vacinas`/`medicacoes` —
+  // não faz nenhuma busca nova no banco.
+  type ItemPendencia = { id: string; icone: string; corFundo: string; titulo: string; detalhe: string };
+  function obterPendencias(): ItemPendencia[] {
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    const itens: ItemPendencia[] = [];
+
+    const proximaConsulta = consultas
+      .filter((c) => c.status === 'agendada' && new Date(c.data_hora) >= hoje)
+      .sort((a, b) => new Date(a.data_hora).getTime() - new Date(b.data_hora).getTime())[0];
+    if (proximaConsulta) {
+      const dh = new Date(proximaConsulta.data_hora);
+      itens.push({
+        id: `consulta-${proximaConsulta.id}`,
+        icone: '📅',
+        corFundo: 'bg-blue-50',
+        titulo: `Consulta: ${proximaConsulta.especialidade?.nome || 'a confirmar'}${proximaConsulta.profissional_saude?.nome ? ' — ' + proximaConsulta.profissional_saude.nome : ''}`,
+        detalhe: `${dh.toLocaleDateString('pt-BR')}${proximaConsulta.local ? ' · ' + proximaConsulta.local : ''}`,
+      });
+    }
+
+    const proximaVacina = vacinas
+      .filter((v) => v.proxima_dose_data)
+      .sort((a, b) => new Date(a.proxima_dose_data as string).getTime() - new Date(b.proxima_dose_data as string).getTime())[0];
+    if (proximaVacina) {
+      const dv = new Date(proximaVacina.proxima_dose_data as string);
+      const diasRestantes = Math.round((dv.getTime() - hoje.getTime()) / 86400000);
+      itens.push({
+        id: `vacina-${proximaVacina.id}`,
+        icone: '💉',
+        corFundo: 'bg-amber-50',
+        titulo: `Vacina: ${proximaVacina.nome}${proximaVacina.dose ? ' — ' + proximaVacina.dose : ''}`,
+        detalhe: diasRestantes < 0 ? `atrasada desde ${dv.toLocaleDateString('pt-BR')}` : diasRestantes === 0 ? 'hoje' : `vence em ${diasRestantes} dias`,
+      });
+    }
+
+    const medicamentoContinuo = medicacoes.find((m) => !m.data_fim || new Date(m.data_fim) >= hoje);
+    if (medicamentoContinuo) {
+      itens.push({
+        id: `medicacao-${medicamentoContinuo.id}`,
+        icone: '💊',
+        corFundo: 'bg-teal-50',
+        titulo: `Medicação: ${medicamentoContinuo.nome}`,
+        detalhe: medicamentoContinuo.horario ? `hoje às ${medicamentoContinuo.horario}` : 'uso contínuo',
+      });
+    }
+
+    return itens;
+  }
+
   const secoes: { id: Aba; label: string; icone: string }[] = [
     { id: 'novoregistro', label: '+ Novo Registro', icone: '➕' },
     { id: 'condicoes', label: 'Evento de Saúde', icone: '🩺' },
@@ -2626,9 +2774,34 @@ export default function Home() {
 
         {passo === 'painel' && membroSelecionado && telaDetalhe === null && (
           <div>
-            <button onClick={() => setMembroSelecionado(null)} className="mb-4 text-sm text-teal-700">
-              ← Voltar
-            </button>
+            <div className="mb-4 flex items-center justify-between">
+              <button
+                onClick={() => setTelaDetalhe('nascimento')}
+                aria-label="Dados pessoais"
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-50 hover:text-slate-700"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" className="h-5 w-5">
+                  <line x1="3" y1="6" x2="21" y2="6" />
+                  <line x1="3" y1="12" x2="21" y2="12" />
+                  <line x1="3" y1="18" x2="21" y2="18" />
+                </svg>
+              </button>
+              <div className="flex items-center gap-3">
+                <button onClick={() => setMembroSelecionado(null)} className="text-sm text-teal-700">
+                  ← Voltar
+                </button>
+                <button
+                  aria-label="Notificações"
+                  title="Notificações (em breve)"
+                  className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
+                    <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+                    <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                  </svg>
+                </button>
+              </div>
+            </div>
 
             <button
               onClick={() => setTelaDetalhe('nascimento')}
@@ -2664,6 +2837,32 @@ export default function Home() {
                   <span className="text-xs font-medium text-slate-600 text-center">{s.label}</span>
                 </button>
               ))}
+            </div>
+
+            <div className="mt-8">
+              <h3 className="mb-1 text-sm font-semibold text-slate-800">Pendências</h3>
+              <p className="mb-3 text-xs text-slate-400">Toque num ícone acima pra ver a lista completa daquela categoria.</p>
+              {(() => {
+                const pendencias = obterPendencias();
+                if (pendencias.length === 0) {
+                  return <p className="text-sm text-slate-400 py-2">Nada pendente por aqui no momento.</p>;
+                }
+                return (
+                  <div className="space-y-2">
+                    {pendencias.map((p) => (
+                      <div key={p.id} className="flex items-center gap-3 rounded-xl border border-slate-100 p-3">
+                        <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-base ${p.corFundo}`}>
+                          {p.icone}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-slate-800">{p.titulo}</p>
+                          <p className="text-xs text-slate-400">{p.detalhe}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
 
             <div className="mt-8 border-t border-slate-100 pt-4">
@@ -3245,16 +3444,29 @@ export default function Home() {
                   const consultasLigadas = consultas.filter((cs) => cs.condicao_relacionada_id === c.id);
                   const medicacoesLigadas = medicacoes.filter((m) => m.condicao_relacionada_id === c.id);
                   return (
-                  <button
+                  <div
                     key={c.id}
-                    onClick={() => abrirEdicaoCondicao(c)}
-                    className="w-full rounded-xl border border-slate-100 p-3 text-left transition hover:bg-slate-50"
+                    onClick={() => abrirResumoEvento(c)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => { if (e.key === 'Enter') abrirResumoEvento(c); }}
+                    className="w-full cursor-pointer rounded-xl border border-slate-100 p-3 text-left transition hover:bg-slate-50"
                   >
                     <div className="flex items-center justify-between">
-                      <p className="font-medium text-slate-800">{c.nome} ✎</p>
-                      {c.relevante_geneticamente && (
-                        <span className="text-xs bg-amber-100 text-amber-700 rounded-full px-2 py-0.5">genético</span>
-                      )}
+                      <p className="font-medium text-slate-800">{c.nome}</p>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {c.relevante_geneticamente && (
+                          <span className="text-xs bg-amber-100 text-amber-700 rounded-full px-2 py-0.5">genético</span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); abrirEdicaoCondicao(c); }}
+                          aria-label="Editar evento de saúde"
+                          className="text-slate-400 hover:text-teal-700"
+                        >
+                          ✎
+                        </button>
+                      </div>
                     </div>
                     <p className="text-xs text-slate-400">
                       {tipoCondicaoLabels[c.tipo] || c.tipo} · {statusCondicaoLabels[c.status] || c.status}
@@ -3276,7 +3488,7 @@ export default function Home() {
                         )}
                       </div>
                     )}
-                  </button>
+                  </div>
                   );
                 })}
 
@@ -3408,6 +3620,177 @@ export default function Home() {
                 )}
               </div>
             )}
+
+            {telaDetalhe === 'eventoresumo' && (() => {
+              const evento = condicoes.find((c) => c.id === condicaoResumoId);
+              if (!evento) {
+                return (
+                  <div>
+                    <p className="text-sm text-slate-400">Esse evento não foi encontrado.</p>
+                    <button onClick={() => setTelaDetalhe('condicoes')} className="mt-3 text-sm text-teal-700">
+                      ← Voltar pra Eventos de Saúde
+                    </button>
+                  </div>
+                );
+              }
+              const consultasDoEvento = consultas.filter((cs) => cs.condicao_relacionada_id === evento.id);
+              const medicacoesDoEvento = medicacoes.filter((m) => m.condicao_relacionada_id === evento.id);
+              return (
+                <div className="space-y-5">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <button onClick={() => setTelaDetalhe('condicoes')} className="mb-1 text-sm text-teal-700">
+                        ← Eventos de Saúde
+                      </button>
+                      <h2 className="text-lg font-semibold text-slate-800">{evento.nome}</h2>
+                      <p className="text-xs text-slate-400">
+                        {tipoCondicaoLabels[evento.tipo] || evento.tipo} · {statusCondicaoLabels[evento.status] || evento.status}
+                        {evento.data_diagnostico_ou_procedimento && ` · ${formatarData(evento.data_diagnostico_ou_procedimento)}`}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => { setTelaDetalhe('condicoes'); abrirEdicaoCondicao(evento); }}
+                      className="shrink-0 rounded-lg px-2 py-1 text-sm text-slate-400 hover:bg-slate-50 hover:text-teal-700"
+                      aria-label="Editar evento"
+                    >
+                      ✎ editar
+                    </button>
+                  </div>
+
+                  {evento.observacao && <p className="text-sm text-slate-500">📝 {evento.observacao}</p>}
+                  {evento.orientacoes && <p className="text-sm text-teal-700">💡 {evento.orientacoes}</p>}
+
+                  <div>
+                    <div className="mb-2 flex items-center justify-between">
+                      <h3 className="text-sm font-semibold text-slate-800">💊 Medicações</h3>
+                      <button onClick={() => abrirNovaMedicacaoParaEvento(evento.id)} className="text-xs font-medium text-teal-700">
+                        + nova
+                      </button>
+                    </div>
+                    {medicacoesDoEvento.length === 0 ? (
+                      <p className="text-xs text-slate-400">Nenhuma medicação ligada ainda.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {medicacoesDoEvento.map((m) => (
+                          <button
+                            key={m.id}
+                            onClick={() => { setTelaDetalhe('medicacoes'); abrirEdicaoMedicacao(m); }}
+                            className="w-full rounded-xl border border-slate-100 p-3 text-left transition hover:bg-slate-50"
+                          >
+                            <p className="text-sm font-medium text-slate-800">{m.nome}</p>
+                            <p className="text-xs text-slate-400">
+                              {m.dosagem ? `${m.dosagem} · ` : ''}{m.data_fim ? `até ${formatarData(m.data_fim)}` : 'uso contínuo'}
+                            </p>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <div className="mb-2 flex items-center justify-between">
+                      <h3 className="text-sm font-semibold text-slate-800">📅 Consultas</h3>
+                      <button onClick={() => abrirNovaConsultaParaEvento(evento.id)} className="text-xs font-medium text-teal-700">
+                        + nova
+                      </button>
+                    </div>
+                    {consultasDoEvento.length === 0 ? (
+                      <p className="text-xs text-slate-400">Nenhuma consulta ligada ainda.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {consultasDoEvento.map((cs) => (
+                          <button
+                            key={cs.id}
+                            onClick={() => { setTelaDetalhe('consultas'); abrirEdicaoConsulta(cs); }}
+                            className="w-full rounded-xl border border-slate-100 p-3 text-left transition hover:bg-slate-50"
+                          >
+                            <p className="text-sm font-medium text-slate-800">{cs.especialidade?.nome || 'Consulta'}</p>
+                            <p className="text-xs text-slate-400">{new Date(cs.data_hora).toLocaleDateString('pt-BR')}</p>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <div className="mb-2 flex items-center justify-between">
+                      <h3 className="text-sm font-semibold text-slate-800">🧪 Exames</h3>
+                      <button onClick={() => abrirNovoExameParaEvento(evento.id)} className="text-xs font-medium text-teal-700">
+                        + novo
+                      </button>
+                    </div>
+                    {exames.filter((e) => e.condicao_relacionada_id === evento.id).length === 0 ? (
+                      <p className="text-xs text-slate-400">Nenhum exame ligado ainda.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {exames.filter((e) => e.condicao_relacionada_id === evento.id).map((e) => (
+                          <button
+                            key={e.id}
+                            onClick={() => { setTelaDetalhe('exames'); abrirEdicaoExame(e); }}
+                            className="w-full rounded-xl border border-slate-100 p-3 text-left transition hover:bg-slate-50"
+                          >
+                            <p className="text-sm font-medium text-slate-800">{e.nome}</p>
+                            <p className="text-xs text-slate-400">{formatarData(e.data_realizacao)}{e.laboratorio ? ` · ${e.laboratorio}` : ''}</p>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <div className="mb-2 flex items-center justify-between">
+                      <h3 className="text-sm font-semibold text-slate-800">💉 Vacinas</h3>
+                      <button onClick={() => abrirNovaVacinaParaEvento(evento.id)} className="text-xs font-medium text-teal-700">
+                        + nova
+                      </button>
+                    </div>
+                    {vacinas.filter((v) => v.condicao_relacionada_id === evento.id).length === 0 ? (
+                      <p className="text-xs text-slate-400">Nenhuma vacina ligada ainda.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {vacinas.filter((v) => v.condicao_relacionada_id === evento.id).map((v) => (
+                          <button
+                            key={v.id}
+                            onClick={() => { setTelaDetalhe('vacinas'); abrirEdicaoVacina(v); }}
+                            className="w-full rounded-xl border border-slate-100 p-3 text-left transition hover:bg-slate-50"
+                          >
+                            <p className="text-sm font-medium text-slate-800">{v.nome}{v.dose ? ` — ${v.dose}` : ''}</p>
+                            <p className="text-xs text-slate-400">{formatarData(v.data_aplicacao)}</p>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <div className="mb-2 flex items-center justify-between">
+                      <h3 className="text-sm font-semibold text-slate-800">📈 Crescimento</h3>
+                      <button onClick={() => abrirNovaMedicaoCrescimentoParaEvento(evento.id)} className="text-xs font-medium text-teal-700">
+                        + nova
+                      </button>
+                    </div>
+                    {crescimento.filter((m) => m.condicao_relacionada_id === evento.id).length === 0 ? (
+                      <p className="text-xs text-slate-400">Nenhuma medição ligada ainda.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {crescimento.filter((m) => m.condicao_relacionada_id === evento.id).map((m) => (
+                          <button
+                            key={m.id}
+                            onClick={() => { setTelaDetalhe('crescimento'); abrirEdicaoCrescimento(m); }}
+                            className="w-full rounded-xl border border-slate-100 p-3 text-left transition hover:bg-slate-50"
+                          >
+                            <p className="text-sm font-medium text-slate-800">
+                              {m.peso_kg != null ? `${m.peso_kg} kg` : ''}{m.peso_kg != null && m.altura_cm != null ? ' · ' : ''}{m.altura_cm != null ? `${m.altura_cm} cm` : ''}
+                            </p>
+                            <p className="text-xs text-slate-400">{formatarData(m.data_medicao)}</p>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
 
             {telaDetalhe === 'medicacoes' && (
               <div className="space-y-3">
@@ -3994,6 +4377,12 @@ export default function Home() {
                       value={novoLaboratorioExame}
                       onChange={(e) => setNovoLaboratorioExame(e.target.value)}
                     />
+                    <select className={inputClasse} value={novaCondicaoRelacionadaExame} onChange={(e) => setNovaCondicaoRelacionadaExame(e.target.value)}>
+                      <option value="">relacionado a qual evento de saúde? (opcional)</option>
+                      {condicoes.map((c) => (
+                        <option key={c.id} value={c.id}>{c.nome}</option>
+                      ))}
+                    </select>
                     <div>
                       <div className="flex items-center justify-between mb-1">
                         <label className="text-xs text-slate-400">resumo do resultado (opcional)</label>
@@ -4113,6 +4502,12 @@ export default function Home() {
                         onChange={(e) => setNovaProximaDoseVacina(e.target.value)}
                       />
                     </div>
+                    <select className={inputClasse} value={novaCondicaoRelacionadaVacina} onChange={(e) => setNovaCondicaoRelacionadaVacina(e.target.value)}>
+                      <option value="">relacionada a qual evento de saúde? (opcional)</option>
+                      {condicoes.map((c) => (
+                        <option key={c.id} value={c.id}>{c.nome}</option>
+                      ))}
+                    </select>
                     <div>
                       <div className="flex items-center justify-between mb-1">
                         <label className="text-xs text-slate-400">observações (opcional)</label>
@@ -4630,6 +5025,12 @@ export default function Home() {
                       value={novaAlturaCrescimento}
                       onChange={(e) => setNovaAlturaCrescimento(e.target.value)}
                     />
+                    <select className={inputClasse} value={novaCondicaoRelacionadaCrescimento} onChange={(e) => setNovaCondicaoRelacionadaCrescimento(e.target.value)}>
+                      <option value="">relacionada a qual evento de saúde? (opcional)</option>
+                      {condicoes.map((c) => (
+                        <option key={c.id} value={c.id}>{c.nome}</option>
+                      ))}
+                    </select>
                     {erroCrescimento && <p className="text-sm text-red-600">{erroCrescimento}</p>}
                     <div className="flex gap-2">
                       <button disabled={carregando} onClick={salvarMedicaoCrescimento} className={botaoPrimario}>
