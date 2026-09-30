@@ -202,7 +202,7 @@ type Medico = {
 };
 
 type Passo = 'login' | 'cadastro' | 'onboarding' | 'painel';
-type Aba = 'geral' | 'condicoes' | 'medicacoes' | 'consultas' | 'exames' | 'vacinas' | 'nascimento' | 'crescimento' | 'riscos' | 'medicos' | 'novoregistro' | 'onboardingvoz' | 'eventoresumo';
+type Aba = 'geral' | 'condicoes' | 'cirurgias' | 'medicacoes' | 'consultas' | 'exames' | 'vacinas' | 'nascimento' | 'crescimento' | 'riscos' | 'medicos' | 'novoregistro' | 'onboardingvoz' | 'eventoresumo';
 
 function calcularIdade(dataNascimento: string) {
   const nascimento = new Date(dataNascimento);
@@ -1546,9 +1546,9 @@ export default function Home() {
     }
   }
 
-  function abrirNovaCondicao() {
+  function abrirNovaCondicao(tipoPadrao: string = 'doenca') {
     setCondicaoEditandoId(null);
-    setNovoTipoCondicao('doenca');
+    setNovoTipoCondicao(tipoPadrao);
     setNovoNomeCondicao('');
     setDoencaOutraNome('');
     setNovaDataCondicao('');
@@ -2581,27 +2581,28 @@ export default function Home() {
   }
 
   const secoes: { id: Aba; label: string }[] = [
-    { id: 'novoregistro', label: '+ Novo Registro' },
     { id: 'condicoes', label: 'Evento de Saúde' },
+    { id: 'cirurgias', label: 'Cirurgia/Internação' },
     { id: 'medicacoes', label: 'Medicações' },
     { id: 'consultas', label: 'Consultas' },
-    { id: 'medicos', label: 'Médicos' },
     { id: 'exames', label: 'Exames' },
     { id: 'vacinas', label: 'Vacinas' },
-    { id: 'nascimento', label: 'Ficha Pessoal' },
     { id: 'crescimento', label: 'Crescimento' },
     { id: 'riscos', label: 'Cuidados Preventivos' },
+    { id: 'medicos', label: 'Médicos' },
   ];
 
   // Ícones de linha (estilo do protótipo) pra cada seção do hub do membro — substituem
   // os emojis que eram usados antes, pra bater com a cara combinada com a Roberta.
-  function iconeSecao(id: Aba) {
-    const props = { width: 26, height: 26, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
+  function iconeSecao(id: Aba, tamanho: number = 26) {
+    const props = { width: tamanho, height: tamanho, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
     switch (id) {
       case 'novoregistro':
         return <svg {...props}><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>;
       case 'condicoes':
         return <svg {...props}><rect x="8" y="2" width="8" height="4" rx="1" /><path d="M9 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-3" /></svg>;
+      case 'cirurgias':
+        return <svg {...props}><path d="M3 21l7-7" /><path d="M13.5 10.5l6-6a2.1 2.1 0 0 0-3-3l-6 6" /><path d="M9 12l6 6" /><path d="M13 15l3 3" /><path d="M10 18l3 3" /></svg>;
       case 'medicacoes':
         return <svg {...props}><path d="M22 12h-4l-3 9L9 3l-3 9H2" /></svg>;
       case 'consultas':
@@ -2864,22 +2865,20 @@ export default function Home() {
               </div>
             </button>
 
-            <div className="grid grid-cols-3 sm:grid-cols-4 gap-4">
+            <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
               {secoes.map((s) => (
                 <button
                   key={s.id}
                   onClick={() => setTelaDetalhe(s.id)}
-                  className="flex flex-col items-center gap-2 group"
+                  className="flex w-[68px] shrink-0 flex-col items-center gap-1.5 rounded-xl border border-[#E5E1DA] bg-white px-1 py-2.5 text-teal-700 transition hover:bg-[#FAFAF8]"
                 >
-                  <div className="flex h-16 w-16 items-center justify-center rounded-full bg-teal-50 text-teal-700 transition group-hover:bg-teal-100">
-                    {iconeSecao(s.id)}
-                  </div>
-                  <span className="text-xs font-medium text-slate-600 text-center">{s.label}</span>
+                  {iconeSecao(s.id, 20)}
+                  <span className="text-[10px] font-medium text-slate-600 text-center leading-tight">{s.label}</span>
                 </button>
               ))}
             </div>
 
-            <div className="mt-8">
+            <div className="mt-5">
               <h3 className="mb-1 text-sm font-semibold text-slate-800">Pendências</h3>
               <p className="mb-3 text-xs text-slate-400">Toque num ícone acima pra ver a lista completa daquela categoria.</p>
               {(() => {
@@ -3482,22 +3481,25 @@ export default function Home() {
               </div>
             )}
 
-            {telaDetalhe === 'condicoes' && (
+            {(telaDetalhe === 'condicoes' || telaDetalhe === 'cirurgias') && (() => {
+              const ehCirurgias = telaDetalhe === 'cirurgias';
+              const condicoesDaTela = condicoes.filter((c) => (ehCirurgias ? c.tipo !== 'doenca' : c.tipo === 'doenca'));
+              return (
               <div className="space-y-3">
                 {!mostrarFormCondicao && (
                   <div className="flex items-center justify-between">
-                    <p className="text-xs text-slate-400">{condicoes.length} registrado{condicoes.length === 1 ? '' : 's'}</p>
+                    <p className="text-xs text-slate-400">{condicoesDaTela.length} registrado{condicoesDaTela.length === 1 ? '' : 's'}</p>
                     <button
-                      onClick={abrirNovaCondicao}
-                      aria-label="Novo evento de saúde"
+                      onClick={() => abrirNovaCondicao(ehCirurgias ? 'cirurgia' : 'doenca')}
+                      aria-label={ehCirurgias ? 'Nova cirurgia ou internação' : 'Novo evento de saúde'}
                       className="flex items-center gap-1 text-sm font-semibold text-teal-700"
                     >
                       <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
-                      novo
+                      {ehCirurgias ? 'nova' : 'novo'}
                     </button>
                   </div>
                 )}
-                {!mostrarFormCondicao && condicoes.length > 0 && (
+                {!mostrarFormCondicao && condicoesDaTela.length > 0 && (
                   <input
                     className={inputClasse}
                     placeholder="🔎 buscar por nome, tipo ou status"
@@ -3505,10 +3507,12 @@ export default function Home() {
                     onChange={(e) => setBuscaCondicao(e.target.value)}
                   />
                 )}
-                {!mostrarFormCondicao && condicoes.length === 0 && (
-                  <p className="text-sm text-slate-400 text-center py-2">Nenhum evento de saúde registrado ainda.</p>
+                {!mostrarFormCondicao && condicoesDaTela.length === 0 && (
+                  <p className="text-sm text-slate-400 text-center py-2">
+                    {ehCirurgias ? 'Nenhuma cirurgia ou internação registrada ainda.' : 'Nenhum evento de saúde registrado ainda.'}
+                  </p>
                 )}
-                {!mostrarFormCondicao && condicoes
+                {!mostrarFormCondicao && condicoesDaTela
                   .filter((c) => {
                     const termo = buscaCondicao.trim().toLowerCase();
                     if (!termo) return true;
@@ -3698,7 +3702,8 @@ export default function Home() {
                   </>
                 )}
               </div>
-            )}
+              );
+            })()}
 
             {telaDetalhe === 'eventoresumo' && (() => {
               const evento = condicoes.find((c) => c.id === condicaoResumoId);
@@ -3712,14 +3717,15 @@ export default function Home() {
                   </div>
                 );
               }
+              const telaDeOrigem: Aba = evento.tipo === 'doenca' ? 'condicoes' : 'cirurgias';
               const consultasDoEvento = consultas.filter((cs) => cs.condicao_relacionada_id === evento.id);
               const medicacoesDoEvento = medicacoes.filter((m) => m.condicao_relacionada_id === evento.id);
               return (
                 <div className="space-y-5">
                   <div className="flex items-start justify-between">
                     <div>
-                      <button onClick={() => setTelaDetalhe('condicoes')} className="mb-1 text-sm text-teal-700">
-                        ← Eventos de Saúde
+                      <button onClick={() => setTelaDetalhe(telaDeOrigem)} className="mb-1 text-sm text-teal-700">
+                        ← {telaDeOrigem === 'condicoes' ? 'Eventos de Saúde' : 'Cirurgia/Internação'}
                       </button>
                       <h2 className="text-lg font-semibold text-slate-800">{evento.nome}</h2>
                       <p className="text-xs text-slate-400">
@@ -3728,7 +3734,7 @@ export default function Home() {
                       </p>
                     </div>
                     <button
-                      onClick={() => { setTelaDetalhe('condicoes'); abrirEdicaoCondicao(evento); }}
+                      onClick={() => { setTelaDetalhe(telaDeOrigem); abrirEdicaoCondicao(evento); }}
                       className="shrink-0 rounded-lg px-2 py-1 text-sm text-slate-400 hover:bg-[#FAFAF8] hover:text-teal-700"
                       aria-label="Editar evento"
                     >
