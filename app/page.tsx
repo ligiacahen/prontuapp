@@ -4073,7 +4073,7 @@ export default function Home() {
                       .sort((a, b) => Number(!b.data_fim) - Number(!a.data_fim))
                       .map((m) => {
                       const continua = !m.data_fim;
-                      const ativa = continua || m.data_fim >= new Date().toISOString().slice(0, 10);
+                      const ativa = continua || (m.data_fim as string) >= new Date().toISOString().slice(0, 10);
                       const condicaoNome = condicoes.find((c) => c.id === m.condicao_relacionada_id)?.nome;
                       const consultaLigada = consultas.find((cs) => cs.id === m.consulta_relacionada_id);
                       const labelClasse = classesMedicamento.find((c) => c.value === m.classe)?.label;
