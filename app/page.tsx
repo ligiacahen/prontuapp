@@ -914,6 +914,15 @@ export default function Home() {
     if (passo === 'painel') carregarMembros();
   }, [passo]);
 
+  // Sempre que a tela muda (incluindo cada passo do onboarding), volta pro topo.
+  // Sem isso, quem rola a página pra baixo pra preencher um formulário mais longo
+  // (como o de Cirurgia/Internação) e depois salva ou avança, continua com a
+  // rolagem no mesmo lugar — a tela já trocou, mas por fora da vista, dando a
+  // impressão de que o app travou ou não avançou.
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [telaDetalhe, onboardingPasso]);
+
   useEffect(() => {
     if (membroSelecionado) {
       carregarCondicoes(membroSelecionado.id);
