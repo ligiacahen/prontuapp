@@ -811,6 +811,11 @@ export default function Home() {
   const [onboardingAtivo, setOnboardingAtivo] = useState(false);
   const [onboardingPasso, setOnboardingPasso] = useState(0);
 
+  // Menu dos "3 risquinhos": antes abria uma tela cheia ("menupessoal"); agora abre
+  // como um menu suspenso por cima da própria tela do hub, e cada item leva direto
+  // pra tela daquela seção (sem tela intermediária).
+  const [mostrarMenuPessoal, setMostrarMenuPessoal] = useState(false);
+
   const [exames, setExames] = useState<Exame[]>([]);
   const [mostrarFormExame, setMostrarFormExame] = useState(false);
   const [novoNomeExame, setNovoNomeExame] = useState('');
@@ -3031,7 +3036,6 @@ export default function Home() {
   // mais completa, organizada em seções). Cada seção só aparece pra idade em que faz
   // sentido perguntar aquilo — mas nunca desaparece se já tiver dado salvo, pra não
   // sumir uma informação que já foi preenchida quando o membro "sai" da faixa etária.
-  const telasMenuPessoal: Aba[] = ['nascimento', 'gestacao', 'desenvolvimento', 'alimentacaoinfantil', 'puberdade', 'saudemental', 'habitosvida'];
   function itensMenuPessoal(): { id: Aba; label: string; descricao: string }[] {
     const idadeAnos = membroSelecionado ? calcularIdade(membroSelecionado.data_nascimento) : 0;
     const itens = [
@@ -3290,11 +3294,12 @@ export default function Home() {
         )}
 
         {passo === 'painel' && membroSelecionado && telaDetalhe === null && (
-          <div>
+          <div className="relative">
             <div className="mb-4 flex items-center justify-between">
               <button
-                onClick={() => setTelaDetalhe('menupessoal')}
+                onClick={() => setMostrarMenuPessoal((v) => !v)}
                 aria-label="Mais informações"
+                aria-expanded={mostrarMenuPessoal}
                 className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 hover:bg-[#FAFAF8] hover:text-slate-700"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" className="h-5 w-5">
@@ -3320,8 +3325,35 @@ export default function Home() {
               </div>
             </div>
 
+            {mostrarMenuPessoal && (
+              <>
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setMostrarMenuPessoal(false)}
+                />
+                <div className="absolute left-0 top-10 z-50 w-[85%] max-w-sm overflow-hidden rounded-xl border border-[#E5E1DA] bg-white shadow-lg">
+                  {itensMenuPessoal().map((item) => (
+                    <button
+                      key={item.id}
+                      onClick={() => {
+                        setMostrarMenuPessoal(false);
+                        setTelaDetalhe(item.id);
+                      }}
+                      className="flex w-full items-center gap-3 border-b border-[#F2F0EC] px-4 py-3 text-left last:border-b-0 hover:bg-[#FAFAF8]"
+                    >
+                      <span className="shrink-0 text-teal-700">{iconeSecao(item.id, 18)}</span>
+                      <div>
+                        <p className="text-sm font-medium text-slate-800">{item.label}</p>
+                        <p className="text-xs text-slate-400">{item.descricao}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+
             <button
-              onClick={() => setTelaDetalhe('menupessoal')}
+              onClick={() => setTelaDetalhe('nascimento')}
               className="mb-6 flex w-full items-center gap-3 rounded-xl p-2 text-left transition hover:bg-[#FAFAF8]"
             >
               {membroSelecionado.foto_url ? (
@@ -3464,8 +3496,6 @@ export default function Home() {
                     }
                     if (telaDetalhe === 'nutricionista' || telaDetalhe === 'esportes') {
                       setTelaDetalhe('bemestar');
-                    } else if (telasMenuPessoal.includes(telaDetalhe as Aba)) {
-                      setTelaDetalhe('menupessoal');
                     } else {
                       setTelaDetalhe(null);
                     }
@@ -5724,28 +5754,6 @@ export default function Home() {
                     </div>
                   </div>
                 )}
-              </div>
-            )}
-
-            {telaDetalhe === 'menupessoal' && (
-              <div className="space-y-2">
-                <p className="text-sm text-slate-500 mb-2">Escolha o que você quer ver ou preencher.</p>
-                {itensMenuPessoal().map((item) => (
-                  <button
-                    key={item.id}
-                    onClick={() => setTelaDetalhe(item.id)}
-                    className="w-full flex items-center gap-3 rounded-xl border border-[#E5E1DA] bg-white p-3 text-left transition hover:bg-[#FAFAF8]"
-                  >
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#CCFBF1] text-teal-700">
-                      {iconeSecao(item.id, 18)}
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-slate-800">{item.label}</p>
-                      <p className="text-xs text-slate-400">{item.descricao}</p>
-                    </div>
-                    <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="text-slate-300 shrink-0"><polyline points="9 18 15 12 9 6" /></svg>
-                  </button>
-                ))}
               </div>
             )}
 
