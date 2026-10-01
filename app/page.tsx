@@ -182,6 +182,59 @@ type InformacaoNascimento = {
   uti_neonatal: boolean;
   intercorrencias: string | null;
   local_nascimento: string | null;
+  pre_natal_adequado: string | null;
+  pre_natal_num_consultas: number | null;
+  intercorrencias_gestacionais: string | null;
+  uso_substancias_medicacoes: string | null;
+};
+
+// As 5 seções de anamnese abaixo seguem todas o mesmo padrão de informacao_nascimento:
+// um registro único por membro (não uma lista com datas), editável quando precisar atualizar.
+type Desenvolvimento = {
+  id: string;
+  sustentou_cabeca: string | null;
+  sentou: string | null;
+  engatinhou: string | null;
+  andou: string | null;
+  primeiras_palavras: string | null;
+  desenvolvimento_adequado: boolean | null;
+  observacao: string | null;
+};
+
+type AlimentacaoInfantil = {
+  id: string;
+  aleitamento_materno: boolean | null;
+  aleitamento_exclusivo_meses: number | null;
+  formula: string | null;
+  introducao_alimentar: string | null;
+  aceitacao_alimentar: string | null;
+};
+
+type PuberdadeSexualidade = {
+  id: string;
+  menarca_espermarca: string | null;
+  ciclo_menstrual: string | null;
+  vida_sexual_ativa: boolean | null;
+  metodos_contraceptivos: string | null;
+  historico_ist: string | null;
+};
+
+type SaudeMental = {
+  id: string;
+  humor: string | null;
+  ansiedade: boolean | null;
+  tristeza_persistente: boolean | null;
+  ideacao_suicida: boolean | null;
+  automutilacao: boolean | null;
+  observacao: string | null;
+};
+
+type HabitosVida = {
+  id: string;
+  alimentacao: string | null;
+  atividade_fisica: string | null;
+  sono: string | null;
+  uso_telas: string | null;
 };
 
 type MedicaoCrescimento = {
@@ -202,7 +255,7 @@ type Medico = {
 };
 
 type Passo = 'login' | 'cadastro' | 'onboarding' | 'painel';
-type Aba = 'geral' | 'condicoes' | 'cirurgias' | 'medicacoes' | 'consultas' | 'odontologia' | 'exames' | 'vacinas' | 'nascimento' | 'crescimento' | 'riscos' | 'medicos' | 'bemestar' | 'nutricionista' | 'esportes' | 'novoregistro' | 'onboardingvoz' | 'eventoresumo';
+type Aba = 'geral' | 'condicoes' | 'cirurgias' | 'medicacoes' | 'consultas' | 'odontologia' | 'exames' | 'vacinas' | 'nascimento' | 'menupessoal' | 'gestacao' | 'desenvolvimento' | 'alimentacaoinfantil' | 'puberdade' | 'saudemental' | 'habitosvida' | 'crescimento' | 'riscos' | 'medicos' | 'bemestar' | 'nutricionista' | 'esportes' | 'novoregistro' | 'onboardingvoz' | 'eventoresumo';
 
 function calcularIdade(dataNascimento: string) {
   const nascimento = new Date(dataNascimento);
@@ -792,7 +845,54 @@ export default function Home() {
   const [novoUtiNeonatal, setNovoUtiNeonatal] = useState(false);
   const [novasIntercorrencias, setNovasIntercorrencias] = useState('');
   const [novoLocalNascimento, setNovoLocalNascimento] = useState('');
+  const [novoPreNatalAdequado, setNovoPreNatalAdequado] = useState('');
+  const [novoPreNatalNumConsultas, setNovoPreNatalNumConsultas] = useState('');
+  const [novasIntercorrenciasGestacionais, setNovasIntercorrenciasGestacionais] = useState('');
+  const [novoUsoSubstancias, setNovoUsoSubstancias] = useState('');
   const [erroNascimento, setErroNascimento] = useState('');
+
+  // As 5 seções de anamnese abaixo (pedido da Roberta) seguem o mesmo padrão de
+  // "Informações de nascimento": um registro único por membro, com uma tela de
+  // visualização e um formulário de edição que usa um objeto de estado único (em vez
+  // de um useState por campo, pra não precisar de ~25 estados separados).
+  const [desenvolvimento, setDesenvolvimento] = useState<Desenvolvimento | null>(null);
+  const [mostrarFormDesenvolvimento, setMostrarFormDesenvolvimento] = useState(false);
+  const [formDesenvolvimento, setFormDesenvolvimento] = useState({
+    sustentou_cabeca: '', sentou: '', engatinhou: '', andou: '', primeiras_palavras: '',
+    desenvolvimento_adequado: '' as '' | 'sim' | 'nao', observacao: '',
+  });
+  const [erroDesenvolvimento, setErroDesenvolvimento] = useState('');
+
+  const [alimentacaoInfantil, setAlimentacaoInfantil] = useState<AlimentacaoInfantil | null>(null);
+  const [mostrarFormAlimentacaoInfantil, setMostrarFormAlimentacaoInfantil] = useState(false);
+  const [formAlimentacaoInfantil, setFormAlimentacaoInfantil] = useState({
+    aleitamento_materno: '' as '' | 'sim' | 'nao', aleitamento_exclusivo_meses: '',
+    formula: '', introducao_alimentar: '', aceitacao_alimentar: '',
+  });
+  const [erroAlimentacaoInfantil, setErroAlimentacaoInfantil] = useState('');
+
+  const [puberdadeSexualidade, setPuberdadeSexualidade] = useState<PuberdadeSexualidade | null>(null);
+  const [mostrarFormPuberdade, setMostrarFormPuberdade] = useState(false);
+  const [formPuberdade, setFormPuberdade] = useState({
+    menarca_espermarca: '', ciclo_menstrual: '', vida_sexual_ativa: '' as '' | 'sim' | 'nao',
+    metodos_contraceptivos: '', historico_ist: '',
+  });
+  const [erroPuberdade, setErroPuberdade] = useState('');
+
+  const [saudeMental, setSaudeMental] = useState<SaudeMental | null>(null);
+  const [mostrarFormSaudeMental, setMostrarFormSaudeMental] = useState(false);
+  const [formSaudeMental, setFormSaudeMental] = useState({
+    humor: '', ansiedade: '' as '' | 'sim' | 'nao', tristeza_persistente: '' as '' | 'sim' | 'nao',
+    ideacao_suicida: '' as '' | 'sim' | 'nao', automutilacao: '' as '' | 'sim' | 'nao', observacao: '',
+  });
+  const [erroSaudeMental, setErroSaudeMental] = useState('');
+
+  const [habitosVida, setHabitosVida] = useState<HabitosVida | null>(null);
+  const [mostrarFormHabitosVida, setMostrarFormHabitosVida] = useState(false);
+  const [formHabitosVida, setFormHabitosVida] = useState({
+    alimentacao: '', atividade_fisica: '', sono: '', uso_telas: '',
+  });
+  const [erroHabitosVida, setErroHabitosVida] = useState('');
 
   const [crescimento, setCrescimento] = useState<MedicaoCrescimento[]>([]);
   const [mostrarFormCrescimento, setMostrarFormCrescimento] = useState(false);
@@ -822,6 +922,11 @@ export default function Home() {
       carregarExames(membroSelecionado.id);
       carregarVacinas(membroSelecionado.id);
       carregarNascimento(membroSelecionado.id);
+      carregarDesenvolvimento(membroSelecionado.id);
+      carregarAlimentacaoInfantil(membroSelecionado.id);
+      carregarPuberdadeSexualidade(membroSelecionado.id);
+      carregarSaudeMental(membroSelecionado.id);
+      carregarHabitosVida(membroSelecionado.id);
       carregarCrescimento(membroSelecionado.id);
       carregarRiscosGeneticos(membroSelecionado);
       carregarMedicos();
@@ -832,6 +937,11 @@ export default function Home() {
       setExames([]);
       setVacinas([]);
       setNascimento(null);
+      setDesenvolvimento(null);
+      setAlimentacaoInfantil(null);
+      setPuberdadeSexualidade(null);
+      setSaudeMental(null);
+      setHabitosVida(null);
       setCrescimento([]);
       setRiscos(null);
       setHistoricoGeral(null);
@@ -899,10 +1009,57 @@ export default function Home() {
   async function carregarNascimento(membroId: string) {
     const { data, error } = await supabase
       .from('informacao_nascimento')
-      .select('id, peso_nascimento, comprimento_nascimento, perimetro_cefalico, idade_gestacional_semanas, tipo_parto, apgar_1min, apgar_5min, uti_neonatal, intercorrencias, local_nascimento')
+      .select('id, peso_nascimento, comprimento_nascimento, perimetro_cefalico, idade_gestacional_semanas, tipo_parto, apgar_1min, apgar_5min, uti_neonatal, intercorrencias, local_nascimento, pre_natal_adequado, pre_natal_num_consultas, intercorrencias_gestacionais, uso_substancias_medicacoes')
       .eq('membro_id', membroId)
       .maybeSingle();
     if (!error && membroAtualRef.current === membroId) setNascimento(data);
+  }
+
+  // Carregamento das 5 seções novas de anamnese — todas "uma por membro", igual
+  // informacao_nascimento, por isso maybeSingle() em todas.
+  async function carregarDesenvolvimento(membroId: string) {
+    const { data, error } = await supabase
+      .from('desenvolvimento_neuropsicomotor')
+      .select('id, sustentou_cabeca, sentou, engatinhou, andou, primeiras_palavras, desenvolvimento_adequado, observacao')
+      .eq('membro_id', membroId)
+      .maybeSingle();
+    if (!error && membroAtualRef.current === membroId) setDesenvolvimento(data);
+  }
+
+  async function carregarAlimentacaoInfantil(membroId: string) {
+    const { data, error } = await supabase
+      .from('alimentacao_infantil')
+      .select('id, aleitamento_materno, aleitamento_exclusivo_meses, formula, introducao_alimentar, aceitacao_alimentar')
+      .eq('membro_id', membroId)
+      .maybeSingle();
+    if (!error && membroAtualRef.current === membroId) setAlimentacaoInfantil(data);
+  }
+
+  async function carregarPuberdadeSexualidade(membroId: string) {
+    const { data, error } = await supabase
+      .from('puberdade_sexualidade')
+      .select('id, menarca_espermarca, ciclo_menstrual, vida_sexual_ativa, metodos_contraceptivos, historico_ist')
+      .eq('membro_id', membroId)
+      .maybeSingle();
+    if (!error && membroAtualRef.current === membroId) setPuberdadeSexualidade(data);
+  }
+
+  async function carregarSaudeMental(membroId: string) {
+    const { data, error } = await supabase
+      .from('saude_mental')
+      .select('id, humor, ansiedade, tristeza_persistente, ideacao_suicida, automutilacao, observacao')
+      .eq('membro_id', membroId)
+      .maybeSingle();
+    if (!error && membroAtualRef.current === membroId) setSaudeMental(data);
+  }
+
+  async function carregarHabitosVida(membroId: string) {
+    const { data, error } = await supabase
+      .from('habitos_vida')
+      .select('id, alimentacao, atividade_fisica, sono, uso_telas')
+      .eq('membro_id', membroId)
+      .maybeSingle();
+    if (!error && membroAtualRef.current === membroId) setHabitosVida(data);
   }
 
   async function carregarCrescimento(membroId: string) {
@@ -2198,6 +2355,10 @@ export default function Home() {
     setNovoUtiNeonatal(nascimento?.uti_neonatal || false);
     setNovasIntercorrencias(nascimento?.intercorrencias || '');
     setNovoLocalNascimento(nascimento?.local_nascimento || '');
+    setNovoPreNatalAdequado(nascimento?.pre_natal_adequado || '');
+    setNovoPreNatalNumConsultas(nascimento?.pre_natal_num_consultas != null ? String(nascimento.pre_natal_num_consultas) : '');
+    setNovasIntercorrenciasGestacionais(nascimento?.intercorrencias_gestacionais || '');
+    setNovoUsoSubstancias(nascimento?.uso_substancias_medicacoes || '');
     setErroNascimento('');
     setMostrarFormNascimento(true);
   }
@@ -2212,6 +2373,7 @@ export default function Home() {
     const idadeGestacional = paraNumeroTolerante(novaIdadeGestacional);
     const apgar1 = paraNumeroTolerante(novoApgar1);
     const apgar5 = paraNumeroTolerante(novoApgar5);
+    const preNatalNumConsultas = paraNumeroTolerante(novoPreNatalNumConsultas);
 
     const camposInvalidos: string[] = [];
     if (Number.isNaN(peso)) camposInvalidos.push('peso ao nascer');
@@ -2220,6 +2382,7 @@ export default function Home() {
     if (Number.isNaN(idadeGestacional)) camposInvalidos.push('idade gestacional');
     if (Number.isNaN(apgar1)) camposInvalidos.push('Apgar 1º minuto');
     if (Number.isNaN(apgar5)) camposInvalidos.push('Apgar 5º minuto');
+    if (Number.isNaN(preNatalNumConsultas)) camposInvalidos.push('número de consultas do pré-natal');
 
     if (camposInvalidos.length > 0) {
       setErroNascimento(`Não consegui entender o número em: ${camposInvalidos.join(', ')}. Deixe só os números (pode usar vírgula para decimais).`);
@@ -2240,6 +2403,10 @@ export default function Home() {
       uti_neonatal: novoUtiNeonatal,
       intercorrencias: novasIntercorrencias || null,
       local_nascimento: novoLocalNascimento || null,
+      pre_natal_adequado: novoPreNatalAdequado || null,
+      pre_natal_num_consultas: preNatalNumConsultas,
+      intercorrencias_gestacionais: novasIntercorrenciasGestacionais || null,
+      uso_substancias_medicacoes: novoUsoSubstancias || null,
     };
 
     const { error } = await supabase
@@ -2253,6 +2420,179 @@ export default function Home() {
     }
     setMostrarFormNascimento(false);
     await carregarNascimento(membroSelecionado.id);
+  }
+
+  // Os 3 campos "Sim/Não/não informado" das 5 seções de anamnese usam esse par de
+  // conversores, pra representar um boolean|null como valor de <select>.
+  function boolParaSelect(v: boolean | null): '' | 'sim' | 'nao' {
+    return v === true ? 'sim' : v === false ? 'nao' : '';
+  }
+  function selectParaBool(v: '' | 'sim' | 'nao'): boolean | null {
+    return v === 'sim' ? true : v === 'nao' ? false : null;
+  }
+
+  function abrirEdicaoDesenvolvimento() {
+    setFormDesenvolvimento({
+      sustentou_cabeca: desenvolvimento?.sustentou_cabeca || '',
+      sentou: desenvolvimento?.sentou || '',
+      engatinhou: desenvolvimento?.engatinhou || '',
+      andou: desenvolvimento?.andou || '',
+      primeiras_palavras: desenvolvimento?.primeiras_palavras || '',
+      desenvolvimento_adequado: boolParaSelect(desenvolvimento?.desenvolvimento_adequado ?? null),
+      observacao: desenvolvimento?.observacao || '',
+    });
+    setErroDesenvolvimento('');
+    setMostrarFormDesenvolvimento(true);
+  }
+
+  async function salvarDesenvolvimento() {
+    if (!membroSelecionado) return;
+    setErroDesenvolvimento('');
+    setCarregando(true);
+    const f = formDesenvolvimento;
+    const { error } = await supabase.from('desenvolvimento_neuropsicomotor').upsert({
+      membro_id: membroSelecionado.id,
+      sustentou_cabeca: f.sustentou_cabeca || null,
+      sentou: f.sentou || null,
+      engatinhou: f.engatinhou || null,
+      andou: f.andou || null,
+      primeiras_palavras: f.primeiras_palavras || null,
+      desenvolvimento_adequado: selectParaBool(f.desenvolvimento_adequado),
+      observacao: f.observacao || null,
+    }, { onConflict: 'membro_id' });
+    setCarregando(false);
+    if (error) { setErroDesenvolvimento(error.message); return; }
+    setMostrarFormDesenvolvimento(false);
+    await carregarDesenvolvimento(membroSelecionado.id);
+  }
+
+  function abrirEdicaoAlimentacaoInfantil() {
+    setFormAlimentacaoInfantil({
+      aleitamento_materno: boolParaSelect(alimentacaoInfantil?.aleitamento_materno ?? null),
+      aleitamento_exclusivo_meses: alimentacaoInfantil?.aleitamento_exclusivo_meses != null ? String(alimentacaoInfantil.aleitamento_exclusivo_meses) : '',
+      formula: alimentacaoInfantil?.formula || '',
+      introducao_alimentar: alimentacaoInfantil?.introducao_alimentar || '',
+      aceitacao_alimentar: alimentacaoInfantil?.aceitacao_alimentar || '',
+    });
+    setErroAlimentacaoInfantil('');
+    setMostrarFormAlimentacaoInfantil(true);
+  }
+
+  async function salvarAlimentacaoInfantil() {
+    if (!membroSelecionado) return;
+    setErroAlimentacaoInfantil('');
+    const f = formAlimentacaoInfantil;
+    const exclusivoMeses = paraNumeroTolerante(f.aleitamento_exclusivo_meses);
+    if (Number.isNaN(exclusivoMeses)) {
+      setErroAlimentacaoInfantil('Não consegui entender o número em "aleitamento exclusivo até". Deixe só números.');
+      return;
+    }
+    setCarregando(true);
+    const { error } = await supabase.from('alimentacao_infantil').upsert({
+      membro_id: membroSelecionado.id,
+      aleitamento_materno: selectParaBool(f.aleitamento_materno),
+      aleitamento_exclusivo_meses: exclusivoMeses,
+      formula: f.formula || null,
+      introducao_alimentar: f.introducao_alimentar || null,
+      aceitacao_alimentar: f.aceitacao_alimentar || null,
+    }, { onConflict: 'membro_id' });
+    setCarregando(false);
+    if (error) { setErroAlimentacaoInfantil(error.message); return; }
+    setMostrarFormAlimentacaoInfantil(false);
+    await carregarAlimentacaoInfantil(membroSelecionado.id);
+  }
+
+  function abrirEdicaoPuberdade() {
+    setFormPuberdade({
+      menarca_espermarca: puberdadeSexualidade?.menarca_espermarca || '',
+      ciclo_menstrual: puberdadeSexualidade?.ciclo_menstrual || '',
+      vida_sexual_ativa: boolParaSelect(puberdadeSexualidade?.vida_sexual_ativa ?? null),
+      metodos_contraceptivos: puberdadeSexualidade?.metodos_contraceptivos || '',
+      historico_ist: puberdadeSexualidade?.historico_ist || '',
+    });
+    setErroPuberdade('');
+    setMostrarFormPuberdade(true);
+  }
+
+  async function salvarPuberdade() {
+    if (!membroSelecionado) return;
+    setErroPuberdade('');
+    setCarregando(true);
+    const f = formPuberdade;
+    const { error } = await supabase.from('puberdade_sexualidade').upsert({
+      membro_id: membroSelecionado.id,
+      menarca_espermarca: f.menarca_espermarca || null,
+      ciclo_menstrual: f.ciclo_menstrual || null,
+      vida_sexual_ativa: selectParaBool(f.vida_sexual_ativa),
+      metodos_contraceptivos: f.metodos_contraceptivos || null,
+      historico_ist: f.historico_ist || null,
+    }, { onConflict: 'membro_id' });
+    setCarregando(false);
+    if (error) { setErroPuberdade(error.message); return; }
+    setMostrarFormPuberdade(false);
+    await carregarPuberdadeSexualidade(membroSelecionado.id);
+  }
+
+  function abrirEdicaoSaudeMental() {
+    setFormSaudeMental({
+      humor: saudeMental?.humor || '',
+      ansiedade: boolParaSelect(saudeMental?.ansiedade ?? null),
+      tristeza_persistente: boolParaSelect(saudeMental?.tristeza_persistente ?? null),
+      ideacao_suicida: boolParaSelect(saudeMental?.ideacao_suicida ?? null),
+      automutilacao: boolParaSelect(saudeMental?.automutilacao ?? null),
+      observacao: saudeMental?.observacao || '',
+    });
+    setErroSaudeMental('');
+    setMostrarFormSaudeMental(true);
+  }
+
+  async function salvarSaudeMental() {
+    if (!membroSelecionado) return;
+    setErroSaudeMental('');
+    setCarregando(true);
+    const f = formSaudeMental;
+    const { error } = await supabase.from('saude_mental').upsert({
+      membro_id: membroSelecionado.id,
+      humor: f.humor || null,
+      ansiedade: selectParaBool(f.ansiedade),
+      tristeza_persistente: selectParaBool(f.tristeza_persistente),
+      ideacao_suicida: selectParaBool(f.ideacao_suicida),
+      automutilacao: selectParaBool(f.automutilacao),
+      observacao: f.observacao || null,
+    }, { onConflict: 'membro_id' });
+    setCarregando(false);
+    if (error) { setErroSaudeMental(error.message); return; }
+    setMostrarFormSaudeMental(false);
+    await carregarSaudeMental(membroSelecionado.id);
+  }
+
+  function abrirEdicaoHabitosVida() {
+    setFormHabitosVida({
+      alimentacao: habitosVida?.alimentacao || '',
+      atividade_fisica: habitosVida?.atividade_fisica || '',
+      sono: habitosVida?.sono || '',
+      uso_telas: habitosVida?.uso_telas || '',
+    });
+    setErroHabitosVida('');
+    setMostrarFormHabitosVida(true);
+  }
+
+  async function salvarHabitosVida() {
+    if (!membroSelecionado) return;
+    setErroHabitosVida('');
+    setCarregando(true);
+    const f = formHabitosVida;
+    const { error } = await supabase.from('habitos_vida').upsert({
+      membro_id: membroSelecionado.id,
+      alimentacao: f.alimentacao || null,
+      atividade_fisica: f.atividade_fisica || null,
+      sono: f.sono || null,
+      uso_telas: f.uso_telas || null,
+    }, { onConflict: 'membro_id' });
+    setCarregando(false);
+    if (error) { setErroHabitosVida(error.message); return; }
+    setMostrarFormHabitosVida(false);
+    await carregarHabitosVida(membroSelecionado.id);
   }
 
   function abrirNovaMedicaoCrescimento() {
@@ -2678,6 +3018,25 @@ export default function Home() {
     { id: 'medicos', label: 'Médicos' },
   ];
 
+  // Itens do menu que abre ao tocar nos 3 risquinhos (pedido da Roberta: uma anamnese
+  // mais completa, organizada em seções). Cada seção só aparece pra idade em que faz
+  // sentido perguntar aquilo — mas nunca desaparece se já tiver dado salvo, pra não
+  // sumir uma informação que já foi preenchida quando o membro "sai" da faixa etária.
+  const telasMenuPessoal: Aba[] = ['nascimento', 'gestacao', 'desenvolvimento', 'alimentacaoinfantil', 'puberdade', 'saudemental', 'habitosvida'];
+  function itensMenuPessoal(): { id: Aba; label: string; descricao: string }[] {
+    const idadeAnos = membroSelecionado ? calcularIdade(membroSelecionado.data_nascimento) : 0;
+    const itens = [
+      { id: 'nascimento' as Aba, label: 'Dados pessoais', descricao: 'Foto, tipo sanguíneo, parentesco, alergias e observações gerais.', mostrar: true },
+      { id: 'gestacao' as Aba, label: 'Gestação e Nascimento', descricao: 'Pré-natal, parto, Apgar e intercorrências da gestação e do nascimento.', mostrar: true },
+      { id: 'desenvolvimento' as Aba, label: 'Desenvolvimento Neuropsicomotor', descricao: 'Marcos do desenvolvimento: sustentar a cabeça, sentar, engatinhar, andar, falar.', mostrar: idadeAnos < 6 || !!desenvolvimento },
+      { id: 'alimentacaoinfantil' as Aba, label: 'Alimentação', descricao: 'Aleitamento materno, fórmula, introdução e aceitação alimentar.', mostrar: idadeAnos < 6 || !!alimentacaoInfantil },
+      { id: 'puberdade' as Aba, label: 'Puberdade e Sexualidade', descricao: 'Menarca/espermarca, ciclo menstrual, vida sexual e métodos contraceptivos.', mostrar: idadeAnos >= 9 || !!puberdadeSexualidade },
+      { id: 'saudemental' as Aba, label: 'Saúde Mental', descricao: 'Humor, ansiedade e outros pontos de atenção emocional.', mostrar: true },
+      { id: 'habitosvida' as Aba, label: 'Hábitos de Vida', descricao: 'Alimentação do dia a dia, atividade física, sono e uso de telas.', mostrar: true },
+    ];
+    return itens.filter((i) => i.mostrar);
+  }
+
   // Ícones de linha (estilo do protótipo) pra cada seção do hub do membro — substituem
   // os emojis que eram usados antes, pra bater com a cara combinada com a Roberta.
   function iconeSecao(id: Aba, tamanho: number = 26) {
@@ -2708,7 +3067,21 @@ export default function Home() {
       case 'vacinas':
         return <svg {...props}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>;
       case 'nascimento':
-        return <svg {...props}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /></svg>;
+        return <svg {...props}><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4 4-7 8-7s8 3 8 7" /></svg>;
+      case 'menupessoal':
+        return <svg {...props}><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" /></svg>;
+      case 'gestacao':
+        return <svg {...props}><path d="M12 21s-7-4.35-9.5-9A5.5 5.5 0 0 1 12 6a5.5 5.5 0 0 1 9.5 6c-2.5 4.65-9.5 9-9.5 9z" /></svg>;
+      case 'desenvolvimento':
+        return <svg {...props}><circle cx="12" cy="12" r="9" /><path d="M8 14s1.5 2 4 2 4-2 4-2" /><line x1="9" y1="9" x2="9" y2="9.01" /><line x1="15" y1="9" x2="15" y2="9.01" /></svg>;
+      case 'alimentacaoinfantil':
+        return <svg {...props}><path d="M9 2h6v3H9z" /><path d="M8 6h8l-1 13a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2z" /><line x1="8" y1="10" x2="16" y2="10" /></svg>;
+      case 'puberdade':
+        return <svg {...props}><path d="M12 22V8" /><path d="M5 12c0-4 3-8 7-8s7 4 7 8" /></svg>;
+      case 'saudemental':
+        return <svg {...props}><path d="M12 2a7 7 0 0 0-7 7c0 2.5 1.5 4 1.5 6.5V19a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2v-3.5C19 13 20 11.5 20 9a7 7 0 0 0-7-7z" /><path d="M9 9c0-1.5 1.5-2 3-2s3 .5 3 2-1.5 2-3 3" /></svg>;
+      case 'habitosvida':
+        return <svg {...props}><path d="M3 12a9 9 0 0 1 15-6.7L21 8" /><path d="M21 3v5h-5" /><path d="M21 12a9 9 0 0 1-15 6.7L3 16" /><path d="M3 21v-5h5" /></svg>;
       case 'crescimento':
         return <svg {...props}><polyline points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline points="17 6 23 6 23 12" /></svg>;
       case 'riscos':
@@ -2911,8 +3284,8 @@ export default function Home() {
           <div>
             <div className="mb-4 flex items-center justify-between">
               <button
-                onClick={() => setTelaDetalhe('nascimento')}
-                aria-label="Dados pessoais"
+                onClick={() => setTelaDetalhe('menupessoal')}
+                aria-label="Mais informações"
                 className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 hover:bg-[#FAFAF8] hover:text-slate-700"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" className="h-5 w-5">
@@ -2939,7 +3312,7 @@ export default function Home() {
             </div>
 
             <button
-              onClick={() => setTelaDetalhe('nascimento')}
+              onClick={() => setTelaDetalhe('menupessoal')}
               className="mb-6 flex w-full items-center gap-3 rounded-xl p-2 text-left transition hover:bg-[#FAFAF8]"
             >
               {membroSelecionado.foto_url ? (
@@ -3077,8 +3450,16 @@ export default function Home() {
                     if (onboardingAtivo) {
                       setOnboardingAtivo(false);
                       setOnboardingPasso(0);
+                      setTelaDetalhe(null);
+                      return;
                     }
-                    setTelaDetalhe(telaDetalhe === 'nutricionista' || telaDetalhe === 'esportes' ? 'bemestar' : null);
+                    if (telaDetalhe === 'nutricionista' || telaDetalhe === 'esportes') {
+                      setTelaDetalhe('bemestar');
+                    } else if (telasMenuPessoal.includes(telaDetalhe as Aba)) {
+                      setTelaDetalhe('menupessoal');
+                    } else {
+                      setTelaDetalhe(null);
+                    }
                   }}
                   className="mb-4 text-sm text-teal-700"
                 >
@@ -3102,6 +3483,22 @@ export default function Home() {
                       ? 'Nutricionista'
                       : telaDetalhe === 'esportes'
                       ? 'Exercícios/Esportes'
+                      : telaDetalhe === 'menupessoal'
+                      ? 'Mais informações'
+                      : telaDetalhe === 'nascimento'
+                      ? 'Dados pessoais'
+                      : telaDetalhe === 'gestacao'
+                      ? 'Gestação e Nascimento'
+                      : telaDetalhe === 'desenvolvimento'
+                      ? 'Desenvolvimento Neuropsicomotor'
+                      : telaDetalhe === 'alimentacaoinfantil'
+                      ? 'Alimentação'
+                      : telaDetalhe === 'puberdade'
+                      ? 'Puberdade e Sexualidade'
+                      : telaDetalhe === 'saudemental'
+                      ? 'Saúde Mental'
+                      : telaDetalhe === 'habitosvida'
+                      ? 'Hábitos de Vida'
                       : secoes.find((s) => s.id === telaDetalhe)?.label}
                   </h2>
                 </div>
@@ -5112,16 +5509,27 @@ export default function Home() {
                   )}
                 </div>
 
-                <div className="border-t border-[#E5E1DA] pt-3">
-                  <p className="text-xs font-medium text-slate-500 mb-2">Informações de nascimento</p>
-                </div>
+              </div>
+            )}
 
+            {telaDetalhe === 'gestacao' && (
+              <div className="space-y-3">
+                <p className="text-sm text-slate-500">
+                  Informações sobre a gestação, o parto e o período neonatal — útil pra médicos entenderem o histórico desde o início.
+                </p>
                 {!mostrarFormNascimento ? (
                   <>
                     {!nascimento ? (
-                      <p className="text-sm text-slate-400 text-center py-2">Nenhuma informação de nascimento registrada ainda.</p>
+                      <p className="text-sm text-slate-400 text-center py-2">Nenhuma informação registrada ainda.</p>
                     ) : (
                       <div className="grid grid-cols-2 gap-3">
+                        <div className="rounded-xl bg-[#FAFAF8] p-3">
+                          <p className="text-xs text-slate-400">Pré-natal</p>
+                          <p className="text-sm font-medium text-slate-800 capitalize">
+                            {nascimento.pre_natal_adequado || '—'}
+                            {nascimento.pre_natal_num_consultas != null ? ` · ${nascimento.pre_natal_num_consultas} consultas` : ''}
+                          </p>
+                        </div>
                         <div className="rounded-xl bg-[#FAFAF8] p-3">
                           <p className="text-xs text-slate-400">Peso ao nascer</p>
                           <p className="text-sm font-medium text-slate-800">{nascimento.peso_nascimento != null ? `${nascimento.peso_nascimento} kg` : '—'}</p>
@@ -5158,20 +5566,63 @@ export default function Home() {
                           <p className="text-xs text-slate-400">Local de nascimento</p>
                           <p className="text-sm font-medium text-slate-800">{nascimento.local_nascimento || '—'}</p>
                         </div>
+                        {nascimento.uso_substancias_medicacoes && (
+                          <div className="col-span-2 rounded-xl bg-[#FAFAF8] p-3">
+                            <p className="text-xs text-slate-400">Uso de substâncias/medicações na gestação</p>
+                            <p className="text-sm text-slate-700">{nascimento.uso_substancias_medicacoes}</p>
+                          </div>
+                        )}
+                        {nascimento.intercorrencias_gestacionais && (
+                          <div className="col-span-2 rounded-xl bg-[#FAFAF8] p-3">
+                            <p className="text-xs text-slate-400">Intercorrências gestacionais</p>
+                            <p className="text-sm text-slate-700">{nascimento.intercorrencias_gestacionais}</p>
+                          </div>
+                        )}
                         {nascimento.intercorrencias && (
                           <div className="col-span-2 rounded-xl bg-[#FAFAF8] p-3">
-                            <p className="text-xs text-slate-400">Intercorrências</p>
+                            <p className="text-xs text-slate-400">Intercorrências neonatais</p>
                             <p className="text-sm text-slate-700">{nascimento.intercorrencias}</p>
                           </div>
                         )}
                       </div>
                     )}
                     <button onClick={abrirEdicaoNascimento} className={botaoPrimario}>
-                      {nascimento ? 'Editar informações de nascimento' : '+ Adicionar informações de nascimento'}
+                      {nascimento ? 'Editar informações' : '+ Adicionar informações'}
                     </button>
                   </>
                 ) : (
                   <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
+                    <p className="text-xs font-medium text-slate-500">Pré-natal</p>
+                    <select
+                      className={inputClasse}
+                      value={novoPreNatalAdequado}
+                      onChange={(e) => setNovoPreNatalAdequado(e.target.value)}
+                    >
+                      <option value="">pré-natal foi adequado?</option>
+                      <option value="adequado">Adequado</option>
+                      <option value="inadequado">Inadequado</option>
+                    </select>
+                    <input
+                      className={inputClasse}
+                      placeholder="número de consultas do pré-natal (opcional)"
+                      value={novoPreNatalNumConsultas}
+                      onChange={(e) => setNovoPreNatalNumConsultas(e.target.value)}
+                    />
+                    <textarea
+                      className={inputClasse}
+                      placeholder="intercorrências gestacionais (opcional)"
+                      rows={2}
+                      value={novasIntercorrenciasGestacionais}
+                      onChange={(e) => setNovasIntercorrenciasGestacionais(e.target.value)}
+                    />
+                    <textarea
+                      className={inputClasse}
+                      placeholder="uso de substâncias/medicações na gestação (opcional)"
+                      rows={2}
+                      value={novoUsoSubstancias}
+                      onChange={(e) => setNovoUsoSubstancias(e.target.value)}
+                    />
+                    <p className="text-xs font-medium text-slate-500 pt-1">Parto e nascimento</p>
                     <input
                       className={inputClasse}
                       placeholder="peso ao nascer (kg, ex: 3,250)"
@@ -5236,7 +5687,7 @@ export default function Home() {
                     />
                     <div>
                       <div className="flex items-center justify-between mb-1">
-                        <label className="text-xs text-slate-400">intercorrências (opcional)</label>
+                        <label className="text-xs text-slate-400">intercorrências neonatais (opcional)</label>
                         <button
                           type="button"
                           onClick={() => alternarReconhecimentoVoz('intercorrencias', setNovasIntercorrencias)}
@@ -5247,7 +5698,7 @@ export default function Home() {
                       </div>
                       <textarea
                         className={inputClasse}
-                        placeholder="intercorrências (opcional)"
+                        placeholder="intercorrências neonatais (opcional)"
                         rows={3}
                         value={novasIntercorrencias}
                         onChange={(e) => setNovasIntercorrencias(e.target.value)}
@@ -5261,6 +5712,244 @@ export default function Home() {
                       <button onClick={() => setMostrarFormNascimento(false)} className={botaoSecundario}>
                         Cancelar
                       </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {telaDetalhe === 'menupessoal' && (
+              <div className="space-y-2">
+                <p className="text-sm text-slate-500 mb-2">Escolha o que você quer ver ou preencher.</p>
+                {itensMenuPessoal().map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => setTelaDetalhe(item.id)}
+                    className="w-full flex items-center gap-3 rounded-xl border border-[#E5E1DA] bg-white p-3 text-left transition hover:bg-[#FAFAF8]"
+                  >
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#CCFBF1] text-teal-700">
+                      {iconeSecao(item.id, 18)}
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-slate-800">{item.label}</p>
+                      <p className="text-xs text-slate-400">{item.descricao}</p>
+                    </div>
+                    <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="text-slate-300 shrink-0"><polyline points="9 18 15 12 9 6" /></svg>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {telaDetalhe === 'desenvolvimento' && (
+              <div className="space-y-3">
+                <p className="text-sm text-slate-500">Marcos do desenvolvimento neuropsicomotor — registre a idade ou período em que cada um aconteceu, quando souber.</p>
+                {!mostrarFormDesenvolvimento ? (
+                  <>
+                    {!desenvolvimento ? (
+                      <p className="text-sm text-slate-400 text-center py-2">Nenhuma informação registrada ainda.</p>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="rounded-xl bg-[#FAFAF8] p-3"><p className="text-xs text-slate-400">Sustentou a cabeça</p><p className="text-sm font-medium text-slate-800">{desenvolvimento.sustentou_cabeca || '—'}</p></div>
+                        <div className="rounded-xl bg-[#FAFAF8] p-3"><p className="text-xs text-slate-400">Sentou</p><p className="text-sm font-medium text-slate-800">{desenvolvimento.sentou || '—'}</p></div>
+                        <div className="rounded-xl bg-[#FAFAF8] p-3"><p className="text-xs text-slate-400">Engatinhou</p><p className="text-sm font-medium text-slate-800">{desenvolvimento.engatinhou || '—'}</p></div>
+                        <div className="rounded-xl bg-[#FAFAF8] p-3"><p className="text-xs text-slate-400">Andou</p><p className="text-sm font-medium text-slate-800">{desenvolvimento.andou || '—'}</p></div>
+                        <div className="rounded-xl bg-[#FAFAF8] p-3"><p className="text-xs text-slate-400">Primeiras palavras</p><p className="text-sm font-medium text-slate-800">{desenvolvimento.primeiras_palavras || '—'}</p></div>
+                        <div className="rounded-xl bg-[#FAFAF8] p-3"><p className="text-xs text-slate-400">Desenvolvimento adequado</p><p className="text-sm font-medium text-slate-800">{desenvolvimento.desenvolvimento_adequado == null ? '—' : desenvolvimento.desenvolvimento_adequado ? 'Sim' : 'Não'}</p></div>
+                        {desenvolvimento.observacao && (
+                          <div className="col-span-2 rounded-xl bg-[#FAFAF8] p-3"><p className="text-xs text-slate-400">Observações</p><p className="text-sm text-slate-700">{desenvolvimento.observacao}</p></div>
+                        )}
+                      </div>
+                    )}
+                    <button onClick={abrirEdicaoDesenvolvimento} className={botaoPrimario}>{desenvolvimento ? 'Editar' : '+ Adicionar'}</button>
+                  </>
+                ) : (
+                  <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
+                    <input className={inputClasse} placeholder="sustentou a cabeça (ex: 3 meses)" value={formDesenvolvimento.sustentou_cabeca} onChange={(e) => setFormDesenvolvimento((f) => ({ ...f, sustentou_cabeca: e.target.value }))} />
+                    <input className={inputClasse} placeholder="sentou (ex: 6 meses)" value={formDesenvolvimento.sentou} onChange={(e) => setFormDesenvolvimento((f) => ({ ...f, sentou: e.target.value }))} />
+                    <input className={inputClasse} placeholder="engatinhou (ex: 8 meses)" value={formDesenvolvimento.engatinhou} onChange={(e) => setFormDesenvolvimento((f) => ({ ...f, engatinhou: e.target.value }))} />
+                    <input className={inputClasse} placeholder="andou (ex: 1 ano)" value={formDesenvolvimento.andou} onChange={(e) => setFormDesenvolvimento((f) => ({ ...f, andou: e.target.value }))} />
+                    <input className={inputClasse} placeholder="primeiras palavras (ex: 1 ano e 2 meses)" value={formDesenvolvimento.primeiras_palavras} onChange={(e) => setFormDesenvolvimento((f) => ({ ...f, primeiras_palavras: e.target.value }))} />
+                    <select className={inputClasse} value={formDesenvolvimento.desenvolvimento_adequado} onChange={(e) => setFormDesenvolvimento((f) => ({ ...f, desenvolvimento_adequado: e.target.value as '' | 'sim' | 'nao' }))}>
+                      <option value="">desenvolvimento adequado?</option>
+                      <option value="sim">Sim</option>
+                      <option value="nao">Não</option>
+                    </select>
+                    <textarea className={inputClasse} rows={2} placeholder="observações (opcional)" value={formDesenvolvimento.observacao} onChange={(e) => setFormDesenvolvimento((f) => ({ ...f, observacao: e.target.value }))} />
+                    {erroDesenvolvimento && <p className="text-sm text-red-600">{erroDesenvolvimento}</p>}
+                    <div className="flex gap-2">
+                      <button disabled={carregando} onClick={salvarDesenvolvimento} className={botaoPrimario}>{carregando ? 'Salvando...' : 'Salvar'}</button>
+                      <button onClick={() => setMostrarFormDesenvolvimento(false)} className={botaoSecundario}>Cancelar</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {telaDetalhe === 'alimentacaoinfantil' && (
+              <div className="space-y-3">
+                <p className="text-sm text-slate-500">Aleitamento materno, fórmula e como foi a introdução alimentar.</p>
+                {!mostrarFormAlimentacaoInfantil ? (
+                  <>
+                    {!alimentacaoInfantil ? (
+                      <p className="text-sm text-slate-400 text-center py-2">Nenhuma informação registrada ainda.</p>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="rounded-xl bg-[#FAFAF8] p-3"><p className="text-xs text-slate-400">Aleitamento materno</p><p className="text-sm font-medium text-slate-800">{alimentacaoInfantil.aleitamento_materno == null ? '—' : alimentacaoInfantil.aleitamento_materno ? 'Sim' : 'Não'}</p></div>
+                        <div className="rounded-xl bg-[#FAFAF8] p-3"><p className="text-xs text-slate-400">Exclusivo até</p><p className="text-sm font-medium text-slate-800">{alimentacaoInfantil.aleitamento_exclusivo_meses != null ? `${alimentacaoInfantil.aleitamento_exclusivo_meses} meses` : '—'}</p></div>
+                        {alimentacaoInfantil.formula && <div className="col-span-2 rounded-xl bg-[#FAFAF8] p-3"><p className="text-xs text-slate-400">Fórmula</p><p className="text-sm text-slate-700">{alimentacaoInfantil.formula}</p></div>}
+                        {alimentacaoInfantil.introducao_alimentar && <div className="col-span-2 rounded-xl bg-[#FAFAF8] p-3"><p className="text-xs text-slate-400">Introdução alimentar</p><p className="text-sm text-slate-700">{alimentacaoInfantil.introducao_alimentar}</p></div>}
+                        {alimentacaoInfantil.aceitacao_alimentar && <div className="col-span-2 rounded-xl bg-[#FAFAF8] p-3"><p className="text-xs text-slate-400">Aceitação alimentar</p><p className="text-sm text-slate-700">{alimentacaoInfantil.aceitacao_alimentar}</p></div>}
+                      </div>
+                    )}
+                    <button onClick={abrirEdicaoAlimentacaoInfantil} className={botaoPrimario}>{alimentacaoInfantil ? 'Editar' : '+ Adicionar'}</button>
+                  </>
+                ) : (
+                  <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
+                    <select className={inputClasse} value={formAlimentacaoInfantil.aleitamento_materno} onChange={(e) => setFormAlimentacaoInfantil((f) => ({ ...f, aleitamento_materno: e.target.value as '' | 'sim' | 'nao' }))}>
+                      <option value="">houve aleitamento materno?</option>
+                      <option value="sim">Sim</option>
+                      <option value="nao">Não</option>
+                    </select>
+                    <input className={inputClasse} placeholder="exclusivo até quantos meses (opcional)" value={formAlimentacaoInfantil.aleitamento_exclusivo_meses} onChange={(e) => setFormAlimentacaoInfantil((f) => ({ ...f, aleitamento_exclusivo_meses: e.target.value }))} />
+                    <input className={inputClasse} placeholder="fórmula usada (opcional)" value={formAlimentacaoInfantil.formula} onChange={(e) => setFormAlimentacaoInfantil((f) => ({ ...f, formula: e.target.value }))} />
+                    <textarea className={inputClasse} rows={2} placeholder="como foi a introdução alimentar (opcional)" value={formAlimentacaoInfantil.introducao_alimentar} onChange={(e) => setFormAlimentacaoInfantil((f) => ({ ...f, introducao_alimentar: e.target.value }))} />
+                    <textarea className={inputClasse} rows={2} placeholder="aceitação alimentar (opcional)" value={formAlimentacaoInfantil.aceitacao_alimentar} onChange={(e) => setFormAlimentacaoInfantil((f) => ({ ...f, aceitacao_alimentar: e.target.value }))} />
+                    {erroAlimentacaoInfantil && <p className="text-sm text-red-600">{erroAlimentacaoInfantil}</p>}
+                    <div className="flex gap-2">
+                      <button disabled={carregando} onClick={salvarAlimentacaoInfantil} className={botaoPrimario}>{carregando ? 'Salvando...' : 'Salvar'}</button>
+                      <button onClick={() => setMostrarFormAlimentacaoInfantil(false)} className={botaoSecundario}>Cancelar</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {telaDetalhe === 'puberdade' && (
+              <div className="space-y-3">
+                <p className="text-sm text-slate-500">Informações sobre puberdade e vida sexual — fica só entre você e quem tiver acesso a este perfil.</p>
+                {!mostrarFormPuberdade ? (
+                  <>
+                    {!puberdadeSexualidade ? (
+                      <p className="text-sm text-slate-400 text-center py-2">Nenhuma informação registrada ainda.</p>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-3">
+                        {puberdadeSexualidade.menarca_espermarca && <div className="col-span-2 rounded-xl bg-[#FAFAF8] p-3"><p className="text-xs text-slate-400">Menarca/espermarca</p><p className="text-sm text-slate-700">{puberdadeSexualidade.menarca_espermarca}</p></div>}
+                        {puberdadeSexualidade.ciclo_menstrual && <div className="col-span-2 rounded-xl bg-[#FAFAF8] p-3"><p className="text-xs text-slate-400">Ciclo menstrual</p><p className="text-sm text-slate-700">{puberdadeSexualidade.ciclo_menstrual}</p></div>}
+                        <div className="rounded-xl bg-[#FAFAF8] p-3"><p className="text-xs text-slate-400">Vida sexual ativa</p><p className="text-sm font-medium text-slate-800">{puberdadeSexualidade.vida_sexual_ativa == null ? '—' : puberdadeSexualidade.vida_sexual_ativa ? 'Sim' : 'Não'}</p></div>
+                        {puberdadeSexualidade.metodos_contraceptivos && <div className="col-span-2 rounded-xl bg-[#FAFAF8] p-3"><p className="text-xs text-slate-400">Métodos contraceptivos</p><p className="text-sm text-slate-700">{puberdadeSexualidade.metodos_contraceptivos}</p></div>}
+                        {puberdadeSexualidade.historico_ist && <div className="col-span-2 rounded-xl bg-[#FAFAF8] p-3"><p className="text-xs text-slate-400">Histórico de ISTs</p><p className="text-sm text-slate-700">{puberdadeSexualidade.historico_ist}</p></div>}
+                      </div>
+                    )}
+                    <button onClick={abrirEdicaoPuberdade} className={botaoPrimario}>{puberdadeSexualidade ? 'Editar' : '+ Adicionar'}</button>
+                  </>
+                ) : (
+                  <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
+                    <input className={inputClasse} placeholder="menarca/espermarca (ex: 12 anos)" value={formPuberdade.menarca_espermarca} onChange={(e) => setFormPuberdade((f) => ({ ...f, menarca_espermarca: e.target.value }))} />
+                    <input className={inputClasse} placeholder="ciclo menstrual (opcional)" value={formPuberdade.ciclo_menstrual} onChange={(e) => setFormPuberdade((f) => ({ ...f, ciclo_menstrual: e.target.value }))} />
+                    <select className={inputClasse} value={formPuberdade.vida_sexual_ativa} onChange={(e) => setFormPuberdade((f) => ({ ...f, vida_sexual_ativa: e.target.value as '' | 'sim' | 'nao' }))}>
+                      <option value="">vida sexual ativa?</option>
+                      <option value="sim">Sim</option>
+                      <option value="nao">Não</option>
+                    </select>
+                    <input className={inputClasse} placeholder="métodos contraceptivos (opcional)" value={formPuberdade.metodos_contraceptivos} onChange={(e) => setFormPuberdade((f) => ({ ...f, metodos_contraceptivos: e.target.value }))} />
+                    <textarea className={inputClasse} rows={2} placeholder="histórico de ISTs (opcional)" value={formPuberdade.historico_ist} onChange={(e) => setFormPuberdade((f) => ({ ...f, historico_ist: e.target.value }))} />
+                    {erroPuberdade && <p className="text-sm text-red-600">{erroPuberdade}</p>}
+                    <div className="flex gap-2">
+                      <button disabled={carregando} onClick={salvarPuberdade} className={botaoPrimario}>{carregando ? 'Salvando...' : 'Salvar'}</button>
+                      <button onClick={() => setMostrarFormPuberdade(false)} className={botaoSecundario}>Cancelar</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {telaDetalhe === 'saudemental' && (
+              <div className="space-y-3">
+                <p className="text-sm text-slate-500">Humor e pontos de atenção emocional.</p>
+                {(saudeMental?.ideacao_suicida || saudeMental?.automutilacao) && (
+                  <div className="rounded-xl bg-amber-50 border border-amber-100 p-3">
+                    <p className="text-xs text-amber-800">
+                      Se isso ainda for uma preocupação atual, vale buscar apoio profissional (psicólogo/psiquiatra) o quanto antes — e, em caso de risco imediato, o CVV (188) atende 24h.
+                    </p>
+                  </div>
+                )}
+                {!mostrarFormSaudeMental ? (
+                  <>
+                    {!saudeMental ? (
+                      <p className="text-sm text-slate-400 text-center py-2">Nenhuma informação registrada ainda.</p>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-3">
+                        {saudeMental.humor && <div className="col-span-2 rounded-xl bg-[#FAFAF8] p-3"><p className="text-xs text-slate-400">Humor</p><p className="text-sm text-slate-700">{saudeMental.humor}</p></div>}
+                        <div className="rounded-xl bg-[#FAFAF8] p-3"><p className="text-xs text-slate-400">Ansiedade</p><p className="text-sm font-medium text-slate-800">{saudeMental.ansiedade == null ? '—' : saudeMental.ansiedade ? 'Sim' : 'Não'}</p></div>
+                        <div className="rounded-xl bg-[#FAFAF8] p-3"><p className="text-xs text-slate-400">Tristeza persistente</p><p className="text-sm font-medium text-slate-800">{saudeMental.tristeza_persistente == null ? '—' : saudeMental.tristeza_persistente ? 'Sim' : 'Não'}</p></div>
+                        <div className="rounded-xl bg-[#FAFAF8] p-3"><p className="text-xs text-slate-400">Ideação suicida</p><p className="text-sm font-medium text-slate-800">{saudeMental.ideacao_suicida == null ? '—' : saudeMental.ideacao_suicida ? 'Sim' : 'Não'}</p></div>
+                        <div className="rounded-xl bg-[#FAFAF8] p-3"><p className="text-xs text-slate-400">Automutilação</p><p className="text-sm font-medium text-slate-800">{saudeMental.automutilacao == null ? '—' : saudeMental.automutilacao ? 'Sim' : 'Não'}</p></div>
+                        {saudeMental.observacao && <div className="col-span-2 rounded-xl bg-[#FAFAF8] p-3"><p className="text-xs text-slate-400">Observações</p><p className="text-sm text-slate-700">{saudeMental.observacao}</p></div>}
+                      </div>
+                    )}
+                    <button onClick={abrirEdicaoSaudeMental} className={botaoPrimario}>{saudeMental ? 'Editar' : '+ Adicionar'}</button>
+                  </>
+                ) : (
+                  <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
+                    <input className={inputClasse} placeholder="como está o humor (opcional)" value={formSaudeMental.humor} onChange={(e) => setFormSaudeMental((f) => ({ ...f, humor: e.target.value }))} />
+                    <select className={inputClasse} value={formSaudeMental.ansiedade} onChange={(e) => setFormSaudeMental((f) => ({ ...f, ansiedade: e.target.value as '' | 'sim' | 'nao' }))}>
+                      <option value="">tem ansiedade?</option>
+                      <option value="sim">Sim</option>
+                      <option value="nao">Não</option>
+                    </select>
+                    <select className={inputClasse} value={formSaudeMental.tristeza_persistente} onChange={(e) => setFormSaudeMental((f) => ({ ...f, tristeza_persistente: e.target.value as '' | 'sim' | 'nao' }))}>
+                      <option value="">tristeza persistente?</option>
+                      <option value="sim">Sim</option>
+                      <option value="nao">Não</option>
+                    </select>
+                    <select className={inputClasse} value={formSaudeMental.ideacao_suicida} onChange={(e) => setFormSaudeMental((f) => ({ ...f, ideacao_suicida: e.target.value as '' | 'sim' | 'nao' }))}>
+                      <option value="">ideação suicida?</option>
+                      <option value="sim">Sim</option>
+                      <option value="nao">Não</option>
+                    </select>
+                    <select className={inputClasse} value={formSaudeMental.automutilacao} onChange={(e) => setFormSaudeMental((f) => ({ ...f, automutilacao: e.target.value as '' | 'sim' | 'nao' }))}>
+                      <option value="">automutilação?</option>
+                      <option value="sim">Sim</option>
+                      <option value="nao">Não</option>
+                    </select>
+                    <textarea className={inputClasse} rows={2} placeholder="observações (opcional)" value={formSaudeMental.observacao} onChange={(e) => setFormSaudeMental((f) => ({ ...f, observacao: e.target.value }))} />
+                    {erroSaudeMental && <p className="text-sm text-red-600">{erroSaudeMental}</p>}
+                    <div className="flex gap-2">
+                      <button disabled={carregando} onClick={salvarSaudeMental} className={botaoPrimario}>{carregando ? 'Salvando...' : 'Salvar'}</button>
+                      <button onClick={() => setMostrarFormSaudeMental(false)} className={botaoSecundario}>Cancelar</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {telaDetalhe === 'habitosvida' && (
+              <div className="space-y-3">
+                <p className="text-sm text-slate-500">Alimentação do dia a dia, atividade física, sono e uso de telas.</p>
+                {!mostrarFormHabitosVida ? (
+                  <>
+                    {!habitosVida ? (
+                      <p className="text-sm text-slate-400 text-center py-2">Nenhuma informação registrada ainda.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {habitosVida.alimentacao && <div className="rounded-xl bg-[#FAFAF8] p-3"><p className="text-xs text-slate-400">Alimentação</p><p className="text-sm text-slate-700">{habitosVida.alimentacao}</p></div>}
+                        {habitosVida.atividade_fisica && <div className="rounded-xl bg-[#FAFAF8] p-3"><p className="text-xs text-slate-400">Atividade física</p><p className="text-sm text-slate-700">{habitosVida.atividade_fisica}</p></div>}
+                        {habitosVida.sono && <div className="rounded-xl bg-[#FAFAF8] p-3"><p className="text-xs text-slate-400">Sono</p><p className="text-sm text-slate-700">{habitosVida.sono}</p></div>}
+                        {habitosVida.uso_telas && <div className="rounded-xl bg-[#FAFAF8] p-3"><p className="text-xs text-slate-400">Uso de telas</p><p className="text-sm text-slate-700">{habitosVida.uso_telas}</p></div>}
+                      </div>
+                    )}
+                    <button onClick={abrirEdicaoHabitosVida} className={botaoPrimario}>{habitosVida ? 'Editar' : '+ Adicionar'}</button>
+                  </>
+                ) : (
+                  <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
+                    <textarea className={inputClasse} rows={2} placeholder="alimentação do dia a dia (opcional)" value={formHabitosVida.alimentacao} onChange={(e) => setFormHabitosVida((f) => ({ ...f, alimentacao: e.target.value }))} />
+                    <textarea className={inputClasse} rows={2} placeholder="atividade física (opcional)" value={formHabitosVida.atividade_fisica} onChange={(e) => setFormHabitosVida((f) => ({ ...f, atividade_fisica: e.target.value }))} />
+                    <textarea className={inputClasse} rows={2} placeholder="sono (opcional)" value={formHabitosVida.sono} onChange={(e) => setFormHabitosVida((f) => ({ ...f, sono: e.target.value }))} />
+                    <textarea className={inputClasse} rows={2} placeholder="uso de telas (opcional)" value={formHabitosVida.uso_telas} onChange={(e) => setFormHabitosVida((f) => ({ ...f, uso_telas: e.target.value }))} />
+                    {erroHabitosVida && <p className="text-sm text-red-600">{erroHabitosVida}</p>}
+                    <div className="flex gap-2">
+                      <button disabled={carregando} onClick={salvarHabitosVida} className={botaoPrimario}>{carregando ? 'Salvando...' : 'Salvar'}</button>
+                      <button onClick={() => setMostrarFormHabitosVida(false)} className={botaoSecundario}>Cancelar</button>
                     </div>
                   </div>
                 )}
@@ -5421,7 +6110,7 @@ export default function Home() {
 
                 {!membroSelecionado.parentesco && (
                   <p className="text-sm text-slate-400 text-center py-2">
-                    Para calcular os cuidados preventivos, primeiro informe o grau de parentesco deste membro na “Ficha Pessoal”.
+                    Para calcular os cuidados preventivos, primeiro informe o grau de parentesco deste membro em “Dados pessoais” (nos três risquinhos no topo).
                   </p>
                 )}
 
