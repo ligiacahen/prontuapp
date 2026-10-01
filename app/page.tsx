@@ -114,7 +114,7 @@ const especialidadesMedicas: string[] = [
   'Geriatria', 'Ginecologia e Obstetrícia', 'Hematologia e Hemoterapia', 'Homeopatia',
   'Infectologia', 'Mastologia', 'Medicina de Família e Comunidade', 'Medicina do Trabalho',
   'Medicina Esportiva', 'Medicina Intensiva', 'Medicina Nuclear', 'Nefrologia',
-  'Neurocirurgia', 'Neurologia', 'Nutrição', 'Nutrologia', 'Odontologia', 'Oftalmologia',
+  'Neurocirurgia', 'Neurologia', 'Nutrição', 'Nutrologia', 'Odontologia', 'Oftalmologia', 'Ortodontia',
   'Oncologia Clínica', 'Ortopedia e Traumatologia', 'Otorrinolaringologia', 'Patologia',
   'Patologia Clínica / Medicina Laboratorial', 'Pediatria', 'Pneumologia', 'Psicologia',
   'Psiquiatria', 'Radiologia e Diagnóstico por Imagem', 'Radioterapia', 'Reumatologia',
@@ -202,7 +202,7 @@ type Medico = {
 };
 
 type Passo = 'login' | 'cadastro' | 'onboarding' | 'painel';
-type Aba = 'geral' | 'condicoes' | 'cirurgias' | 'medicacoes' | 'consultas' | 'exames' | 'vacinas' | 'nascimento' | 'crescimento' | 'riscos' | 'medicos' | 'novoregistro' | 'onboardingvoz' | 'eventoresumo';
+type Aba = 'geral' | 'condicoes' | 'cirurgias' | 'medicacoes' | 'consultas' | 'odontologia' | 'exames' | 'vacinas' | 'nascimento' | 'crescimento' | 'riscos' | 'medicos' | 'bemestar' | 'nutricionista' | 'esportes' | 'novoregistro' | 'onboardingvoz' | 'eventoresumo';
 
 function calcularIdade(dataNascimento: string) {
   const nascimento = new Date(dataNascimento);
@@ -274,6 +274,27 @@ function calcularZScoresOMS(
   } catch {
     return null;
   }
+}
+
+// IMC (índice de massa corporal) — cálculo padrão pra adultos (peso em kg / altura em m²).
+// Usamos a classificação clássica da OMS pra adultos; em crianças/adolescentes o IMC
+// interpretado da mesma forma não é preciso (o ideal seria IMC-por-idade), por isso só
+// mostramos essa classificação a partir dos 18 anos — abaixo disso a tela já usa os
+// z-scores da OMS (até 5 anos) ou só mostra peso/altura sem rótulo de classificação.
+function calcularIMC(pesoKg: number | null, alturaCm: number | null): number | null {
+  if (!pesoKg || !alturaCm) return null;
+  const alturaM = alturaCm / 100;
+  if (alturaM <= 0) return null;
+  return pesoKg / (alturaM * alturaM);
+}
+
+function classificarIMC(imc: number): string {
+  if (imc < 18.5) return 'Abaixo do peso';
+  if (imc < 25) return 'Peso adequado';
+  if (imc < 30) return 'Sobrepeso';
+  if (imc < 35) return 'Obesidade grau I';
+  if (imc < 40) return 'Obesidade grau II';
+  return 'Obesidade grau III';
 }
 
 // ATENÇÃO: estas são orientações gerais de rastreamento, baseadas em diretrizes conhecidas
@@ -729,6 +750,13 @@ export default function Home() {
   const [ovErro, setOvErro] = useState('');
   const [ovSalvando, setOvSalvando] = useState(false);
   const [ovProcessando, setOvProcessando] = useState(false);
+
+  // Estados do wizard passo a passo de onboarding (estilo "configuração inicial do
+  // iPhone"): ao criar um membro novo, ele vai sendo guiado tela por tela pelas
+  // categorias principais, com opção de pular qualquer uma. Aparece só uma vez, logo
+  // depois de criar o membro — passosOnboarding está definido mais abaixo, junto de secoes.
+  const [onboardingAtivo, setOnboardingAtivo] = useState(false);
+  const [onboardingPasso, setOnboardingPasso] = useState(0);
 
   const [exames, setExames] = useState<Exame[]>([]);
   const [mostrarFormExame, setMostrarFormExame] = useState(false);
@@ -1386,7 +1414,9 @@ export default function Home() {
       }
       await Promise.all([carregarCondicoes(membroId), carregarMedicacoes(membroId), carregarMembros()]);
       limparOnboardingVoz();
-      setTelaDetalhe(null);
+      // Se veio do wizard passo a passo (link "contar por voz" dentro do passo de
+      // Evento de Saúde), volta pro passo atual em vez de fechar o painel inteiro.
+      setTelaDetalhe(onboardingAtivo ? passosOnboarding[onboardingPasso].aba : null);
     } catch (e: any) {
       setOvErro(e.message || 'Erro ao salvar.');
     } finally {
@@ -1541,7 +1571,13 @@ export default function Home() {
       const membroCriado = membrosAtualizados.find((m) => m.nome === nomeSalvo && m.data_nascimento === dataSalva);
       if (membroCriado) {
         setMembroSelecionado(membroCriado as Membro);
-        setTelaDetalhe('onboardingvoz');
+        // Leva pro wizard passo a passo (estilo configuração inicial do iPhone) em vez
+        // da tela de "contar por voz" — dá pra pular qualquer etapa, e a opção de
+        // contar por voz continua disponível dentro do próprio wizard, no passo de
+        // Evento de Saúde.
+        setOnboardingAtivo(true);
+        setOnboardingPasso(0);
+        setTelaDetalhe(passosOnboarding[0].aba);
       }
     }
   }
@@ -1712,7 +1748,10 @@ export default function Home() {
       frequencia: novaFrequencia || null,
       horario: novoHorario || null,
       data_inicio: novaDataInicioMed,
-      data_fim: usoContinuo ? null : (novaDataFimMed || null),
+      // Se desmarcou "uso contínuo" mas não preencheu uma data de término, usa hoje como
+      // padrão — sem isso, data_fim ficava null (= "uso contínuo" pro resto do app) mesmo
+      // com a caixinha desmarcada.
+      data_fim: usoContinuo ? null : (novaDataFimMed || new Date().toISOString().slice(0, 10)),
       condicao_relacionada_id: novaCondicaoRelacionada || null,
       consulta_relacionada_id: novaConsultaRelacionadaMed || null,
       classe: novaClasseMedicacao || null,
@@ -1763,9 +1802,9 @@ export default function Home() {
     await carregarMedicacoes(membroSelecionado.id);
   }
 
-  function abrirNovaConsulta() {
+  function abrirNovaConsulta(especialidadePadrao: string = '') {
     setConsultaEditandoId(null);
-    setNovaEspecialidadeConsulta('');
+    setNovaEspecialidadeConsulta(especialidadePadrao);
     setEspecialidadeOutroConsulta('');
     setNovoProfissionalConsulta('');
     setNovaDataHoraConsulta('');
@@ -2530,7 +2569,7 @@ export default function Home() {
       case 'vacina':
         return <svg {...props}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>;
       case 'medicacao':
-        return <svg {...props}><path d="M22 12h-4l-3 9L9 3l-3 9H2" /></svg>;
+        return <svg {...props}><path d="m10.5 20.5 10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7Z" /><path d="m8.5 8.5 7 7" /></svg>;
       default:
         return null;
     }
@@ -2540,55 +2579,102 @@ export default function Home() {
     hoje.setHours(0, 0, 0, 0);
     const itens: ItemPendencia[] = [];
 
-    const proximaConsulta = consultas
+    // Mostra TODAS as consultas agendadas futuras (não só a próxima), da mais próxima
+    // pra mais distante.
+    const consultasFuturas = consultas
       .filter((c) => c.status === 'agendada' && new Date(c.data_hora) >= hoje)
-      .sort((a, b) => new Date(a.data_hora).getTime() - new Date(b.data_hora).getTime())[0];
-    if (proximaConsulta) {
-      const dh = new Date(proximaConsulta.data_hora);
+      .sort((a, b) => new Date(a.data_hora).getTime() - new Date(b.data_hora).getTime());
+    for (const c of consultasFuturas) {
+      const dh = new Date(c.data_hora);
       itens.push({
-        id: `consulta-${proximaConsulta.id}`,
+        id: `consulta-${c.id}`,
         tipo: 'consulta',
-        titulo: `Consulta: ${proximaConsulta.especialidade?.nome || 'a confirmar'}${proximaConsulta.profissional_saude?.nome ? ' — ' + proximaConsulta.profissional_saude.nome : ''}`,
-        detalhe: `${dh.toLocaleDateString('pt-BR')}${proximaConsulta.local ? ' · ' + proximaConsulta.local : ''}`,
+        titulo: `Consulta: ${c.especialidade?.nome || 'a confirmar'}${c.profissional_saude?.nome ? ' — ' + c.profissional_saude.nome : ''}`,
+        detalhe: `${dh.toLocaleDateString('pt-BR')}${c.local ? ' · ' + c.local : ''}`,
       });
     }
 
-    const proximaVacina = vacinas
+    // Mostra TODAS as vacinas com próxima dose marcada (atrasadas e futuras), da mais
+    // atrasada/mais próxima pra mais distante.
+    const vacinasComProxima = vacinas
       .filter((v) => v.proxima_dose_data)
-      .sort((a, b) => new Date(a.proxima_dose_data as string).getTime() - new Date(b.proxima_dose_data as string).getTime())[0];
-    if (proximaVacina) {
-      const dv = new Date(proximaVacina.proxima_dose_data as string);
+      .sort((a, b) => new Date(a.proxima_dose_data as string).getTime() - new Date(b.proxima_dose_data as string).getTime());
+    for (const v of vacinasComProxima) {
+      const dv = new Date(v.proxima_dose_data as string);
       const diasRestantes = Math.round((dv.getTime() - hoje.getTime()) / 86400000);
       itens.push({
-        id: `vacina-${proximaVacina.id}`,
+        id: `vacina-${v.id}`,
         tipo: 'vacina',
-        titulo: `Vacina: ${proximaVacina.nome}${proximaVacina.dose ? ' — ' + proximaVacina.dose : ''}`,
+        titulo: `Vacina: ${v.nome}${v.dose ? ' — ' + v.dose : ''}`,
         detalhe: diasRestantes < 0 ? `atrasada desde ${dv.toLocaleDateString('pt-BR')}` : diasRestantes === 0 ? 'hoje' : `vence em ${diasRestantes} dias`,
       });
     }
 
-    const medicamentoContinuo = medicacoes.find((m) => !m.data_fim || new Date(m.data_fim) >= hoje);
-    if (medicamentoContinuo) {
+    // Mostra TODAS as medicações de uso contínuo/ainda ativas, não só a primeira.
+    const medicacoesAtivas = medicacoes.filter((m) => !m.data_fim || new Date(m.data_fim) >= hoje);
+    for (const m of medicacoesAtivas) {
       itens.push({
-        id: `medicacao-${medicamentoContinuo.id}`,
+        id: `medicacao-${m.id}`,
         tipo: 'medicacao',
-        titulo: `Medicação: ${medicamentoContinuo.nome}`,
-        detalhe: medicamentoContinuo.horario ? `hoje às ${medicamentoContinuo.horario}` : 'uso contínuo',
+        titulo: `Medicação: ${m.nome}`,
+        detalhe: m.horario ? `hoje às ${m.horario}` : 'uso contínuo',
       });
     }
 
     return itens;
   }
 
-  const secoes: { id: Aba; label: string }[] = [
+  // Passos do wizard de onboarding (estilo "configuração inicial do iPhone"), mostrado
+  // só uma vez, logo depois de criar um membro novo. Cada passo reaproveita a tela e o
+  // formulário que já existem pra aquela categoria — o wizard só guia a navegação entre
+  // elas, com uma explicação rápida e opção de pular.
+  const passosOnboarding: { aba: Aba; titulo: string; explicacao: string }[] = [
+    { aba: 'nascimento', titulo: 'Dados pessoais', explicacao: 'Confira os dados básicos e complete o que quiser: tipo sanguíneo, parentesco, alergias e observações gerais.' },
+    { aba: 'condicoes', titulo: 'Evento de Saúde', explicacao: 'Registre doenças ou condições de saúde que esta pessoa já teve ou tem atualmente.' },
+    { aba: 'cirurgias', titulo: 'Cirurgia/Internação', explicacao: 'Registre cirurgias ou internações pelas quais esta pessoa já passou.' },
+    { aba: 'consultas', titulo: 'Consultas', explicacao: 'Registre consultas médicas já feitas ou marcadas para esta pessoa.' },
+    { aba: 'odontologia', titulo: 'Odontologia', explicacao: 'Registre visitas ao dentista ou ortodontista.' },
+    { aba: 'exames', titulo: 'Exames', explicacao: 'Registre exames já realizados, pra manter um histórico e os resultados à mão.' },
+    { aba: 'medicacoes', titulo: 'Medicações', explicacao: 'Registre os medicamentos que esta pessoa usa ou já usou, incluindo os de uso contínuo.' },
+    { aba: 'vacinas', titulo: 'Vacinas', explicacao: 'Registre as vacinas já tomadas e as próximas doses previstas.' },
+    { aba: 'crescimento', titulo: 'Peso e IMC', explicacao: 'Registre o peso e a altura mais recentes, pra acompanhar a curva de crescimento ou o IMC.' },
+  ];
+
+  // Avança, volta ou conclui o wizard. delta = 1 (próximo/pular) ou -1 (anterior).
+  function moverPassoOnboarding(delta: number) {
+    const novoIndex = onboardingPasso + delta;
+    if (novoIndex < 0) return;
+    if (novoIndex >= passosOnboarding.length) {
+      setOnboardingAtivo(false);
+      setOnboardingPasso(0);
+      setTelaDetalhe(null);
+      return;
+    }
+    // Fecha qualquer formulário aberto do passo anterior, pra sempre abrir o próximo
+    // passo na tela de lista (nunca presa num formulário com dados do passo anterior).
+    setMostrarFormCondicao(false);
+    setMostrarFormMedicacao(false);
+    setMostrarFormConsulta(false);
+    setMostrarFormExame(false);
+    setMostrarFormVacina(false);
+    setMostrarFormCrescimento(false);
+    setOnboardingPasso(novoIndex);
+    setTelaDetalhe(passosOnboarding[novoIndex].aba);
+  }
+
+  // labelCurto é o texto exibido na fileira pequena de ícones do hub (cards de 76px) —
+  // quando ausente, usa o label completo (esse sempre aparece no cabeçalho da tela).
+  const secoes: { id: Aba; label: string; labelCurto?: string }[] = [
     { id: 'condicoes', label: 'Evento de Saúde' },
-    { id: 'cirurgias', label: 'Cirurgia/Internação' },
+    { id: 'cirurgias', label: 'Cirurgia/Internação', labelCurto: 'Cirurgia / Intern.' },
     { id: 'medicacoes', label: 'Medicações' },
     { id: 'consultas', label: 'Consultas' },
+    { id: 'odontologia', label: 'Odontologia', labelCurto: 'Dentista' },
     { id: 'exames', label: 'Exames' },
     { id: 'vacinas', label: 'Vacinas' },
-    { id: 'crescimento', label: 'Crescimento' },
-    { id: 'riscos', label: 'Cuidados Preventivos' },
+    { id: 'crescimento', label: 'Peso e IMC' },
+    { id: 'riscos', label: 'Cuidados Preventivos', labelCurto: 'Cuidados Prev.' },
+    { id: 'bemestar', label: 'Bem-estar' },
     { id: 'medicos', label: 'Médicos' },
   ];
 
@@ -2604,9 +2690,17 @@ export default function Home() {
       case 'cirurgias':
         return <svg {...props}><path d="M3 21l7-7" /><path d="M13.5 10.5l6-6a2.1 2.1 0 0 0-3-3l-6 6" /><path d="M9 12l6 6" /><path d="M13 15l3 3" /><path d="M10 18l3 3" /></svg>;
       case 'medicacoes':
-        return <svg {...props}><path d="M22 12h-4l-3 9L9 3l-3 9H2" /></svg>;
+        return <svg {...props}><path d="m10.5 20.5 10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7Z" /><path d="m8.5 8.5 7 7" /></svg>;
       case 'consultas':
         return <svg {...props}><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>;
+      case 'odontologia':
+        return <svg {...props}><path d="M12 2C9 2 6.5 4 6.5 8c0 2 .5 3.5 1 6 .3 1.5.8 3 1.5 3s1-1.2 1-3 .5-3 2-3 2 1 2 3 .5 3 1 3 1.2-1.5 1.5-3c.5-2.5 1-4 1-6 0-4-2.5-6-5.5-6z" /></svg>;
+      case 'bemestar':
+        return <svg {...props}><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" /></svg>;
+      case 'nutricionista':
+        return <svg {...props}><path d="M12 6c-1-2-3-3-5-2 0 2 1 3 2 4-3 0-5 2-5 6 0 4 3 7 6 7 1 0 2-.5 2-.5s1 .5 2 .5c3 0 6-3 6-7 0-4-2-6-5-6 1-1 2-2 2-4-2-1-4 0-5 2z" /></svg>;
+      case 'esportes':
+        return <svg {...props}><line x1="6" y1="5" x2="6" y2="19" /><line x1="18" y1="5" x2="18" y2="19" /><line x1="2" y1="9" x2="2" y2="15" /><line x1="22" y1="9" x2="22" y2="15" /><line x1="6" y1="12" x2="18" y2="12" /></svg>;
       case 'medicos':
         return <svg {...props}><circle cx="12" cy="7" r="4" /><path d="M5.5 21a6.5 6.5 0 0 1 13 0" /></svg>;
       case 'exames':
@@ -2865,17 +2959,21 @@ export default function Home() {
               </div>
             </button>
 
-            <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
-              {secoes.map((s) => (
-                <button
-                  key={s.id}
-                  onClick={() => setTelaDetalhe(s.id)}
-                  className="flex w-[68px] shrink-0 flex-col items-center gap-1.5 rounded-xl border border-[#E5E1DA] bg-white px-1 py-2.5 text-teal-700 transition hover:bg-[#FAFAF8]"
-                >
-                  {iconeSecao(s.id, 20)}
-                  <span className="text-[10px] font-medium text-slate-600 text-center leading-tight">{s.label}</span>
-                </button>
-              ))}
+            <div className="flex justify-center overflow-x-auto pb-1 -mx-1 px-1">
+              <div className="grid grid-flow-col grid-rows-2 auto-cols-[76px] gap-2">
+                {secoes.map((s) => (
+                  <button
+                    key={s.id}
+                    onClick={() => setTelaDetalhe(s.id)}
+                    className="flex w-[76px] shrink-0 flex-col items-center gap-1.5 rounded-xl border border-[#E5E1DA] bg-white px-1 py-2.5 text-teal-700 transition hover:bg-[#FAFAF8]"
+                  >
+                    {iconeSecao(s.id, 20)}
+                    <span className="w-full text-[10px] font-medium text-slate-600 text-center leading-tight">
+                      {s.labelCurto ?? s.label}
+                    </span>
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="mt-5">
@@ -2931,9 +3029,59 @@ export default function Home() {
 
         {passo === 'painel' && membroSelecionado && telaDetalhe !== null && (
           <div>
+            {onboardingAtivo && (
+              <div className="mb-4 rounded-xl border border-teal-200 bg-teal-50 p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-medium text-teal-700">
+                    Passo {onboardingPasso + 1} de {passosOnboarding.length} · {passosOnboarding[onboardingPasso].titulo}
+                  </p>
+                  <button
+                    onClick={() => { setOnboardingAtivo(false); setOnboardingPasso(0); setTelaDetalhe(null); }}
+                    className="shrink-0 text-xs text-teal-700/70 hover:text-teal-700"
+                  >
+                    sair do passo a passo
+                  </button>
+                </div>
+                <div className="h-1.5 w-full rounded-full bg-teal-100">
+                  <div
+                    className="h-1.5 rounded-full bg-teal-600 transition-all"
+                    style={{ width: `${((onboardingPasso + 1) / passosOnboarding.length) * 100}%` }}
+                  />
+                </div>
+                <p className="text-xs text-teal-800">{passosOnboarding[onboardingPasso].explicacao}</p>
+                {passosOnboarding[onboardingPasso].aba === 'condicoes' && telaDetalhe !== 'onboardingvoz' && (
+                  <button onClick={() => setTelaDetalhe('onboardingvoz')} className="text-xs text-teal-700 underline">
+                    🎤 prefiro contar por voz
+                  </button>
+                )}
+                <div className="flex items-center gap-2 pt-1">
+                  {onboardingPasso > 0 && (
+                    <button onClick={() => moverPassoOnboarding(-1)} className="rounded-xl border border-teal-200 px-3 py-1.5 text-xs font-medium text-teal-700 hover:bg-teal-100">
+                      ← anterior
+                    </button>
+                  )}
+                  <button onClick={() => moverPassoOnboarding(1)} className="text-xs text-teal-700/70 hover:text-teal-700 ml-auto">
+                    pular
+                  </button>
+                  <button onClick={() => moverPassoOnboarding(1)} className="rounded-xl bg-teal-600 px-4 py-1.5 text-xs font-medium text-white hover:bg-teal-700">
+                    {onboardingPasso === passosOnboarding.length - 1 ? 'concluir' : 'próximo →'}
+                  </button>
+                </div>
+              </div>
+            )}
+
             {telaDetalhe !== 'eventoresumo' && (
               <>
-                <button onClick={() => setTelaDetalhe(null)} className="mb-4 text-sm text-teal-700">
+                <button
+                  onClick={() => {
+                    if (onboardingAtivo) {
+                      setOnboardingAtivo(false);
+                      setOnboardingPasso(0);
+                    }
+                    setTelaDetalhe(telaDetalhe === 'nutricionista' || telaDetalhe === 'esportes' ? 'bemestar' : null);
+                  }}
+                  className="mb-4 text-sm text-teal-700"
+                >
                   ← Voltar
                 </button>
 
@@ -2948,7 +3096,13 @@ export default function Home() {
                     iconeSecao(telaDetalhe as Aba)
                   )}
                   <h2 className="text-lg font-semibold text-slate-800">
-                    {telaDetalhe === 'onboardingvoz' ? 'Contar sobre a saúde' : secoes.find((s) => s.id === telaDetalhe)?.label}
+                    {telaDetalhe === 'onboardingvoz'
+                      ? 'Contar sobre a saúde'
+                      : telaDetalhe === 'nutricionista'
+                      ? 'Nutricionista'
+                      : telaDetalhe === 'esportes'
+                      ? 'Exercícios/Esportes'
+                      : secoes.find((s) => s.id === telaDetalhe)?.label}
                   </h2>
                 </div>
               </>
@@ -3019,7 +3173,13 @@ export default function Home() {
                   </div>
                 )}
 
-                <button onClick={() => { setTelaDetalhe(null); limparOnboardingVoz(); }} className="w-full text-sm text-slate-400 pt-1">
+                <button
+                  onClick={() => {
+                    limparOnboardingVoz();
+                    setTelaDetalhe(onboardingAtivo ? passosOnboarding[onboardingPasso].aba : null);
+                  }}
+                  className="w-full text-sm text-slate-400 pt-1"
+                >
                   Pular por enquanto, prefiro preencher manualmente
                 </button>
               </div>
@@ -3063,7 +3223,7 @@ export default function Home() {
                           <svg width={26} height={26} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
                         )}
                         {op.id === 'medicamento' && (
-                          <svg width={26} height={26} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2" /></svg>
+                          <svg width={26} height={26} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="m10.5 20.5 10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7Z" /><path d="m8.5 8.5 7 7" /></svg>
                         )}
                       </div>
                       <div className="text-sm font-medium text-slate-700 mt-1">{op.label}</div>
@@ -3910,8 +4070,10 @@ export default function Home() {
                         const labelClasse = classesMedicamento.find((c) => c.value === m.classe)?.label || '';
                         return m.nome.toLowerCase().includes(termo) || labelClasse.toLowerCase().includes(termo);
                       })
+                      .sort((a, b) => Number(!b.data_fim) - Number(!a.data_fim))
                       .map((m) => {
-                      const ativa = !m.data_fim || m.data_fim >= new Date().toISOString().slice(0, 10);
+                      const continua = !m.data_fim;
+                      const ativa = continua || m.data_fim >= new Date().toISOString().slice(0, 10);
                       const condicaoNome = condicoes.find((c) => c.id === m.condicao_relacionada_id)?.nome;
                       const consultaLigada = consultas.find((cs) => cs.id === m.consulta_relacionada_id);
                       const labelClasse = classesMedicamento.find((c) => c.value === m.classe)?.label;
@@ -3919,13 +4081,20 @@ export default function Home() {
                         <button
                           key={m.id}
                           onClick={() => abrirEdicaoMedicacao(m)}
-                          className="w-full rounded-xl border border-[#E5E1DA] p-3 text-left transition hover:bg-[#FAFAF8]"
+                          className={`w-full rounded-xl border p-3 text-left transition hover:bg-[#FAFAF8] ${continua ? 'border-teal-200 bg-teal-50/40' : 'border-[#E5E1DA]'}`}
                         >
                           <div className="flex items-center justify-between">
                             <p className="font-medium text-slate-800">{m.nome} ✎</p>
-                            <span className={`text-xs rounded-full px-2 py-0.5 ${ativa ? 'bg-teal-100 text-teal-700' : 'bg-slate-100 text-slate-500'}`}>
-                              {ativa ? 'ativa' : 'encerrada'}
-                            </span>
+                            {continua ? (
+                              <span className="flex items-center gap-1 text-xs font-medium rounded-full px-2 py-0.5 bg-teal-600 text-white">
+                                <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round"><circle cx="12" cy="12" r="10" /></svg>
+                                uso contínuo
+                              </span>
+                            ) : (
+                              <span className={`text-xs rounded-full px-2 py-0.5 ${ativa ? 'bg-teal-100 text-teal-700' : 'bg-slate-100 text-slate-500'}`}>
+                                {ativa ? 'ativa' : 'encerrada'}
+                              </span>
+                            )}
                           </div>
                           <p className="text-xs text-slate-400">
                             {[m.dosagem, m.frequencia, m.horario && `às ${m.horario}`].filter(Boolean).join(' · ')}
@@ -3993,7 +4162,7 @@ export default function Home() {
                     </label>
                     {!usoContinuo && (
                       <div>
-                        <label className="text-xs text-slate-400 mb-1 block">data de término</label>
+                        <label className="text-xs text-slate-400 mb-1 block">data de término (se deixar em branco, usa a data de hoje)</label>
                         <input
                           className={inputClasse}
                           type="date"
@@ -4082,14 +4251,23 @@ export default function Home() {
               </div>
             )}
 
-            {telaDetalhe === 'consultas' && (
+            {(telaDetalhe === 'consultas' || telaDetalhe === 'odontologia' || telaDetalhe === 'nutricionista') && (() => {
+              const especialidadesFiltroTela: Record<string, string[]> = {
+                odontologia: ['Odontologia', 'Ortodontia'],
+                nutricionista: ['Nutrição'],
+              };
+              const filtroEsp = especialidadesFiltroTela[telaDetalhe as string] || null;
+              const especialidadePadraoTela = telaDetalhe === 'odontologia' ? 'Odontologia' : telaDetalhe === 'nutricionista' ? 'Nutrição' : '';
+              const consultasDaTela = filtroEsp ? consultas.filter((c) => filtroEsp.includes(c.especialidade?.nome || '')) : consultas;
+              const nomeVazio = telaDetalhe === 'odontologia' ? 'Nenhuma consulta de odontologia registrada ainda.' : telaDetalhe === 'nutricionista' ? 'Nenhuma consulta com nutricionista registrada ainda.' : 'Nenhuma consulta registrada ainda.';
+              return (
               <div className="space-y-3">
                 {!mostrarFormConsulta ? (
                   <>
                     <div className="flex items-center justify-between">
-                      <p className="text-xs text-slate-400">{consultas.length} registrada{consultas.length === 1 ? '' : 's'}</p>
+                      <p className="text-xs text-slate-400">{consultasDaTela.length} registrada{consultasDaTela.length === 1 ? '' : 's'}</p>
                       <button
-                        onClick={abrirNovaConsulta}
+                        onClick={() => abrirNovaConsulta(especialidadePadraoTela)}
                         aria-label="Nova consulta"
                         className="flex items-center gap-1 text-sm font-semibold text-teal-700"
                       >
@@ -4097,7 +4275,7 @@ export default function Home() {
                         nova
                       </button>
                     </div>
-                    {consultas.length > 0 && (
+                    {consultasDaTela.length > 0 && (
                       <input
                         className={inputClasse}
                         placeholder="🔎 buscar por especialidade ou profissional"
@@ -4105,10 +4283,10 @@ export default function Home() {
                         onChange={(e) => setBuscaConsulta(e.target.value)}
                       />
                     )}
-                    {consultas.length === 0 && (
-                      <p className="text-sm text-slate-400 text-center py-2">Nenhuma consulta registrada ainda.</p>
+                    {consultasDaTela.length === 0 && (
+                      <p className="text-sm text-slate-400 text-center py-2">{nomeVazio}</p>
                     )}
-                    {consultas
+                    {consultasDaTela
                       .filter((c) => {
                         const termo = buscaConsulta.trim().toLowerCase();
                         if (!termo) return true;
@@ -4351,7 +4529,8 @@ export default function Home() {
                   </>
                 )}
               </div>
-            )}
+              );
+            })()}
 
             {telaDetalhe === 'medicos' && (
               <div className="space-y-3">
@@ -5141,6 +5320,8 @@ export default function Home() {
                 {!mostrarFormCrescimento && [...crescimento].reverse().map((m) => {
                   const idadeMeses = calcularIdadeEmMeses(membroSelecionado.data_nascimento, m.data_medicao);
                   const zscores = calcularZScoresOMS(membroSelecionado.sexo_biologico, idadeMeses, m.peso_kg, m.altura_cm);
+                  const imc = calcularIMC(m.peso_kg, m.altura_cm);
+                  const ehAdulto = idadeMeses >= 216; // 18 anos — faixa em que a classificação de IMC de adulto vale
                   return (
                     <button
                       key={m.id}
@@ -5152,18 +5333,23 @@ export default function Home() {
                         <span className="text-xs text-slate-400">{formatarIdadeEmMeses(idadeMeses)}</span>
                       </div>
                       <p className="text-xs text-slate-400">
-                        {[m.peso_kg != null && `${m.peso_kg} kg`, m.altura_cm != null && `${m.altura_cm} cm`].filter(Boolean).join(' · ')}
+                        {[m.peso_kg != null && `${m.peso_kg} kg`, m.altura_cm != null && `${m.altura_cm} cm`, imc != null && `IMC ${imc.toFixed(1)}`].filter(Boolean).join(' · ')}
                       </p>
-                      {zscores && (
+                      {(zscores || (ehAdulto && imc != null)) && (
                         <div className="flex flex-wrap gap-1 mt-1">
-                          {zscores.zPeso != null && (
+                          {zscores?.zPeso != null && (
                             <span className="text-xs bg-teal-50 text-teal-700 rounded-full px-2 py-0.5">
                               {classificarZScorePeso(zscores.zPeso)} (z={zscores.zPeso.toFixed(2)})
                             </span>
                           )}
-                          {zscores.zAltura != null && (
+                          {zscores?.zAltura != null && (
                             <span className="text-xs bg-sky-50 text-sky-700 rounded-full px-2 py-0.5">
                               {classificarZScoreAltura(zscores.zAltura)} (z={zscores.zAltura.toFixed(2)})
+                            </span>
+                          )}
+                          {ehAdulto && imc != null && (
+                            <span className="text-xs bg-teal-50 text-teal-700 rounded-full px-2 py-0.5">
+                              {classificarIMC(imc)}
                             </span>
                           )}
                         </div>
@@ -5303,6 +5489,59 @@ export default function Home() {
                     </div>
                   </div>
                 )}
+              </div>
+            )}
+
+            {telaDetalhe === 'bemestar' && (() => {
+              const consultasNutricionista = consultas.filter((c) => (c.especialidade?.nome || '') === 'Nutrição');
+              return (
+                <div className="space-y-3">
+                  <p className="text-xs text-slate-400">Escolha o que você quer acompanhar.</p>
+                  <button
+                    onClick={() => setTelaDetalhe('nutricionista')}
+                    className="w-full flex items-center gap-3 rounded-xl border border-[#E5E1DA] bg-white p-3 text-left transition hover:bg-[#FAFAF8]"
+                  >
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#CCFBF1] text-teal-700">
+                      {iconeSecao('nutricionista', 18)}
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-slate-800">Nutricionista</p>
+                      <p className="text-xs text-slate-400">
+                        {consultasNutricionista.length > 0
+                          ? `${consultasNutricionista.length} consulta${consultasNutricionista.length > 1 ? 's' : ''} registrada${consultasNutricionista.length > 1 ? 's' : ''}`
+                          : 'nenhuma consulta registrada ainda'}
+                      </p>
+                    </div>
+                    <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="text-slate-400 shrink-0"><path d="M9 18l6-6-6-6" /></svg>
+                  </button>
+                  <button
+                    onClick={() => setTelaDetalhe('esportes')}
+                    className="w-full flex items-center gap-3 rounded-xl border border-[#E5E1DA] bg-white p-3 text-left transition hover:bg-[#FAFAF8]"
+                  >
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#CCFBF1] text-teal-700">
+                      {iconeSecao('esportes', 18)}
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-slate-800">Exercícios/Esportes</p>
+                      <p className="text-xs text-slate-400">em breve</p>
+                    </div>
+                    <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="text-slate-400 shrink-0"><path d="M9 18l6-6-6-6" /></svg>
+                  </button>
+                </div>
+              );
+            })()}
+
+            {telaDetalhe === 'esportes' && (
+              <div className="space-y-3">
+                <div className="rounded-xl border border-dashed border-[#E5E1DA] bg-[#FAFAF8] p-4 text-center">
+                  <p className="text-sm text-slate-600 mb-1">Ainda estamos construindo essa parte</p>
+                  <p className="text-xs text-slate-400">
+                    Em breve você vai poder registrar os esportes/exercícios de cada pessoa, com duração e nível.
+                  </p>
+                </div>
+                <button onClick={() => setTelaDetalhe('bemestar')} className="text-sm text-teal-700">
+                  ← Voltar pra Bem-estar
+                </button>
               </div>
             )}
           </div>
