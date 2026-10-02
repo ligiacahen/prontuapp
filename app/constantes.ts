@@ -184,3 +184,14 @@ export const doencasComuns: { nome: string; categoria: string }[] = [
 ];
 
 export const categoriasDoencas: string[] = Array.from(new Set(doencasComuns.map((d) => d.categoria))).sort();
+
+// Dicas genéricas de saúde/bem-estar mostradas na Home — por enquanto são fixas e
+// iguais pra todo mundo; no futuro dá pra pensar em personalizar por idade/membro.
+// Cada dica tem um ícone próprio, usado no carrossel da Home.
+export const dicasDeSaude: { texto: string; icone: string }[] = [
+  { texto: 'Beber bastante água ao longo do dia ajuda a manter a energia e a concentração.', icone: '💧' },
+  { texto: 'Experimente separar 20-30 minutos por dia pra alguma atividade física, mesmo que seja uma caminhada.', icone: '🚶' },
+  { texto: 'Manter um horário regular de sono (inclusive nos fins de semana) melhora a qualidade do descanso.', icone: '😴' },
+  { texto: 'Consultas de rotina e exames preventivos ajudam a identificar problemas de saúde antes que piorem.', icone: '🩺' },
+  { texto: 'Lavar as mãos com frequência continua sendo uma das formas mais simples de evitar doenças.', icone: '🧼' },
+];

@@ -35,6 +35,7 @@ import {
   doencasComuns,
   categoriasDoencas,
   regrasGeneticas,
+  dicasDeSaude,
 } from './constantes';
 import {
   calcularIdade,
@@ -381,7 +382,12 @@ export default function Home() {
   const [filtroFeedTipo, setFiltroFeedTipo] = useState<string>('todos');
   const [filtroFeedDataInicio, setFiltroFeedDataInicio] = useState('');
   const [filtroFeedDataFim, setFiltroFeedDataFim] = useState('');
-  const [filtroFeedMedico, setFiltroFeedMedico] = useState('');
+
+  // Carrossel de dicas de saúde na Home: troca de dica sozinho a cada 10s, com um
+  // fade suave (opacidade) na transição.
+  const [dicaIndex, setDicaIndex] = useState(0);
+  const [dicaVisivel, setDicaVisivel] = useState(true);
+  const [filtroFeedMedico, setFiltroFeedMedico] = useState('todos');
 
   const [editandoParentesco, setEditandoParentesco] = useState(false);
   const [valorParentescoEdit, setValorParentescoEdit] = useState('');
@@ -393,6 +399,19 @@ export default function Home() {
   useEffect(() => {
     if (passo === 'painel') carregarMembros();
   }, [passo]);
+
+  // Troca de dica sozinha a cada 10s: some com um fade curto, avança pra próxima
+  // (voltando pra primeira no fim) e aparece de novo.
+  useEffect(() => {
+    const intervalo = setInterval(() => {
+      setDicaVisivel(false);
+      setTimeout(() => {
+        setDicaIndex((i) => (i + 1) % dicasDeSaude.length);
+        setDicaVisivel(true);
+      }, 300);
+    }, 10000);
+    return () => clearInterval(intervalo);
+  }, []);
 
   useEffect(() => {
     if (passo === 'painel' && abaInferior === 'configuracao') {
@@ -2621,16 +2640,6 @@ export default function Home() {
     { id: 'medicos', label: 'Médicos' },
   ];
 
-  // Dicas genéricas de saúde/bem-estar mostradas na Home — por enquanto são fixas e
-  // iguais pra todo mundo; no futuro dá pra pensar em personalizar por idade/membro.
-  const dicasDeSaude: string[] = [
-    'Beber bastante água ao longo do dia ajuda a manter a energia e a concentração.',
-    'Experimente separar 20-30 minutos por dia pra alguma atividade física, mesmo que seja uma caminhada.',
-    'Manter um horário regular de sono (inclusive nos fins de semana) melhora a qualidade do descanso.',
-    'Consultas de rotina e exames preventivos ajudam a identificar problemas de saúde antes que piorem.',
-    'Lavar as mãos com frequência continua sendo uma das formas mais simples de evitar doenças.',
-  ];
-
   // Ao tocar numa categoria dentro de "Incluir" ou "Consultar", já abre ela no modo
   // certo: em "Incluir" pula direto pro formulário de novo registro (sem precisar
   // tocar em "+ nova" de novo); em "Consultar" só mostra a lista (o botão de "+ nova"
@@ -2658,7 +2667,7 @@ export default function Home() {
     crescimento: { label: 'Peso e Crescimento', cor: 'bg-slate-200 text-slate-700 border-slate-300' },
   };
 
-  function obterEventosUnificados(): EventoFeed[] {
+  function obterEventosBrutos(): EventoFeed[] {
     const eventos: EventoFeed[] = [];
 
     for (const c of condicoes) {
@@ -2749,15 +2758,22 @@ export default function Home() {
       });
     }
 
-    return eventos
+    return eventos.sort((a, b) => (b.data ?? '').localeCompare(a.data ?? ''));
+  }
+
+  function obterMedicosDoFeed(): string[] {
+    const nomes = obterEventosBrutos()
+      .map((ev) => ev.medico)
+      .filter((nome): nome is string => !!nome && nome.trim().length > 0);
+    return Array.from(new Set(nomes)).sort((a, b) => a.localeCompare(b));
+  }
+
+  function obterEventosUnificados(): EventoFeed[] {
+    return obterEventosBrutos()
       .filter((ev) => filtroFeedTipo === 'todos' || ev.categoria === filtroFeedTipo)
       .filter((ev) => !filtroFeedDataInicio || (ev.data && ev.data >= filtroFeedDataInicio))
       .filter((ev) => !filtroFeedDataFim || (ev.data && ev.data <= filtroFeedDataFim))
-      .filter((ev) => {
-        if (!filtroFeedMedico.trim()) return true;
-        return (ev.medico ?? '').toLowerCase().includes(filtroFeedMedico.trim().toLowerCase());
-      })
-      .sort((a, b) => (b.data ?? '').localeCompare(a.data ?? ''));
+      .filter((ev) => filtroFeedMedico === 'todos' || ev.medico === filtroFeedMedico);
   }
 
   function abrirCategoriaNoModo(id: Aba) {
@@ -3400,11 +3416,22 @@ export default function Home() {
 
             <div className="mt-6">
               <h3 className="mb-3 text-sm font-semibold text-slate-800">Dicas de saúde e bem-estar</h3>
-              <div className="space-y-2">
-                {dicasDeSaude.map((dica, i) => (
-                  <div key={i} className="rounded-xl bg-teal-50 border border-teal-100 p-3">
-                    <p className="text-sm text-teal-800">💡 {dica}</p>
-                  </div>
+              <div
+                className={`relative overflow-hidden rounded-2xl border border-teal-100 bg-gradient-to-br from-teal-50 to-emerald-50 p-4 transition-opacity duration-300 ${dicaVisivel ? 'opacity-100' : 'opacity-0'}`}
+              >
+                <div className="flex items-start gap-3">
+                  <span className="shrink-0 text-2xl leading-none">{dicasDeSaude[dicaIndex].icone}</span>
+                  <p className="text-sm text-teal-800">{dicasDeSaude[dicaIndex].texto}</p>
+                </div>
+              </div>
+              <div className="mt-2 flex justify-center gap-1.5">
+                {dicasDeSaude.map((_, i) => (
+                  <button
+                    key={i}
+                    onClick={() => { setDicaVisivel(false); setTimeout(() => { setDicaIndex(i); setDicaVisivel(true); }, 150); }}
+                    aria-label={`dica ${i + 1}`}
+                    className={`h-1.5 rounded-full transition-all ${i === dicaIndex ? 'w-4 bg-teal-600' : 'w-1.5 bg-teal-200'}`}
+                  />
                 ))}
               </div>
             </div>
@@ -6363,6 +6390,7 @@ export default function Home() {
 
             {telaDetalhe === 'feedeventos' && (() => {
               const eventosFiltrados = obterEventosUnificados();
+              const medicosDisponiveis = obterMedicosDoFeed();
               return (
                 <div className="space-y-3">
                   <div className="grid grid-cols-2 gap-2">
@@ -6376,13 +6404,16 @@ export default function Home() {
                         <option key={cat} value={cat}>{categoriaFeedInfo[cat].label}</option>
                       ))}
                     </select>
-                    <input
-                      type="text"
-                      placeholder="Filtrar por médico"
+                    <select
                       className={inputClasse}
                       value={filtroFeedMedico}
                       onChange={(e) => setFiltroFeedMedico(e.target.value)}
-                    />
+                    >
+                      <option value="todos">Todos os médicos</option>
+                      {medicosDisponiveis.map((nome) => (
+                        <option key={nome} value={nome}>{nome}</option>
+                      ))}
+                    </select>
                     <input
                       type="date"
                       className={inputClasse}
@@ -6396,11 +6427,11 @@ export default function Home() {
                       onChange={(e) => setFiltroFeedDataFim(e.target.value)}
                     />
                   </div>
-                  {(filtroFeedTipo !== 'todos' || filtroFeedMedico || filtroFeedDataInicio || filtroFeedDataFim) && (
+                  {(filtroFeedTipo !== 'todos' || filtroFeedMedico !== 'todos' || filtroFeedDataInicio || filtroFeedDataFim) && (
                     <button
                       onClick={() => {
                         setFiltroFeedTipo('todos');
-                        setFiltroFeedMedico('');
+                        setFiltroFeedMedico('todos');
                         setFiltroFeedDataInicio('');
                         setFiltroFeedDataFim('');
                       }}
