@@ -3,613 +3,53 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import anthro_zscores from 'anthro-js';
-
-type Membro = {
-  id: string;
-  nome: string;
-  data_nascimento: string;
-  sexo_biologico: string;
-  tipo_sanguineo: string | null;
-  observacoes_gerais: string | null;
-  data_falecimento: string | null;
-  parentesco: string | null;
-  foto_url: string | null;
-  alergias: string | null;
-};
-
-const opcoesParentesco: { value: string; label: string }[] = [
-  { value: 'eu_mesmo', label: 'Eu mesmo(a) (titular da conta)' },
-  { value: 'filho', label: 'Filho(a)' },
-  { value: 'pai', label: 'Pai' },
-  { value: 'mae', label: 'Mãe' },
-  { value: 'irmao', label: 'Irmão/Irmã' },
-  { value: 'avo', label: 'Avô/Avó' },
-  { value: 'outro_sangue', label: 'Outro parente de sangue' },
-  { value: 'conjuge', label: 'Cônjuge/parceiro(a) (sem parentesco de sangue)' },
-  { value: 'sem_parentesco', label: 'Sem parentesco de sangue (ex: cuidador)' },
-];
-
-const parentescosDeSangue = ['eu_mesmo', 'filho', 'pai', 'mae', 'irmao', 'avo', 'outro_sangue'];
-
-type Condicao = {
-  id: string;
-  tipo: string;
-  nome: string;
-  data_diagnostico_ou_procedimento: string | null;
-  status: string;
-  relevante_geneticamente: boolean;
-  observacao: string | null;
-  orientacoes: string | null;
-  medico: string | null;
-  evento_relacionado_id: string | null;
-};
-
-type Medicacao = {
-  id: string;
-  nome: string;
-  dosagem: string | null;
-  frequencia: string | null;
-  horario: string | null;
-  data_inicio: string;
-  data_fim: string | null;
-  condicao_relacionada_id: string | null;
-  consulta_relacionada_id: string | null;
-  classe: string | null;
-  observacao: string | null;
-  medico_receitou: string | null;
-};
-
-const classesMedicamento: { value: string; label: string }[] = [
-  { value: 'analgesico', label: 'Analgésicos' },
-  { value: 'anestesico', label: 'Anestésicos' },
-  { value: 'ansiolitico', label: 'Ansiolíticos' },
-  { value: 'antiacido', label: 'Antiácidos' },
-  { value: 'antiacneico', label: 'Antiacneicos' },
-  { value: 'antiagregante_plaquetario', label: 'Antiagregantes Plaquetários' },
-  { value: 'antialergico', label: 'Antialérgicos (Anti-histamínicos)' },
-  { value: 'antianemico', label: 'Antianêmicos' },
-  { value: 'antiasmatico', label: 'Antiasmáticos' },
-  { value: 'antibiotico', label: 'Antibacterianos (Antibióticos)' },
-  { value: 'anticoagulante', label: 'Anticoagulantes' },
-  { value: 'anticoncepcional', label: 'Anticoncepcionais' },
-  { value: 'anticonvulsivante', label: 'Anticonvulsivantes' },
-  { value: 'antidepressivo', label: 'Antidepressivos' },
-  { value: 'antidiabetico', label: 'Antidiabéticos' },
-  { value: 'antidiarreico', label: 'Antidiarréicos' },
-  { value: 'antiemetico', label: 'Antieméticos' },
-  { value: 'antiepileptico', label: 'Antiepilépticos' },
-  { value: 'antifungico', label: 'Antifúngicos' },
-  { value: 'anti_hipertensivo', label: 'Anti-hipertensivos' },
-  { value: 'anti_inflamatorio', label: 'Anti-inflamatórios' },
-  { value: 'antimalarico', label: 'Antimaláricos' },
-  { value: 'antineoplasico', label: 'Antineoplásicos (Quimioterápicos)' },
-  { value: 'antiparasitario', label: 'Antiparasitários (Vermífugos)' },
-  { value: 'antiprotozoario', label: 'Antiprotozoários' },
-  { value: 'antirreumatico', label: 'Antirreumáticos' },
-  { value: 'antisseptico', label: 'Antissépticos' },
-  { value: 'antitussigeno', label: 'Antitussígenos' },
-  { value: 'antiviral', label: 'Antivirais' },
-  { value: 'betabloqueador', label: 'Betabloqueadores' },
-  { value: 'bloqueador_canal_calcio', label: 'Bloqueadores de Canais de Cálcio' },
-  { value: 'broncodilatador', label: 'Broncodilatadores' },
-  { value: 'corticoide', label: 'Corticoides' },
-  { value: 'diuretico', label: 'Diuréticos' },
-  { value: 'estatina', label: 'Estatinas (Hipolipemiantes)' },
-  { value: 'expectorante', label: 'Expectorantes' },
-  { value: 'imunomodulador', label: 'Imunomoduladores / Imunossupressores' },
-  { value: 'laxante', label: 'Laxantes' },
-  { value: 'opioide', label: 'Opioides' },
-  { value: 'relaxante_muscular', label: 'Relaxantes Musculares' },
-  { value: 'outros', label: 'Outros' },
-];
-
-const especialidadesMedicas: string[] = [
-  'Alergia e Imunologia', 'Anestesiologia', 'Angiologia', 'Cardiologia',
-  'Cirurgia Cardiovascular', 'Cirurgia da Mão', 'Cirurgia de Cabeça e Pescoço',
-  'Cirurgia do Aparelho Digestivo', 'Cirurgia Geral', 'Cirurgia Oncológica',
-  'Cirurgia Pediátrica', 'Cirurgia Plástica', 'Cirurgia Torácica', 'Cirurgia Vascular',
-  'Clínica Médica', 'Coloproctologia', 'Dermatologia', 'Endocrinologia e Metabologia',
-  'Endoscopia', 'Fisioterapia', 'Fonoaudiologia', 'Gastroenterologia', 'Genética Médica',
-  'Geriatria', 'Ginecologia e Obstetrícia', 'Hematologia e Hemoterapia', 'Homeopatia',
-  'Infectologia', 'Mastologia', 'Medicina de Família e Comunidade', 'Medicina do Trabalho',
-  'Medicina Esportiva', 'Medicina Intensiva', 'Medicina Nuclear', 'Nefrologia',
-  'Neurocirurgia', 'Neurologia', 'Nutrição', 'Nutrologia', 'Odontologia', 'Oftalmologia', 'Ortodontia',
-  'Oncologia Clínica', 'Ortopedia e Traumatologia', 'Otorrinolaringologia', 'Patologia',
-  'Patologia Clínica / Medicina Laboratorial', 'Pediatria', 'Pneumologia', 'Psicologia',
-  'Psiquiatria', 'Radiologia e Diagnóstico por Imagem', 'Radioterapia', 'Reumatologia',
-  'Urologia', 'Outros',
-];
-
-const vacinasComuns: string[] = [
-  'BCG', 'Hepatite B', 'Pentavalente (DTP+Hib+Hep B)', 'DTP (Difteria, Tétano e Coqueluche)',
-  'DTPa (acelular)', 'dT (Dupla adulto)', 'dTpa (Tríplice bacteriana acelular do adulto)',
-  'VIP (Poliomielite inativada)', 'VOP (Poliomielite oral)', 'Rotavírus',
-  'Pneumocócica 10-valente', 'Pneumocócica 13-valente', 'Pneumocócica 23-valente',
-  'Meningocócica C (conjugada)', 'Meningocócica ACWY', 'Meningocócica B',
-  'Febre Amarela', 'Tríplice Viral (Sarampo, Caxumba e Rubéola)', 'Tetra Viral (SCR + Varicela)',
-  'Varicela (Catapora)', 'Hepatite A', 'HPV', 'Influenza (Gripe)', 'Dengue', 'Covid-19',
-  'Raiva', 'Herpes-zóster', 'Outra (especificar)',
-];
-
-type Consulta = {
-  id: string;
-  data_hora: string;
-  local: string | null;
-  motivo: string | null;
-  anotacoes: string | null;
-  status: string;
-  especialidade: { nome: string } | null;
-  profissional_saude: { nome: string } | null;
-  data_retorno_sugerida: string | null;
-  forma_atendimento: string | null;
-  valor_pago: number | null;
-  solicitou_reembolso: boolean;
-  valor_reembolsado: number | null;
-  incluir_ir: boolean;
-  obs_financeira: string | null;
-  condicao_relacionada_id: string | null;
-};
-
-type Exame = {
-  id: string;
-  nome: string;
-  data_realizacao: string;
-  laboratorio: string | null;
-  resultado_resumo: string | null;
-  condicao_relacionada_id: string | null;
-};
-
-type Vacina = {
-  id: string;
-  nome: string;
-  dose: string | null;
-  data_aplicacao: string;
-  proxima_dose_data: string | null;
-  observacoes: string | null;
-  condicao_relacionada_id: string | null;
-};
-
-type InformacaoNascimento = {
-  id: string;
-  peso_nascimento: number | null;
-  comprimento_nascimento: number | null;
-  perimetro_cefalico: number | null;
-  idade_gestacional_semanas: number | null;
-  tipo_parto: string | null;
-  apgar_1min: number | null;
-  apgar_5min: number | null;
-  uti_neonatal: boolean;
-  intercorrencias: string | null;
-  local_nascimento: string | null;
-  pre_natal_adequado: string | null;
-  pre_natal_num_consultas: number | null;
-  intercorrencias_gestacionais: string | null;
-  uso_substancias_medicacoes: string | null;
-};
-
-// As 5 seções de anamnese abaixo seguem todas o mesmo padrão de informacao_nascimento:
-// um registro único por membro (não uma lista com datas), editável quando precisar atualizar.
-type Desenvolvimento = {
-  id: string;
-  sustentou_cabeca: string | null;
-  sentou: string | null;
-  engatinhou: string | null;
-  andou: string | null;
-  primeiras_palavras: string | null;
-  desenvolvimento_adequado: boolean | null;
-  observacao: string | null;
-};
-
-type AlimentacaoInfantil = {
-  id: string;
-  aleitamento_materno: boolean | null;
-  aleitamento_exclusivo_meses: number | null;
-  formula: string | null;
-  introducao_alimentar: string | null;
-  aceitacao_alimentar: string | null;
-};
-
-type PuberdadeSexualidade = {
-  id: string;
-  menarca_espermarca: string | null;
-  ciclo_menstrual: string | null;
-  vida_sexual_ativa: boolean | null;
-  metodos_contraceptivos: string | null;
-  historico_ist: string | null;
-};
-
-type SaudeMental = {
-  id: string;
-  humor: string | null;
-  ansiedade: boolean | null;
-  tristeza_persistente: boolean | null;
-  ideacao_suicida: boolean | null;
-  automutilacao: boolean | null;
-  observacao: string | null;
-};
-
-type HabitosVida = {
-  id: string;
-  alimentacao: string | null;
-  atividade_fisica: string | null;
-  sono: string | null;
-  uso_telas: string | null;
-};
-
-type MedicaoCrescimento = {
-  id: string;
-  data_medicao: string;
-  peso_kg: number | null;
-  altura_cm: number | null;
-  condicao_relacionada_id: string | null;
-};
-
-type Medico = {
-  id: string;
-  nome: string;
-  especialidade: string | null;
-  telefone: string | null;
-  local: string | null;
-  observacao: string | null;
-};
-
-type Passo = 'login' | 'cadastro' | 'onboarding' | 'painel';
-type Aba = 'geral' | 'condicoes' | 'cirurgias' | 'medicacoes' | 'consultas' | 'odontologia' | 'exames' | 'vacinas' | 'nascimento' | 'menupessoal' | 'gestacao' | 'desenvolvimento' | 'alimentacaoinfantil' | 'puberdade' | 'saudemental' | 'habitosvida' | 'crescimento' | 'riscos' | 'medicos' | 'bemestar' | 'nutricionista' | 'esportes' | 'novoregistro' | 'onboardingvoz' | 'eventoresumo';
-
-function calcularIdade(dataNascimento: string) {
-  const nascimento = new Date(dataNascimento);
-  const hoje = new Date();
-  let idade = hoje.getFullYear() - nascimento.getFullYear();
-  const mes = hoje.getMonth() - nascimento.getMonth();
-  if (mes < 0 || (mes === 0 && hoje.getDate() < nascimento.getDate())) idade--;
-  return idade;
-}
-
-function calcularIdadeEmMeses(dataNascimento: string, dataReferencia: string) {
-  const nasc = new Date(dataNascimento);
-  const ref = new Date(dataReferencia);
-  let meses = (ref.getFullYear() - nasc.getFullYear()) * 12 + (ref.getMonth() - nasc.getMonth());
-  if (ref.getDate() < nasc.getDate()) meses--;
-  return meses;
-}
-
-function formatarIdadeEmMeses(totalMeses: number): string {
-  if (totalMeses < 12) {
-    return `${totalMeses} ${totalMeses === 1 ? 'mês' : 'meses'}`;
-  }
-  const anos = Math.floor(totalMeses / 12);
-  const mesesRestantes = totalMeses % 12;
-  const textoAnos = `${anos} ${anos === 1 ? 'ano' : 'anos'}`;
-  if (mesesRestantes === 0) return textoAnos;
-  const textoMeses = `${mesesRestantes} ${mesesRestantes === 1 ? 'mês' : 'meses'}`;
-  return `${textoAnos} e ${textoMeses}`;
-}
-
-function classificarZScorePeso(z: number): string {
-  if (z < -3) return 'Peso muito baixo p/ idade';
-  if (z < -2) return 'Peso baixo p/ idade';
-  if (z <= 2) return 'Peso adequado p/ idade';
-  return 'Peso elevado p/ idade';
-}
-
-function classificarZScoreAltura(z: number): string {
-  if (z < -3) return 'Estatura muito baixa p/ idade';
-  if (z < -2) return 'Estatura baixa p/ idade';
-  if (z <= 2) return 'Estatura adequada p/ idade';
-  return 'Estatura alta p/ idade';
-}
-
-// A OMS só publica a referência de peso/altura por idade (Child Growth Standards) até os 5 anos (60 meses).
-// Acima disso, mostramos a medida sem comparação com a OMS.
-function calcularZScoresOMS(
-  sexoBiologico: string,
-  idadeEmMeses: number,
-  pesoKg: number | null,
-  alturaCm: number | null
-): { zPeso: number | null; zAltura: number | null } | null {
-  if (idadeEmMeses < 0 || idadeEmMeses > 60) return null;
-  try {
-    const resultado: any = anthro_zscores({
-      sex: sexoBiologico === 'masculino' ? 'm' : 'f',
-      age: idadeEmMeses,
-      is_age_in_month: true,
-      weight: pesoKg ?? undefined,
-      lenhei: alturaCm ?? undefined,
-    });
-    // Nomes de campo podem variar conforme a versão da biblioteca — checamos as variações mais comuns.
-    const zPeso = resultado?.zwei ?? resultado?.zwfa ?? null;
-    const zAltura = resultado?.zlen ?? resultado?.zhfa ?? resultado?.zlfa ?? null;
-    return {
-      zPeso: typeof zPeso === 'number' ? zPeso : null,
-      zAltura: typeof zAltura === 'number' ? zAltura : null,
-    };
-  } catch {
-    return null;
-  }
-}
-
-// IMC (índice de massa corporal) — cálculo padrão pra adultos (peso em kg / altura em m²).
-// Usamos a classificação clássica da OMS pra adultos; em crianças/adolescentes o IMC
-// interpretado da mesma forma não é preciso (o ideal seria IMC-por-idade), por isso só
-// mostramos essa classificação a partir dos 18 anos — abaixo disso a tela já usa os
-// z-scores da OMS (até 5 anos) ou só mostra peso/altura sem rótulo de classificação.
-function calcularIMC(pesoKg: number | null, alturaCm: number | null): number | null {
-  if (!pesoKg || !alturaCm) return null;
-  const alturaM = alturaCm / 100;
-  if (alturaM <= 0) return null;
-  return pesoKg / (alturaM * alturaM);
-}
-
-function classificarIMC(imc: number): string {
-  if (imc < 18.5) return 'Abaixo do peso';
-  if (imc < 25) return 'Peso adequado';
-  if (imc < 30) return 'Sobrepeso';
-  if (imc < 35) return 'Obesidade grau I';
-  if (imc < 40) return 'Obesidade grau II';
-  return 'Obesidade grau III';
-}
-
-// ATENÇÃO: estas são orientações gerais de rastreamento, baseadas em diretrizes conhecidas
-// (ex: sociedades de mastologia, coloproctologia, urologia, diabetes). Elas NÃO substituem
-// avaliação médica individual — sempre recomendamos consultar um profissional de saúde.
-type RegraGenetica = {
-  id: string;
-  palavras: string[];
-  aplicaSexo: 'masculino' | 'feminino' | null;
-  idadeRecomendada: number | null;
-  mensagem: string;
-};
-
-const regrasGeneticas: RegraGenetica[] = [
-  {
-    id: 'mama_ovario',
-    palavras: ['mama', 'ovário', 'ovario'],
-    aplicaSexo: 'feminino',
-    idadeRecomendada: 30,
-    mensagem: 'Histórico familiar de câncer de mama/ovário. Vale conversar sobre iniciar rastreio (mamografia) e avaliação com mastologista ou ginecologista a partir dos 30 anos, em vez dos 40.',
-  },
-  {
-    id: 'colorretal',
-    palavras: ['colorretal', 'cólon', 'colon', 'intestino'],
-    aplicaSexo: null,
-    idadeRecomendada: 40,
-    mensagem: 'Histórico familiar de câncer colorretal. Vale conversar sobre iniciar rastreio (colonoscopia) a partir dos 40 anos e avaliação com gastroenterologista.',
-  },
-  {
-    id: 'prostata',
-    palavras: ['próstata', 'prostata'],
-    aplicaSexo: 'masculino',
-    idadeRecomendada: 45,
-    mensagem: 'Histórico familiar de câncer de próstata. Vale conversar sobre avaliação urológica a partir dos 45 anos, em vez dos 50.',
-  },
-  {
-    id: 'diabetes_tipo2',
-    palavras: ['diabetes tipo 2'],
-    aplicaSexo: null,
-    idadeRecomendada: 30,
-    mensagem: 'Histórico familiar de diabetes tipo 2. Vale conversar sobre rastreio de glicemia a partir dos 30-35 anos e acompanhamento com endocrinologista.',
-  },
-  {
-    id: 'diabetes_tipo1',
-    palavras: ['diabetes tipo 1'],
-    aplicaSexo: null,
-    idadeRecomendada: null,
-    mensagem: 'Histórico familiar de diabetes tipo 1. Não é uma condição com rastreio por idade — vale ficar atento a sintomas (sede/urina excessiva, perda de peso) e conversar com endocrinologista se surgirem.',
-  },
-  {
-    id: 'cardiaca',
-    palavras: ['infarto', 'cardíaca', 'cardiaca', 'cardiopatia', 'coração', 'coracao'],
-    aplicaSexo: null,
-    idadeRecomendada: null,
-    mensagem: 'Histórico familiar de doença cardíaca precoce. Vale conversar sobre avaliação cardiológica e perfil lipídico com um cardiologista.',
-  },
-  {
-    id: 'hipertensao',
-    palavras: ['hipertensão', 'hipertensao', 'pressão alta', 'pressao alta'],
-    aplicaSexo: null,
-    idadeRecomendada: null,
-    mensagem: 'Histórico familiar de hipertensão. Vale conversar sobre acompanhamento de pressão arterial mais frequente.',
-  },
-  {
-    id: 'colesterol',
-    palavras: ['colesterol'],
-    aplicaSexo: null,
-    idadeRecomendada: 10,
-    mensagem: 'Histórico familiar de colesterol alto. As diretrizes recomendam rastreio (perfil lipídico) já entre 9-11 anos, com reforço entre 17-21 — vale conversar com o pediatra/clínico sobre adiantar esse exame.',
-  },
-  {
-    id: 'hipotireoidismo',
-    palavras: ['hipotireoidismo'],
-    aplicaSexo: null,
-    idadeRecomendada: 35,
-    mensagem: 'Histórico familiar de hipotireoidismo. Vale considerar exame de TSH a partir dos 35 anos (repetindo a cada 5 anos), podendo ser antes se houver sintomas.',
-  },
-  {
-    id: 'hipertireoidismo',
-    palavras: ['hipertireoidismo'],
-    aplicaSexo: null,
-    idadeRecomendada: 35,
-    mensagem: 'Histórico familiar de hipertireoidismo. Vale considerar exame de TSH a partir dos 35 anos (repetindo a cada 5 anos), podendo ser antes se houver sintomas.',
-  },
-  {
-    id: 'osteoporose',
-    palavras: ['osteoporose'],
-    aplicaSexo: null,
-    idadeRecomendada: 50,
-    mensagem: 'Histórico familiar de osteoporose. Vale conversar sobre adiantar a densitometria óssea para os 50 anos (em vez dos 65), especialmente para mulheres.',
-  },
-  {
-    id: 'doenca_renal',
-    palavras: ['doença renal', 'doenca renal', 'renal'],
-    aplicaSexo: null,
-    idadeRecomendada: 20,
-    mensagem: 'Histórico familiar de doença renal. Vale conversar sobre exames de função renal (e possivelmente ultrassom) a partir dos 20 anos.',
-  },
-  {
-    id: 'avc',
-    palavras: ['avc', 'acidente vascular cerebral', 'derrame'],
-    aplicaSexo: null,
-    idadeRecomendada: null,
-    mensagem: 'Histórico familiar de AVC. Não há uma idade específica de rastreio, mas vale reforçar o controle de fatores de risco (pressão, colesterol, tabagismo) com um médico.',
-  },
-  {
-    id: 'cancer_outro',
-    palavras: ['câncer (outro tipo)', 'cancer (outro tipo)'],
-    aplicaSexo: null,
-    idadeRecomendada: null,
-    mensagem: 'Histórico familiar de câncer. Vale mencionar esse histórico específico ao médico, que pode orientar sobre rastreio adequado ao tipo de câncer.',
-  },
-  {
-    id: 'saude_mental',
-    palavras: ['depressão', 'depressao', 'ansiedade'],
-    aplicaSexo: null,
-    idadeRecomendada: null,
-    mensagem: 'Histórico familiar de saúde mental (depressão/ansiedade). Vale ficar atento a sinais em si mesmo e considerar conversar com psicólogo ou psiquiatra se notar sintomas.',
-  },
-  {
-    id: 'obesidade',
-    palavras: ['obesidade'],
-    aplicaSexo: null,
-    idadeRecomendada: null,
-    mensagem: 'Histórico familiar de obesidade. Vale manter acompanhamento nutricional e hábitos saudáveis desde cedo.',
-  },
-  {
-    id: 'glaucoma',
-    palavras: ['glaucoma'],
-    aplicaSexo: null,
-    idadeRecomendada: 35,
-    mensagem: 'Histórico familiar de glaucoma. Vale conversar sobre adiantar o exame oftalmológico completo (com medição de pressão ocular) para os 35 anos, em vez dos 40.',
-  },
-];
-
-type RiscoGenetico = {
-  id: string;
-  mensagem: string;
-  naIdadeRecomendada: boolean;
-  idadeRecomendada: number | null;
-  categoria: string;
-};
-
-function calcularRiscosGeneticos(
-  membro: Membro,
-  nomesCondicoesFamilia: string[]
-): RiscoGenetico[] {
-  const idade = calcularIdade(membro.data_nascimento);
-  const resultados: RiscoGenetico[] = [];
-  for (const regra of regrasGeneticas) {
-    if (regra.aplicaSexo && regra.aplicaSexo !== membro.sexo_biologico) continue;
-    const nomeEncontrado = nomesCondicoesFamilia.find((nome) =>
-      regra.palavras.some((p) => nome.toLowerCase().includes(p))
-    );
-    if (nomeEncontrado) {
-      resultados.push({
-        id: regra.id,
-        mensagem: regra.mensagem,
-        naIdadeRecomendada: regra.idadeRecomendada == null || idade >= regra.idadeRecomendada,
-        idadeRecomendada: regra.idadeRecomendada,
-        categoria: obterCategoriaDoenca(nomeEncontrado),
-      });
-    }
-  }
-  return resultados;
-}
-
-function formatarData(data: string) {
-  const [ano, mes, dia] = data.split('-');
-  return `${dia}/${mes}/${ano}`;
-}
-
-// Converte texto digitado em número, tolerando unidades (ex: "3,250 kg", "38 semanas")
-// e vírgula decimal. Retorna null se o campo estiver vazio, e NaN se não for possível entender o número.
-function paraNumeroTolerante(valor: string): number | null {
-  const limpo = valor.trim();
-  if (!limpo) return null;
-  const apenasNumero = limpo.replace(/[^\d,.-]/g, '').replace(',', '.');
-  if (!apenasNumero) return NaN;
-  const num = Number(apenasNumero);
-  return num;
-}
-
-const tipoCondicaoLabels: Record<string, string> = {
-  doenca: 'Hipótese diagnóstica',
-  cirurgia: 'Cirurgia',
-  internacao: 'Internação',
-};
-
-const statusCondicaoLabels: Record<string, string> = {
-  ativa: 'Ativa',
-  resolvida: 'Resolvida',
-  cronica: 'Crônica',
-};
-
-// Lista fechada de doenças comuns — usar termos fixos ajuda tanto na busca quanto no
-// funcionamento dos Cuidados Preventivos (que procura por palavras-chave nas condições da família).
-const doencasComuns: { nome: string; categoria: string }[] = [
-  { nome: 'Câncer de mama', categoria: 'Oncológica' },
-  { nome: 'Câncer de ovário', categoria: 'Oncológica' },
-  { nome: 'Câncer colorretal', categoria: 'Oncológica' },
-  { nome: 'Câncer de próstata', categoria: 'Oncológica' },
-  { nome: 'Câncer (outro tipo)', categoria: 'Oncológica' },
-  { nome: 'Diabetes tipo 1', categoria: 'Endocrinológica' },
-  { nome: 'Diabetes tipo 2', categoria: 'Endocrinológica' },
-  { nome: 'Hipertensão (pressão alta)', categoria: 'Cardiológica' },
-  { nome: 'Doença cardíaca / infarto', categoria: 'Cardiológica' },
-  { nome: 'Colesterol alto', categoria: 'Cardiológica' },
-  { nome: 'AVC (Acidente Vascular Cerebral)', categoria: 'Neurológica' },
-  { nome: 'Asma', categoria: 'Pneumológica' },
-  { nome: 'Alergia', categoria: 'Alergológica' },
-  { nome: 'Hipotireoidismo', categoria: 'Endocrinológica' },
-  { nome: 'Hipertireoidismo', categoria: 'Endocrinológica' },
-  { nome: 'Depressão', categoria: 'Psiquiátrica' },
-  { nome: 'Ansiedade', categoria: 'Psiquiátrica' },
-  { nome: 'Epilepsia', categoria: 'Neurológica' },
-  { nome: 'Artrite / Artrose', categoria: 'Reumatológica/Ortopédica' },
-  { nome: 'Osteoporose', categoria: 'Reumatológica/Ortopédica' },
-  { nome: 'Obesidade', categoria: 'Endocrinológica' },
-  { nome: 'Doença renal', categoria: 'Nefrológica' },
-  { nome: 'Doença de Alzheimer', categoria: 'Neurológica' },
-  { nome: 'Doença de Parkinson', categoria: 'Neurológica' },
-  { nome: 'Enxaqueca', categoria: 'Neurológica' },
-  { nome: 'Glaucoma', categoria: 'Oftalmológica' },
-  { nome: 'Catarata congênita', categoria: 'Oftalmológica' },
-  { nome: 'Degeneração macular', categoria: 'Oftalmológica' },
-  { nome: 'Retinose pigmentar', categoria: 'Oftalmológica' },
-  { nome: 'Daltonismo (deficiência de percepção de cores)', categoria: 'Oftalmológica' },
-  { nome: 'Alta miopia', categoria: 'Oftalmológica' },
-  { nome: 'Dor de barriga', categoria: 'Sintomas comuns (sem diagnóstico fechado)' },
-  { nome: 'Dor de cabeça', categoria: 'Sintomas comuns (sem diagnóstico fechado)' },
-  { nome: 'Dor de ouvido', categoria: 'Sintomas comuns (sem diagnóstico fechado)' },
-  { nome: 'Dor de garganta', categoria: 'Sintomas comuns (sem diagnóstico fechado)' },
-  { nome: 'Febre', categoria: 'Sintomas comuns (sem diagnóstico fechado)' },
-  { nome: 'Tosse', categoria: 'Sintomas comuns (sem diagnóstico fechado)' },
-  { nome: 'Resfriado / Virose', categoria: 'Sintomas comuns (sem diagnóstico fechado)' },
-  { nome: 'Vômito', categoria: 'Sintomas comuns (sem diagnóstico fechado)' },
-  { nome: 'Diarreia', categoria: 'Sintomas comuns (sem diagnóstico fechado)' },
-  { nome: 'Reação alérgica (sem diagnóstico fechado)', categoria: 'Sintomas comuns (sem diagnóstico fechado)' },
-  { nome: 'Dor muscular', categoria: 'Sintomas comuns (sem diagnóstico fechado)' },
-  { nome: 'Mal-estar geral', categoria: 'Sintomas comuns (sem diagnóstico fechado)' },
-  { nome: 'Outra doença (especificar)', categoria: 'Outra' },
-];
-
-const categoriasDoencas: string[] = Array.from(new Set(doencasComuns.map((d) => d.categoria))).sort();
-
-function obterCategoriaDoenca(nome: string): string {
-  const nomeLower = nome.toLowerCase();
-  const exata = doencasComuns.find((d) => d.nome === nome);
-  if (exata) return exata.categoria;
-  // Correspondência por palavra-chave, pra cobrir registros antigos em texto livre
-  // (ex: "Hipertensão" sozinho, sem o "(pressão alta)" da lista fechada atual).
-  for (const d of doencasComuns) {
-    const tokens = d.nome
-      .toLowerCase()
-      .replace(/[()/]/g, ' ')
-      .split(' ')
-      .filter((t) => t.length > 3 && !['tipo', 'outro', 'outra', 'especificar'].includes(t));
-    if (tokens.some((t) => nomeLower.includes(t))) return d.categoria;
-  }
-  return 'Outra';
-}
+import type {
+  Membro,
+  Condicao,
+  Medicacao,
+  Consulta,
+  Exame,
+  Vacina,
+  InformacaoNascimento,
+  Desenvolvimento,
+  AlimentacaoInfantil,
+  PuberdadeSexualidade,
+  SaudeMental,
+  HabitosVida,
+  MedicaoCrescimento,
+  Medico,
+  Passo,
+  Aba,
+  RiscoGenetico,
+} from './tipos';
+import {
+  opcoesParentesco,
+  parentescosDeSangue,
+  classesMedicamento,
+  especialidadesMedicas,
+  vacinasComuns,
+} from './tipos';
+import {
+  tipoCondicaoLabels,
+  statusCondicaoLabels,
+  doencasComuns,
+  categoriasDoencas,
+  regrasGeneticas,
+} from './constantes';
+import {
+  calcularIdade,
+  calcularIdadeEmMeses,
+  formatarIdadeEmMeses,
+  classificarZScorePeso,
+  classificarZScoreAltura,
+  calcularZScoresOMS,
+  calcularIMC,
+  classificarIMC,
+  formatarData,
+  paraNumeroTolerante,
+  obterCategoriaDoenca,
+  calcularRiscosGeneticos,
+} from './utils';
 
 export default function Home() {
   const [passo, setPasso] = useState<Passo>('login');
@@ -625,6 +65,33 @@ export default function Home() {
   const [codigoConvite, setCodigoConvite] = useState('');
 
   const [codigoGerado, setCodigoGerado] = useState('');
+
+  // Menu inferior fixo: home (pendências + dicas), incluir/consultar (grade de
+  // categorias — cada uma abre direto no modo certo), compartilhar (PDF) e
+  // configuração (conta/senha). Trocar de membro agora é feito dentro da própria Home.
+  const [abaInferior, setAbaInferior] = useState<'home' | 'incluir' | 'consultar' | 'compartilhar' | 'configuracao'>('home');
+
+  const [secoesCompartilhar, setSecoesCompartilhar] = useState<Record<string, boolean>>({
+    nascimento: true,
+    condicoes: true,
+    cirurgias: true,
+    medicacoes: true,
+    consultas: true,
+    odontologia: true,
+    exames: true,
+    vacinas: true,
+    crescimento: true,
+    anamnese: true,
+  });
+  const [mostrarResumoImpressao, setMostrarResumoImpressao] = useState(false);
+  const [pendenciasFamiliares, setPendenciasFamiliares] = useState<{ membroId: string; membroNome: string; itens: { id: string; tipo: 'consulta' | 'vacina' | 'medicacao'; titulo: string; detalhe: string }[] }[]>([]);
+
+  const [contaEmail, setContaEmail] = useState('');
+  const [novaSenhaConfig, setNovaSenhaConfig] = useState('');
+  const [confirmarSenhaConfig, setConfirmarSenhaConfig] = useState('');
+  const [erroConfigSenha, setErroConfigSenha] = useState('');
+  const [sucessoConfigSenha, setSucessoConfigSenha] = useState(false);
+  const [carregandoSenha, setCarregandoSenha] = useState(false);
 
   const [membros, setMembros] = useState<Membro[]>([]);
   const [mostrarFormMembro, setMostrarFormMembro] = useState(false);
@@ -669,6 +136,7 @@ export default function Home() {
   const [novoRelevanteGenetico, setNovoRelevanteGenetico] = useState(false);
   const [novaObservacaoCondicao, setNovaObservacaoCondicao] = useState('');
   const [novaOrientacaoCondicao, setNovaOrientacaoCondicao] = useState('');
+  const [novoMedicoCondicao, setNovoMedicoCondicao] = useState('');
   const [doencaOutraNome, setDoencaOutraNome] = useState('');
   const [erroCondicao, setErroCondicao] = useState('');
   const [condicaoEditandoId, setCondicaoEditandoId] = useState<string | null>(null);
@@ -908,6 +376,13 @@ export default function Home() {
   const [crescimentoEditandoId, setCrescimentoEditandoId] = useState<string | null>(null);
   const [novaCondicaoRelacionadaCrescimento, setNovaCondicaoRelacionadaCrescimento] = useState('');
 
+  // Feed unificado (aba Consultar → "Ver tudo em uma linha do tempo"): junta todos os
+  // tipos de evento num só lugar, coloridos por categoria, com filtros simples.
+  const [filtroFeedTipo, setFiltroFeedTipo] = useState<string>('todos');
+  const [filtroFeedDataInicio, setFiltroFeedDataInicio] = useState('');
+  const [filtroFeedDataFim, setFiltroFeedDataFim] = useState('');
+  const [filtroFeedMedico, setFiltroFeedMedico] = useState('');
+
   const [editandoParentesco, setEditandoParentesco] = useState(false);
   const [valorParentescoEdit, setValorParentescoEdit] = useState('');
 
@@ -919,6 +394,16 @@ export default function Home() {
     if (passo === 'painel') carregarMembros();
   }, [passo]);
 
+  useEffect(() => {
+    if (passo === 'painel' && abaInferior === 'configuracao') {
+      supabase.auth.getUser().then(({ data }) => setContaEmail(data.user?.email || ''));
+    }
+  }, [passo, abaInferior]);
+
+  useEffect(() => {
+    if (passo === 'painel' && abaInferior === 'home') carregarPendenciasFamiliares(membros);
+  }, [passo, abaInferior, membros]);
+
   // Sempre que a tela muda (incluindo cada passo do onboarding), volta pro topo.
   // Sem isso, quem rola a página pra baixo pra preencher um formulário mais longo
   // (como o de Cirurgia/Internação) e depois salva ou avança, continua com a
@@ -926,7 +411,7 @@ export default function Home() {
   // impressão de que o app travou ou não avançou.
   useEffect(() => {
     window.scrollTo(0, 0);
-  }, [telaDetalhe, onboardingPasso]);
+  }, [telaDetalhe, onboardingPasso, abaInferior]);
 
   useEffect(() => {
     if (membroSelecionado) {
@@ -1657,6 +1142,29 @@ export default function Home() {
     setPasso('painel');
   }
 
+  async function trocarSenha() {
+    setErroConfigSenha('');
+    setSucessoConfigSenha(false);
+    if (novaSenhaConfig.length < 6) {
+      setErroConfigSenha('A senha precisa ter pelo menos 6 caracteres.');
+      return;
+    }
+    if (novaSenhaConfig !== confirmarSenhaConfig) {
+      setErroConfigSenha('As senhas não são iguais.');
+      return;
+    }
+    setCarregandoSenha(true);
+    const { error } = await supabase.auth.updateUser({ password: novaSenhaConfig });
+    setCarregandoSenha(false);
+    if (error) {
+      setErroConfigSenha(error.message);
+      return;
+    }
+    setNovaSenhaConfig('');
+    setConfirmarSenhaConfig('');
+    setSucessoConfigSenha(true);
+  }
+
   async function gerarConvite() {
     setErro('');
     const { data: userData } = await supabase.auth.getUser();
@@ -1763,6 +1271,7 @@ export default function Home() {
     setNovoRelevanteGenetico(false);
     setNovaObservacaoCondicao('');
     setNovaOrientacaoCondicao('');
+    setNovoMedicoCondicao('');
     setErroCondicao('');
     setMostrarFormCondicao(true);
   }
@@ -1782,6 +1291,7 @@ export default function Home() {
     setNovoRelevanteGenetico(c.relevante_geneticamente);
     setNovaObservacaoCondicao(c.observacao || '');
     setNovaOrientacaoCondicao(c.orientacoes || '');
+    setNovoMedicoCondicao(c.medico || '');
     setErroCondicao('');
     setMostrarFormCondicao(true);
   }
@@ -1824,6 +1334,7 @@ export default function Home() {
     if (!membroSelecionado) return;
     setCarregando(true);
 
+    const ehCirurgiaOuInternacao = novoTipoCondicao === 'cirurgia' || novoTipoCondicao === 'internacao';
     const dados = {
       tipo: novoTipoCondicao,
       nome: nomeFinal,
@@ -1832,11 +1343,24 @@ export default function Home() {
       relevante_geneticamente: novoRelevanteGenetico,
       observacao: novaObservacaoCondicao || null,
       orientacoes: novaOrientacaoCondicao || null,
+      medico: ehCirurgiaOuInternacao ? (novoMedicoCondicao.trim() || null) : null,
     };
 
-    const { error } = condicaoEditandoId
-      ? await supabase.from('condicao').update(dados).eq('id', condicaoEditandoId)
-      : await supabase.from('condicao').insert({ membro_id: membroSelecionado.id, ...dados });
+    const ehRegistroNovo = !condicaoEditandoId;
+    let error;
+    let idSalvo: string | null = condicaoEditandoId;
+    if (condicaoEditandoId) {
+      const resultado = await supabase.from('condicao').update(dados).eq('id', condicaoEditandoId);
+      error = resultado.error;
+    } else {
+      const resultado = await supabase
+        .from('condicao')
+        .insert({ membro_id: membroSelecionado.id, ...dados })
+        .select('id')
+        .single();
+      error = resultado.error;
+      idSalvo = resultado.data?.id ?? null;
+    }
 
     setCarregando(false);
     if (error) {
@@ -1852,8 +1376,16 @@ export default function Home() {
     setNovoRelevanteGenetico(false);
     setNovaObservacaoCondicao('');
     setNovaOrientacaoCondicao('');
+    setNovoMedicoCondicao('');
     setMostrarFormCondicao(false);
     await carregarCondicoes(membroSelecionado.id);
+    // Depois de criar uma cirurgia/internação nova, já abre o resumo do evento —
+    // é de lá que dá pra ligar exames e medicamentos a ela (ela normalmente gera
+    // esse tipo de item), sem precisar procurar o item na lista pra abrir de novo.
+    if (ehRegistroNovo && idSalvo && ehCirurgiaOuInternacao && telaDetalhe === 'cirurgias') {
+      setCondicaoResumoId(idSalvo);
+      setTelaDetalhe('eventoresumo');
+    }
   }
 
   async function excluirCondicao() {
@@ -2978,6 +2510,63 @@ export default function Home() {
     return itens;
   }
 
+  // Pendências de TODA a família, mostradas na Home (diferente de obterPendencias(),
+  // que só olha o membro selecionado e os dados já carregados no estado). Como esse
+  // resumo precisa dos dados de todo mundo — não só de quem está selecionado agora —
+  // ele faz suas próprias consultas no Supabase com .in('membro_id', ids).
+  async function carregarPendenciasFamiliares(lista: Membro[]) {
+    if (lista.length === 0) {
+      setPendenciasFamiliares([]);
+      return;
+    }
+    const ids = lista.map((m) => m.id);
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    const hojeStr = hoje.toISOString().slice(0, 10);
+
+    const [{ data: consultasData }, { data: vacinasData }, { data: medicacoesData }] = await Promise.all([
+      supabase.from('consulta').select('id, membro_id, data_hora, status, especialidade(nome), profissional_saude(nome), local').in('membro_id', ids).eq('status', 'agendada').gte('data_hora', new Date().toISOString()),
+      supabase.from('vacina').select('id, membro_id, nome, dose, proxima_dose_data').in('membro_id', ids).not('proxima_dose_data', 'is', null),
+      supabase.from('medicacao').select('id, membro_id, nome, data_fim, horario').in('membro_id', ids),
+    ]);
+
+    const porMembro: Record<string, ItemPendencia[]> = {};
+    const adicionar = (membroId: string, item: ItemPendencia) => {
+      if (!porMembro[membroId]) porMembro[membroId] = [];
+      porMembro[membroId].push(item);
+    };
+
+    (consultasData || []).forEach((c: any) => {
+      adicionar(c.membro_id, {
+        id: `consulta-${c.id}`,
+        tipo: 'consulta',
+        titulo: `Consulta: ${c.especialidade?.nome || 'a confirmar'}${c.profissional_saude?.nome ? ' — ' + c.profissional_saude.nome : ''}`,
+        detalhe: `${new Date(c.data_hora).toLocaleDateString('pt-BR')}${c.local ? ' · ' + c.local : ''}`,
+      });
+    });
+    (vacinasData || []).forEach((v: any) => {
+      adicionar(v.membro_id, {
+        id: `vacina-${v.id}`,
+        tipo: 'vacina',
+        titulo: `Vacina: ${v.nome}${v.dose ? ' — ' + v.dose : ''}`,
+        detalhe: `próxima dose: ${formatarData(v.proxima_dose_data)}`,
+      });
+    });
+    (medicacoesData || []).filter((m: any) => !m.data_fim || m.data_fim >= hojeStr).forEach((m: any) => {
+      adicionar(m.membro_id, {
+        id: `medicacao-${m.id}`,
+        tipo: 'medicacao',
+        titulo: `Medicação: ${m.nome}`,
+        detalhe: m.horario ? `hoje às ${m.horario}` : 'uso contínuo',
+      });
+    });
+
+    const resultado = lista
+      .map((m) => ({ membroId: m.id, membroNome: m.nome, itens: porMembro[m.id] || [] }))
+      .filter((r) => r.itens.length > 0);
+    setPendenciasFamiliares(resultado);
+  }
+
   // Passos do wizard de onboarding (estilo "configuração inicial do iPhone"), mostrado
   // só uma vez, logo depois de criar um membro novo. Cada passo reaproveita a tela e o
   // formulário que já existem pra aquela categoria — o wizard só guia a navegação entre
@@ -2991,7 +2580,7 @@ export default function Home() {
     { aba: 'exames', titulo: 'Exames', explicacao: 'Registre exames já realizados, pra manter um histórico e os resultados à mão.' },
     { aba: 'medicacoes', titulo: 'Medicações', explicacao: 'Registre os medicamentos que esta pessoa usa ou já usou, incluindo os de uso contínuo.' },
     { aba: 'vacinas', titulo: 'Vacinas', explicacao: 'Registre as vacinas já tomadas e as próximas doses previstas.' },
-    { aba: 'crescimento', titulo: 'Peso e IMC', explicacao: 'Registre o peso e a altura mais recentes, pra acompanhar a curva de crescimento ou o IMC.' },
+    { aba: 'crescimento', titulo: 'Peso e Crescimento', explicacao: 'Registre o peso e a altura mais recentes, pra acompanhar a curva de crescimento ou o IMC.' },
   ];
 
   // Avança, volta ou conclui o wizard. delta = 1 (próximo/pular) ou -1 (anterior).
@@ -3023,14 +2612,186 @@ export default function Home() {
     { id: 'cirurgias', label: 'Cirurgia/Internação', labelCurto: 'Cirurgia / Intern.' },
     { id: 'medicacoes', label: 'Medicações' },
     { id: 'consultas', label: 'Consultas' },
-    { id: 'odontologia', label: 'Odontologia', labelCurto: 'Dentista' },
+    { id: 'odontologia', label: 'Odontologia' },
     { id: 'exames', label: 'Exames' },
     { id: 'vacinas', label: 'Vacinas' },
-    { id: 'crescimento', label: 'Peso e IMC' },
+    { id: 'crescimento', label: 'Peso e Crescimento' },
     { id: 'riscos', label: 'Cuidados Preventivos', labelCurto: 'Cuidados Prev.' },
     { id: 'bemestar', label: 'Bem-estar' },
     { id: 'medicos', label: 'Médicos' },
   ];
+
+  // Dicas genéricas de saúde/bem-estar mostradas na Home — por enquanto são fixas e
+  // iguais pra todo mundo; no futuro dá pra pensar em personalizar por idade/membro.
+  const dicasDeSaude: string[] = [
+    'Beber bastante água ao longo do dia ajuda a manter a energia e a concentração.',
+    'Experimente separar 20-30 minutos por dia pra alguma atividade física, mesmo que seja uma caminhada.',
+    'Manter um horário regular de sono (inclusive nos fins de semana) melhora a qualidade do descanso.',
+    'Consultas de rotina e exames preventivos ajudam a identificar problemas de saúde antes que piorem.',
+    'Lavar as mãos com frequência continua sendo uma das formas mais simples de evitar doenças.',
+  ];
+
+  // Ao tocar numa categoria dentro de "Incluir" ou "Consultar", já abre ela no modo
+  // certo: em "Incluir" pula direto pro formulário de novo registro (sem precisar
+  // tocar em "+ nova" de novo); em "Consultar" só mostra a lista (o botão de "+ nova"
+  // de cada tela já fica escondido nesse modo, via abaInferior !== 'consultar').
+  // Feed unificado: um item normalizado por evento, de qualquer categoria, pra poder
+  // listar tudo junto, ordenado por data, colorido por tipo e filtrável.
+  type EventoFeed = {
+    id: string;
+    categoria: 'doenca' | 'cirurgia' | 'medicamento' | 'consulta' | 'odontologia' | 'exame' | 'vacina' | 'crescimento';
+    titulo: string;
+    subtitulo: string | null;
+    data: string | null; // formato YYYY-MM-DD, pode ser null se o evento não tiver data
+    medico: string | null;
+    aba: Aba;
+  };
+
+  const categoriaFeedInfo: Record<EventoFeed['categoria'], { label: string; cor: string }> = {
+    doenca: { label: 'Evento de Saúde', cor: 'bg-sky-100 text-sky-700 border-sky-200' },
+    cirurgia: { label: 'Cirurgia/Internação', cor: 'bg-blue-100 text-blue-700 border-blue-200' },
+    medicamento: { label: 'Medicamento', cor: 'bg-amber-100 text-amber-700 border-amber-200' },
+    consulta: { label: 'Consulta', cor: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
+    odontologia: { label: 'Odontologia', cor: 'bg-cyan-100 text-cyan-700 border-cyan-200' },
+    exame: { label: 'Exame', cor: 'bg-purple-100 text-purple-700 border-purple-200' },
+    vacina: { label: 'Vacina', cor: 'bg-orange-100 text-orange-700 border-orange-200' },
+    crescimento: { label: 'Peso e Crescimento', cor: 'bg-slate-200 text-slate-700 border-slate-300' },
+  };
+
+  function obterEventosUnificados(): EventoFeed[] {
+    const eventos: EventoFeed[] = [];
+
+    for (const c of condicoes) {
+      if (c.tipo === 'cirurgia' || c.tipo === 'internacao') {
+        eventos.push({
+          id: `condicao-${c.id}`,
+          categoria: 'cirurgia',
+          titulo: c.nome,
+          subtitulo: statusCondicaoLabels[c.status] ?? null,
+          data: c.data_diagnostico_ou_procedimento,
+          medico: c.medico,
+          aba: 'cirurgias',
+        });
+      } else {
+        eventos.push({
+          id: `condicao-${c.id}`,
+          categoria: 'doenca',
+          titulo: c.nome,
+          subtitulo: statusCondicaoLabels[c.status] ?? null,
+          data: c.data_diagnostico_ou_procedimento,
+          medico: c.medico,
+          aba: 'condicoes',
+        });
+      }
+    }
+
+    for (const m of medicacoes) {
+      eventos.push({
+        id: `medicacao-${m.id}`,
+        categoria: 'medicamento',
+        titulo: m.nome,
+        subtitulo: m.dosagem ?? m.frequencia ?? null,
+        data: m.data_inicio,
+        medico: m.medico_receitou,
+        aba: 'medicacoes',
+      });
+    }
+
+    for (const c of consultas) {
+      const ehOdontologia = c.especialidade?.nome === 'Odontologia';
+      eventos.push({
+        id: `consulta-${c.id}`,
+        categoria: ehOdontologia ? 'odontologia' : 'consulta',
+        titulo: c.especialidade?.nome ?? c.motivo ?? 'Consulta',
+        subtitulo: c.local ?? c.motivo ?? null,
+        data: c.data_hora ? c.data_hora.slice(0, 10) : null,
+        medico: c.profissional_saude?.nome ?? null,
+        aba: ehOdontologia ? 'odontologia' : 'consultas',
+      });
+    }
+
+    for (const e of exames) {
+      eventos.push({
+        id: `exame-${e.id}`,
+        categoria: 'exame',
+        titulo: e.nome,
+        subtitulo: e.laboratorio ?? null,
+        data: e.data_realizacao,
+        medico: null,
+        aba: 'exames',
+      });
+    }
+
+    for (const v of vacinas) {
+      eventos.push({
+        id: `vacina-${v.id}`,
+        categoria: 'vacina',
+        titulo: v.nome,
+        subtitulo: v.dose ?? null,
+        data: v.data_aplicacao,
+        medico: null,
+        aba: 'vacinas',
+      });
+    }
+
+    for (const m of crescimento) {
+      const partes: string[] = [];
+      if (m.peso_kg != null) partes.push(`${m.peso_kg} kg`);
+      if (m.altura_cm != null) partes.push(`${m.altura_cm} cm`);
+      eventos.push({
+        id: `crescimento-${m.id}`,
+        categoria: 'crescimento',
+        titulo: 'Peso e Crescimento',
+        subtitulo: partes.length ? partes.join(' · ') : null,
+        data: m.data_medicao,
+        medico: null,
+        aba: 'crescimento',
+      });
+    }
+
+    return eventos
+      .filter((ev) => filtroFeedTipo === 'todos' || ev.categoria === filtroFeedTipo)
+      .filter((ev) => !filtroFeedDataInicio || (ev.data && ev.data >= filtroFeedDataInicio))
+      .filter((ev) => !filtroFeedDataFim || (ev.data && ev.data <= filtroFeedDataFim))
+      .filter((ev) => {
+        if (!filtroFeedMedico.trim()) return true;
+        return (ev.medico ?? '').toLowerCase().includes(filtroFeedMedico.trim().toLowerCase());
+      })
+      .sort((a, b) => (b.data ?? '').localeCompare(a.data ?? ''));
+  }
+
+  function abrirCategoriaNoModo(id: Aba) {
+    setTelaDetalhe(id);
+    if (abaInferior !== 'incluir') return;
+    switch (id) {
+      case 'condicoes':
+        abrirNovaCondicao('doenca');
+        break;
+      case 'cirurgias':
+        abrirNovaCondicao('cirurgia');
+        break;
+      case 'medicacoes':
+        abrirNovaMedicacao();
+        break;
+      case 'consultas':
+        abrirNovaConsulta();
+        break;
+      case 'odontologia':
+        abrirNovaConsulta('Odontologia');
+        break;
+      case 'exames':
+        abrirNovoExame();
+        break;
+      case 'vacinas':
+        abrirNovaVacina();
+        break;
+      case 'crescimento':
+        abrirNovaMedicaoCrescimento();
+        break;
+      default:
+        break;
+    }
+  }
 
   // Itens do menu que abre ao tocar nos 3 risquinhos (pedido da Roberta: uma anamnese
   // mais completa, organizada em seções). Cada seção só aparece pra idade em que faz
@@ -3099,16 +2860,250 @@ export default function Home() {
         return <svg {...props}><polyline points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline points="17 6 23 6 23 12" /></svg>;
       case 'riscos':
         return <svg {...props}><line x1="6" y1="3" x2="6" y2="15" /><circle cx="18" cy="6" r="3" /><circle cx="6" cy="18" r="3" /><path d="M18 9a9 9 0 0 1-9 9" /></svg>;
+      case 'feedeventos':
+        return <svg {...props}><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>;
       default:
         return null;
     }
   }
 
+  // Tela de resumo pra impressão/PDF (gerada em "Compartilhar"). Fica fora do layout
+  // normal do app (sem menu inferior, sem card centralizado) pra imprimir só o
+  // conteúdo médico — "Imprimir/Salvar PDF" usa o diálogo de impressão do navegador,
+  // onde dá pra escolher "Salvar como PDF" em vez de uma impressora física.
+  if (mostrarResumoImpressao && membroSelecionado) {
+    const consultasGerais = consultas.filter((c) => !['Odontologia', 'Ortodontia'].includes(c.especialidade?.nome || ''));
+    const consultasOdonto = consultas.filter((c) => ['Odontologia', 'Ortodontia'].includes(c.especialidade?.nome || ''));
+    const eventosSaude = condicoes.filter((c) => c.tipo === 'doenca');
+    const cirurgiasInternacoes = condicoes.filter((c) => c.tipo !== 'doenca');
+    return (
+      <main className="min-h-screen bg-white p-6 max-w-2xl mx-auto">
+        <div className="mb-6 flex items-center justify-between print:hidden">
+          <button onClick={() => setMostrarResumoImpressao(false)} className="text-sm text-teal-700">← Voltar</button>
+          <button onClick={() => window.print()} className="rounded-xl bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700">
+            🖨️ Imprimir / Salvar PDF
+          </button>
+        </div>
+
+        <h1 className="text-xl font-semibold text-slate-800">Resumo de saúde — {membroSelecionado.nome}</h1>
+        <p className="text-xs text-slate-400 mb-6">
+          {calcularIdade(membroSelecionado.data_nascimento)} anos · gerado em {new Date().toLocaleDateString('pt-BR')}
+        </p>
+
+        {secoesCompartilhar.nascimento && (
+          <section className="mb-5">
+            <h2 className="text-sm font-semibold text-slate-800 border-b border-slate-200 pb-1 mb-2">Dados pessoais</h2>
+            <p className="text-sm text-slate-700">
+              Nascimento: {formatarData(membroSelecionado.data_nascimento)} · Sexo biológico: {membroSelecionado.sexo_biologico || '—'} · Tipo sanguíneo: {membroSelecionado.tipo_sanguineo || '—'}
+            </p>
+            {membroSelecionado.alergias && <p className="text-sm text-slate-700 mt-1">Alergias: {membroSelecionado.alergias}</p>}
+            {membroSelecionado.observacoes_gerais && <p className="text-sm text-slate-700 mt-1">Observações: {membroSelecionado.observacoes_gerais}</p>}
+            {nascimento?.tipo_parto && <p className="text-sm text-slate-700 mt-1">Tipo de parto: {nascimento.tipo_parto}</p>}
+          </section>
+        )}
+
+        {secoesCompartilhar.condicoes && (
+          <section className="mb-5">
+            <h2 className="text-sm font-semibold text-slate-800 border-b border-slate-200 pb-1 mb-2">Eventos de saúde</h2>
+            {eventosSaude.length === 0 ? <p className="text-sm text-slate-400">Nenhum registrado.</p> : eventosSaude.map((c) => (
+              <p key={c.id} className="text-sm text-slate-700 mb-1">
+                {c.nome} — {statusCondicaoLabels[c.status] || c.status}{c.data_diagnostico_ou_procedimento && ` · ${formatarData(c.data_diagnostico_ou_procedimento)}`}
+                {c.observacao && ` · ${c.observacao}`}
+              </p>
+            ))}
+          </section>
+        )}
+
+        {secoesCompartilhar.cirurgias && (
+          <section className="mb-5">
+            <h2 className="text-sm font-semibold text-slate-800 border-b border-slate-200 pb-1 mb-2">Cirurgias/Internações</h2>
+            {cirurgiasInternacoes.length === 0 ? <p className="text-sm text-slate-400">Nenhuma registrada.</p> : cirurgiasInternacoes.map((c) => (
+              <p key={c.id} className="text-sm text-slate-700 mb-1">
+                {c.nome}{c.data_diagnostico_ou_procedimento && ` · ${formatarData(c.data_diagnostico_ou_procedimento)}`}{c.medico && ` · Dr(a). ${c.medico}`}
+                {c.observacao && ` · ${c.observacao}`}
+              </p>
+            ))}
+          </section>
+        )}
+
+        {secoesCompartilhar.medicacoes && (
+          <section className="mb-5">
+            <h2 className="text-sm font-semibold text-slate-800 border-b border-slate-200 pb-1 mb-2">Medicações</h2>
+            {medicacoes.length === 0 ? <p className="text-sm text-slate-400">Nenhuma registrada.</p> : medicacoes.map((m) => (
+              <p key={m.id} className="text-sm text-slate-700 mb-1">
+                {m.nome}{m.dosagem && ` · ${m.dosagem}`} · {m.data_fim ? `até ${formatarData(m.data_fim)}` : 'uso contínuo'}
+                {m.medico_receitou && ` · receitado por ${m.medico_receitou}`}
+              </p>
+            ))}
+          </section>
+        )}
+
+        {secoesCompartilhar.consultas && (
+          <section className="mb-5">
+            <h2 className="text-sm font-semibold text-slate-800 border-b border-slate-200 pb-1 mb-2">Consultas</h2>
+            {consultasGerais.length === 0 ? <p className="text-sm text-slate-400">Nenhuma registrada.</p> : consultasGerais.map((c) => (
+              <p key={c.id} className="text-sm text-slate-700 mb-1">
+                {c.especialidade?.nome || 'Especialidade'} · {new Date(c.data_hora).toLocaleDateString('pt-BR')}
+                {c.profissional_saude?.nome && ` · ${c.profissional_saude.nome}`}{c.anotacoes && ` · ${c.anotacoes}`}
+              </p>
+            ))}
+          </section>
+        )}
+
+        {secoesCompartilhar.odontologia && (
+          <section className="mb-5">
+            <h2 className="text-sm font-semibold text-slate-800 border-b border-slate-200 pb-1 mb-2">Odontologia</h2>
+            {consultasOdonto.length === 0 ? <p className="text-sm text-slate-400">Nenhuma registrada.</p> : consultasOdonto.map((c) => (
+              <p key={c.id} className="text-sm text-slate-700 mb-1">
+                {new Date(c.data_hora).toLocaleDateString('pt-BR')}{c.profissional_saude?.nome && ` · ${c.profissional_saude.nome}`}{c.anotacoes && ` · ${c.anotacoes}`}
+              </p>
+            ))}
+          </section>
+        )}
+
+        {secoesCompartilhar.exames && (
+          <section className="mb-5">
+            <h2 className="text-sm font-semibold text-slate-800 border-b border-slate-200 pb-1 mb-2">Exames</h2>
+            {exames.length === 0 ? <p className="text-sm text-slate-400">Nenhum registrado.</p> : exames.map((e) => (
+              <p key={e.id} className="text-sm text-slate-700 mb-1">
+                {e.nome} · {formatarData(e.data_realizacao)}{e.laboratorio && ` · ${e.laboratorio}`}{e.resultado_resumo && ` · ${e.resultado_resumo}`}
+              </p>
+            ))}
+          </section>
+        )}
+
+        {secoesCompartilhar.vacinas && (
+          <section className="mb-5">
+            <h2 className="text-sm font-semibold text-slate-800 border-b border-slate-200 pb-1 mb-2">Vacinas</h2>
+            {vacinas.length === 0 ? <p className="text-sm text-slate-400">Nenhuma registrada.</p> : vacinas.map((v) => (
+              <p key={v.id} className="text-sm text-slate-700 mb-1">
+                {v.nome}{v.dose && ` — ${v.dose}`} · {formatarData(v.data_aplicacao)}
+              </p>
+            ))}
+          </section>
+        )}
+
+        {secoesCompartilhar.crescimento && (
+          <section className="mb-5">
+            <h2 className="text-sm font-semibold text-slate-800 border-b border-slate-200 pb-1 mb-2">Peso e crescimento</h2>
+            {crescimento.length === 0 ? <p className="text-sm text-slate-400">Nenhuma medição registrada.</p> : crescimento.map((m) => (
+              <p key={m.id} className="text-sm text-slate-700 mb-1">
+                {formatarData(m.data_medicao)}{m.peso_kg != null && ` · ${m.peso_kg} kg`}{m.altura_cm != null && ` · ${m.altura_cm} cm`}
+              </p>
+            ))}
+          </section>
+        )}
+
+        {secoesCompartilhar.anamnese && (
+          <section className="mb-5">
+            <h2 className="text-sm font-semibold text-slate-800 border-b border-slate-200 pb-1 mb-2">Anamnese</h2>
+            {nascimento && (nascimento.pre_natal_adequado || nascimento.intercorrencias_gestacionais) && (
+              <p className="text-sm text-slate-700 mb-1">
+                Pré-natal: {nascimento.pre_natal_adequado || '—'}{nascimento.intercorrencias_gestacionais && ` · ${nascimento.intercorrencias_gestacionais}`}
+              </p>
+            )}
+            {desenvolvimento && (
+              <p className="text-sm text-slate-700 mb-1">
+                Desenvolvimento: sentou {desenvolvimento.sentou || '—'} · andou {desenvolvimento.andou || '—'} · 1ªs palavras {desenvolvimento.primeiras_palavras || '—'}
+              </p>
+            )}
+            {alimentacaoInfantil && (
+              <p className="text-sm text-slate-700 mb-1">
+                Alimentação: aleitamento materno {alimentacaoInfantil.aleitamento_materno ? 'sim' : 'não'}{alimentacaoInfantil.introducao_alimentar && ` · ${alimentacaoInfantil.introducao_alimentar}`}
+              </p>
+            )}
+            {puberdadeSexualidade && (puberdadeSexualidade.menarca_espermarca || puberdadeSexualidade.historico_ist) && (
+              <p className="text-sm text-slate-700 mb-1">
+                Puberdade: {puberdadeSexualidade.menarca_espermarca || '—'}
+              </p>
+            )}
+            {saudeMental && saudeMental.humor && (
+              <p className="text-sm text-slate-700 mb-1">Saúde mental: humor {saudeMental.humor}</p>
+            )}
+            {habitosVida && (
+              <p className="text-sm text-slate-700 mb-1">
+                Hábitos de vida: sono {habitosVida.sono || '—'} · atividade física {habitosVida.atividade_fisica || '—'} · uso de telas {habitosVida.uso_telas || '—'}
+              </p>
+            )}
+            {!nascimento?.pre_natal_adequado && !desenvolvimento && !alimentacaoInfantil && !puberdadeSexualidade && !saudeMental?.humor && !habitosVida && (
+              <p className="text-sm text-slate-400">Nenhuma informação registrada ainda.</p>
+            )}
+          </section>
+        )}
+      </main>
+    );
+  }
+
   const larguraContainer = membroSelecionado ? 'max-w-2xl' : 'max-w-sm';
+
+  // Troca de aba do menu inferior sempre volta pra tela "raiz" daquela aba (fecha
+  // qualquer categoria/formulário que estivesse aberto na aba anterior), pra nunca
+  // aparecer uma tela de uma aba enquanto o menu mostra outra selecionada.
+  function irParaAbaInferior(aba: 'home' | 'incluir' | 'consultar' | 'compartilhar' | 'configuracao') {
+    setAbaInferior(aba);
+    setTelaDetalhe(null);
+    setMostrarMenuPessoal(false);
+    // Fecha qualquer formulário que tivesse ficado aberto, pra nunca entrar em
+    // "Consultar" e cair de surpresa dentro de um formulário de inclusão.
+    setMostrarFormCondicao(false);
+    setMostrarFormMedicacao(false);
+    setMostrarFormConsulta(false);
+    setMostrarFormExame(false);
+    setMostrarFormVacina(false);
+    setMostrarFormCrescimento(false);
+  }
+
+  const itensMenuInferior: { id: 'home' | 'incluir' | 'consultar' | 'compartilhar' | 'configuracao'; label: string; icone: React.ReactNode }[] = [
+    {
+      id: 'home',
+      label: 'Home',
+      icone: (
+        <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+          <path d="M3 11.5 12 4l9 7.5" /><path d="M5 10v10h14V10" />
+        </svg>
+      ),
+    },
+    {
+      id: 'incluir',
+      label: 'Incluir',
+      icone: (
+        <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="9" /><line x1="12" y1="8" x2="12" y2="16" /><line x1="8" y1="12" x2="16" y2="12" />
+        </svg>
+      ),
+    },
+    {
+      id: 'consultar',
+      label: 'Consultar',
+      icone: (
+        <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+        </svg>
+      ),
+    },
+    {
+      id: 'compartilhar',
+      label: 'Compartilhar',
+      icone: (
+        <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><line x1="8.6" y1="10.5" x2="15.4" y2="6.5" /><line x1="8.6" y1="13.5" x2="15.4" y2="17.5" />
+        </svg>
+      ),
+    },
+    {
+      id: 'configuracao',
+      label: 'Configuração',
+      icone: (
+        <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.44.7.73 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+        </svg>
+      ),
+    },
+  ];
 
   return (
     <main className="min-h-screen bg-[#FAFAF8] flex items-center justify-center p-4">
-      <div className={`w-full ${larguraContainer} rounded-2xl bg-white p-8 shadow-sm border border-[#E5E1DA] transition-all`}>
+      <div className={`w-full ${larguraContainer} rounded-2xl bg-white p-8 shadow-sm border border-[#E5E1DA] transition-all ${passo === 'painel' ? 'pb-24' : ''}`}>
         {!membroSelecionado && (
           <div className="mb-8 text-center">
             <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl border-2 border-green-600 bg-green-50 text-green-700">
@@ -3190,7 +3185,7 @@ export default function Home() {
           </div>
         )}
 
-        {passo === 'painel' && !membroSelecionado && (
+        {passo === 'painel' && abaInferior === 'home' && !membroSelecionado && (
           <div className="space-y-4">
             <div className="space-y-2">
               {membros.length === 0 && (
@@ -3199,7 +3194,7 @@ export default function Home() {
               {membros.map((m) => (
                 <button
                   key={m.id}
-                  onClick={() => { setMembroSelecionado(m); setTelaDetalhe(null); }}
+                  onClick={() => { setMembroSelecionado(m); setTelaDetalhe(null); setAbaInferior('home'); }}
                   className="flex w-full items-center gap-3 rounded-xl border border-[#E5E1DA] p-3 text-left transition hover:bg-[#FAFAF8]"
                 >
                   {m.foto_url ? (
@@ -3275,25 +3270,10 @@ export default function Home() {
                 </div>
               </div>
             )}
-
-            <div className="border-t border-[#E5E1DA] pt-4 text-center space-y-2">
-              <button onClick={gerarConvite} className="text-sm text-teal-700">
-                Convidar alguém para a família
-              </button>
-              {codigoGerado && (
-                <div className="rounded-xl bg-teal-50 border border-teal-100 p-3">
-                  <p className="text-xs text-slate-500 mb-1">Compartilhe este código:</p>
-                  <p className="text-xl font-mono font-semibold text-teal-700 tracking-widest">{codigoGerado}</p>
-                </div>
-              )}
-              <button onClick={sair} className="block w-full text-sm text-slate-400 mt-2">
-                Sair
-              </button>
-            </div>
           </div>
         )}
 
-        {passo === 'painel' && membroSelecionado && telaDetalhe === null && (
+        {passo === 'painel' && abaInferior === 'home' && membroSelecionado && telaDetalhe === null && (
           <div className="relative">
             <div className="mb-4 flex items-center justify-between">
               <button
@@ -3309,9 +3289,6 @@ export default function Home() {
                 </svg>
               </button>
               <div className="flex items-center gap-3">
-                <button onClick={() => setMembroSelecionado(null)} className="text-sm text-teal-700">
-                  ← Voltar
-                </button>
                 <button
                   aria-label="Notificações"
                   title="Notificações (em breve)"
@@ -3353,7 +3330,7 @@ export default function Home() {
             )}
 
             <button
-              onClick={() => setTelaDetalhe('nascimento')}
+              onClick={() => setMembroSelecionado(null)}
               className="mb-6 flex w-full items-center gap-3 rounded-xl p-2 text-left transition hover:bg-[#FAFAF8]"
             >
               {membroSelecionado.foto_url ? (
@@ -3369,30 +3346,12 @@ export default function Home() {
               )}
               <div>
                 <h2 className="text-lg font-semibold text-slate-800">{membroSelecionado.nome}</h2>
-                <p className="text-xs text-slate-400">{calcularIdade(membroSelecionado.data_nascimento)} anos · toque para ver a ficha pessoal</p>
+                <p className="text-xs text-slate-400">{calcularIdade(membroSelecionado.data_nascimento)} anos · toque para trocar de membro</p>
               </div>
             </button>
 
-            <div className="flex justify-center overflow-x-auto pb-1 -mx-1 px-1">
-              <div className="grid grid-flow-col grid-rows-2 auto-cols-[76px] gap-2">
-                {secoes.map((s) => (
-                  <button
-                    key={s.id}
-                    onClick={() => setTelaDetalhe(s.id)}
-                    className="flex w-[76px] shrink-0 flex-col items-center gap-1.5 rounded-xl border border-[#E5E1DA] bg-white px-1 py-2.5 text-teal-700 transition hover:bg-[#FAFAF8]"
-                  >
-                    {iconeSecao(s.id, 20)}
-                    <span className="w-full text-[10px] font-medium text-slate-600 text-center leading-tight">
-                      {s.labelCurto ?? s.label}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="mt-5">
-              <h3 className="mb-1 text-sm font-semibold text-slate-800">Pendências</h3>
-              <p className="mb-3 text-xs text-slate-400">Toque num ícone acima pra ver a lista completa daquela categoria.</p>
+            <div>
+              <h3 className="mb-3 text-sm font-semibold text-slate-800">Pendências de {membroSelecionado.nome}</h3>
               {(() => {
                 const pendencias = obterPendencias();
                 if (pendencias.length === 0) {
@@ -3416,6 +3375,40 @@ export default function Home() {
               })()}
             </div>
 
+            {pendenciasFamiliares.filter((f) => f.membroId !== membroSelecionado?.id).length > 0 && (
+              <div className="mt-6">
+                <h3 className="mb-3 text-sm font-semibold text-slate-800">Pendências da família</h3>
+                <div className="space-y-3">
+                  {pendenciasFamiliares
+                    .filter((f) => f.membroId !== membroSelecionado?.id)
+                    .map((f) => (
+                      <div key={f.membroId} className="rounded-xl border border-[#E5E1DA] bg-white p-3">
+                        <p className="mb-2 text-xs font-semibold text-slate-500">{f.membroNome}</p>
+                        <div className="space-y-1.5">
+                          {f.itens.map((p) => (
+                            <div key={p.id} className="flex items-center gap-2">
+                              <span className="shrink-0">{iconePendencia(p.tipo)}</span>
+                              <p className="min-w-0 truncate text-sm text-slate-700">{p.titulo} · <span className="text-slate-400">{p.detalhe}</span></p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
+
+            <div className="mt-6">
+              <h3 className="mb-3 text-sm font-semibold text-slate-800">Dicas de saúde e bem-estar</h3>
+              <div className="space-y-2">
+                {dicasDeSaude.map((dica, i) => (
+                  <div key={i} className="rounded-xl bg-teal-50 border border-teal-100 p-3">
+                    <p className="text-sm text-teal-800">💡 {dica}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
             <div className="mt-8 border-t border-[#E5E1DA] pt-4">
               {!confirmandoExclusaoMembro ? (
                 <button onClick={() => setConfirmandoExclusaoMembro(true)} className="w-full text-sm text-red-600">
@@ -3437,6 +3430,152 @@ export default function Home() {
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {passo === 'painel' && abaInferior === 'configuracao' && (
+          <div className="space-y-6">
+            <h2 className="text-lg font-semibold text-slate-800">Configuração</h2>
+
+            <div className="space-y-2 rounded-xl border border-[#E5E1DA] p-4">
+              <p className="text-xs text-slate-400">Conta</p>
+              <p className="text-sm font-medium text-slate-800">{contaEmail || '—'}</p>
+            </div>
+
+            <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
+              <p className="text-sm font-medium text-slate-800">Trocar senha</p>
+              <input
+                className={inputClasse}
+                type="password"
+                placeholder="nova senha (mín. 6 caracteres)"
+                value={novaSenhaConfig}
+                onChange={(e) => { setNovaSenhaConfig(e.target.value); setSucessoConfigSenha(false); }}
+              />
+              <input
+                className={inputClasse}
+                type="password"
+                placeholder="confirmar nova senha"
+                value={confirmarSenhaConfig}
+                onChange={(e) => { setConfirmarSenhaConfig(e.target.value); setSucessoConfigSenha(false); }}
+              />
+              {erroConfigSenha && <p className="text-sm text-red-600">{erroConfigSenha}</p>}
+              {sucessoConfigSenha && <p className="text-sm text-teal-700">Senha atualizada com sucesso.</p>}
+              <button disabled={carregandoSenha} onClick={trocarSenha} className={botaoPrimario}>
+                {carregandoSenha ? 'Salvando...' : 'Salvar nova senha'}
+              </button>
+            </div>
+
+            <div className="space-y-2 rounded-xl border border-[#E5E1DA] p-4 text-center">
+              <p className="text-sm font-medium text-slate-800">Família</p>
+              <button onClick={gerarConvite} className="text-sm text-teal-700">
+                Convidar alguém para a família
+              </button>
+              {codigoGerado && (
+                <div className="rounded-xl bg-teal-50 border border-teal-100 p-3">
+                  <p className="text-xs text-slate-500 mb-1">Compartilhe este código:</p>
+                  <p className="text-xl font-mono font-semibold text-teal-700 tracking-widest">{codigoGerado}</p>
+                </div>
+              )}
+            </div>
+
+            <button onClick={sair} className="block w-full text-sm text-slate-400">
+              Sair da conta
+            </button>
+          </div>
+        )}
+
+        {passo === 'painel' && abaInferior === 'compartilhar' && (() => {
+          const secoesDisponiveis: { id: string; label: string }[] = [
+            { id: 'nascimento', label: 'Dados pessoais e nascimento' },
+            { id: 'condicoes', label: 'Eventos de saúde' },
+            { id: 'cirurgias', label: 'Cirurgias/Internações' },
+            { id: 'medicacoes', label: 'Medicações' },
+            { id: 'consultas', label: 'Consultas' },
+            { id: 'odontologia', label: 'Odontologia' },
+            { id: 'exames', label: 'Exames' },
+            { id: 'vacinas', label: 'Vacinas' },
+            { id: 'crescimento', label: 'Peso e crescimento' },
+            { id: 'anamnese', label: 'Anamnese (gestação, desenvolvimento, alimentação, puberdade, saúde mental, hábitos de vida)' },
+          ];
+          return (
+          <div className="space-y-4">
+            <h2 className="text-lg font-semibold text-slate-800">Compartilhar</h2>
+            {!membroSelecionado ? (
+              <div className="rounded-xl border border-[#E5E1DA] p-4 text-center space-y-2">
+                <p className="text-sm text-slate-500">Selecione um membro da família primeiro pra gerar o resumo dele.</p>
+                <button onClick={() => irParaAbaInferior('home')} className="text-sm font-semibold text-teal-700">
+                  Escolher membro
+                </button>
+              </div>
+            ) : (
+              <>
+                <p className="text-sm text-slate-500">
+                  Gere um resumo em PDF do prontuário de <strong>{membroSelecionado.nome}</strong>, pra enviar pra um médico ou guardar.
+                </p>
+                <div className="space-y-2 rounded-xl border border-[#E5E1DA] p-4">
+                  <p className="text-xs text-slate-400 mb-1">O que incluir no resumo</p>
+                  {secoesDisponiveis.map((s) => (
+                    <label key={s.id} className="flex items-start gap-2 text-sm text-slate-600 py-0.5">
+                      <input
+                        type="checkbox"
+                        className="mt-0.5"
+                        checked={!!secoesCompartilhar[s.id]}
+                        onChange={(e) => setSecoesCompartilhar((atual) => ({ ...atual, [s.id]: e.target.checked }))}
+                      />
+                      {s.label}
+                    </label>
+                  ))}
+                </div>
+                <button onClick={() => setMostrarResumoImpressao(true)} className={botaoPrimario}>
+                  Gerar resumo
+                </button>
+              </>
+            )}
+          </div>
+          );
+        })()}
+
+        {passo === 'painel' && (abaInferior === 'incluir' || abaInferior === 'consultar') && !membroSelecionado && (
+          <div className="rounded-xl border border-[#E5E1DA] p-4 text-center space-y-2">
+            <p className="text-sm text-slate-500">Selecione um membro da família primeiro.</p>
+            <button onClick={() => setAbaInferior('home')} className="text-sm font-semibold text-teal-700">
+              Escolher membro
+            </button>
+          </div>
+        )}
+
+        {passo === 'painel' && (abaInferior === 'incluir' || abaInferior === 'consultar') && membroSelecionado && telaDetalhe === null && (
+          <div>
+            <h2 className="mb-1 text-lg font-semibold text-slate-800">
+              {abaInferior === 'incluir' ? 'Incluir registro' : 'Consultar registros'}
+            </h2>
+            <p className="mb-4 text-xs text-slate-400">
+              {abaInferior === 'incluir'
+                ? `Escolha a categoria do que você quer adicionar pra ${membroSelecionado.nome}.`
+                : `Escolha o que você quer consultar de ${membroSelecionado.nome}.`}
+            </p>
+            {abaInferior === 'consultar' && (
+              <button
+                onClick={() => setTelaDetalhe('feedeventos')}
+                className="mb-4 flex w-full items-center justify-center gap-2 rounded-xl border border-teal-200 bg-teal-50 px-3 py-2.5 text-sm font-medium text-teal-700 hover:bg-teal-100"
+              >
+                🕒 Ver tudo em uma linha do tempo
+              </button>
+            )}
+            <div className="grid grid-cols-3 gap-2">
+              {secoes.map((s) => (
+                <button
+                  key={s.id}
+                  onClick={() => abrirCategoriaNoModo(s.id)}
+                  className="flex flex-col items-center gap-1.5 rounded-xl border border-[#E5E1DA] bg-white px-1 py-3 text-teal-700 transition hover:bg-[#FAFAF8]"
+                >
+                  {iconeSecao(s.id, 22)}
+                  <span className="w-full text-[10px] font-medium text-slate-600 text-center leading-tight">
+                    {s.labelCurto ?? s.label}
+                  </span>
+                </button>
+              ))}
             </div>
           </div>
         )}
@@ -3538,6 +3677,8 @@ export default function Home() {
                       ? 'Saúde Mental'
                       : telaDetalhe === 'habitosvida'
                       ? 'Hábitos de Vida'
+                      : telaDetalhe === 'feedeventos'
+                      ? 'Linha do tempo'
                       : secoes.find((s) => s.id === telaDetalhe)?.label}
                   </h2>
                 </div>
@@ -4085,14 +4226,16 @@ export default function Home() {
                 {!mostrarFormCondicao && (
                   <div className="flex items-center justify-between">
                     <p className="text-xs text-slate-400">{condicoesDaTela.length} registrado{condicoesDaTela.length === 1 ? '' : 's'}</p>
-                    <button
-                      onClick={() => abrirNovaCondicao(ehCirurgias ? 'cirurgia' : 'doenca')}
-                      aria-label={ehCirurgias ? 'Nova cirurgia ou internação' : 'Novo evento de saúde'}
-                      className="flex items-center gap-1 text-sm font-semibold text-teal-700"
-                    >
-                      <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
-                      {ehCirurgias ? 'nova' : 'novo'}
-                    </button>
+                    {abaInferior !== 'consultar' && (
+                      <button
+                        onClick={() => abrirNovaCondicao(ehCirurgias ? 'cirurgia' : 'doenca')}
+                        aria-label={ehCirurgias ? 'Nova cirurgia ou internação' : 'Novo evento de saúde'}
+                        className="flex items-center gap-1 text-sm font-semibold text-teal-700"
+                      >
+                        <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+                        {ehCirurgias ? 'nova' : 'novo'}
+                      </button>
+                    )}
                   </div>
                 )}
                 {!mostrarFormCondicao && condicoesDaTela.length > 0 && (
@@ -4149,6 +4292,7 @@ export default function Home() {
                     <p className="text-xs text-slate-400">
                       {tipoCondicaoLabels[c.tipo] || c.tipo} · {statusCondicaoLabels[c.status] || c.status}
                       {c.data_diagnostico_ou_procedimento && ` · ${formatarData(c.data_diagnostico_ou_procedimento)}`}
+                      {c.medico && ` · Dr(a). ${c.medico}`}
                     </p>
                     {c.observacao && <p className="text-xs text-slate-500 mt-1">📝 {c.observacao}</p>}
                     {c.orientacoes && <p className="text-xs text-teal-700 mt-1">💡 {c.orientacoes}</p>}
@@ -4185,7 +4329,7 @@ export default function Home() {
                         setDoencaOutraNome('');
                       }}
                     >
-                      <option value="doenca">Hipótese diagnóstica</option>
+                      {!ehCirurgias && <option value="doenca">Hipótese diagnóstica</option>}
                       <option value="cirurgia">Cirurgia</option>
                       <option value="internacao">Internação</option>
                     </select>
@@ -4229,6 +4373,14 @@ export default function Home() {
                       value={novaDataCondicao}
                       onChange={(e) => setNovaDataCondicao(e.target.value)}
                     />
+                    {ehCirurgias && (
+                      <input
+                        className={inputClasse}
+                        placeholder="nome do médico (opcional)"
+                        value={novoMedicoCondicao}
+                        onChange={(e) => setNovoMedicoCondicao(e.target.value)}
+                      />
+                    )}
                     <select className={inputClasse} value={novoStatusCondicao} onChange={(e) => setNovoStatusCondicao(e.target.value)}>
                       <option value="ativa">Ativa</option>
                       <option value="resolvida">Resolvida</option>
@@ -4327,6 +4479,7 @@ export default function Home() {
                       <p className="text-xs text-slate-400">
                         {tipoCondicaoLabels[evento.tipo] || evento.tipo} · {statusCondicaoLabels[evento.status] || evento.status}
                         {evento.data_diagnostico_ou_procedimento && ` · ${formatarData(evento.data_diagnostico_ou_procedimento)}`}
+                        {evento.medico && ` · Dr(a). ${evento.medico}`}
                       </p>
                     </div>
                     <button
@@ -4479,14 +4632,16 @@ export default function Home() {
                   <>
                     <div className="flex items-center justify-between">
                       <p className="text-xs text-slate-400">{medicacoes.length} registrada{medicacoes.length === 1 ? '' : 's'}</p>
-                      <button
-                        onClick={abrirNovaMedicacao}
-                        aria-label="Nova medicação"
-                        className="flex items-center gap-1 text-sm font-semibold text-teal-700"
-                      >
-                        <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
-                        nova
-                      </button>
+                      {abaInferior !== 'consultar' && (
+                        <button
+                          onClick={abrirNovaMedicacao}
+                          aria-label="Nova medicação"
+                          className="flex items-center gap-1 text-sm font-semibold text-teal-700"
+                        >
+                          <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+                          nova
+                        </button>
+                      )}
                     </div>
                     {medicacoes.length > 0 && (
                       <input
@@ -4702,14 +4857,16 @@ export default function Home() {
                   <>
                     <div className="flex items-center justify-between">
                       <p className="text-xs text-slate-400">{consultasDaTela.length} registrada{consultasDaTela.length === 1 ? '' : 's'}</p>
-                      <button
-                        onClick={() => abrirNovaConsulta(especialidadePadraoTela)}
-                        aria-label="Nova consulta"
-                        className="flex items-center gap-1 text-sm font-semibold text-teal-700"
-                      >
-                        <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
-                        nova
-                      </button>
+                      {abaInferior !== 'consultar' && (
+                        <button
+                          onClick={() => abrirNovaConsulta(especialidadePadraoTela)}
+                          aria-label="Nova consulta"
+                          className="flex items-center gap-1 text-sm font-semibold text-teal-700"
+                        >
+                          <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+                          nova
+                        </button>
+                      )}
                     </div>
                     {consultasDaTela.length > 0 && (
                       <input
@@ -5080,14 +5237,16 @@ export default function Home() {
                   <>
                     <div className="flex items-center justify-between">
                       <p className="text-xs text-slate-400">{exames.length} registrado{exames.length === 1 ? '' : 's'}</p>
-                      <button
-                        onClick={abrirNovoExame}
-                        aria-label="Novo exame"
-                        className="flex items-center gap-1 text-sm font-semibold text-teal-700"
-                      >
-                        <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
-                        novo
-                      </button>
+                      {abaInferior !== 'consultar' && (
+                        <button
+                          onClick={abrirNovoExame}
+                          aria-label="Novo exame"
+                          className="flex items-center gap-1 text-sm font-semibold text-teal-700"
+                        >
+                          <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+                          novo
+                        </button>
+                      )}
                     </div>
                     {exames.length === 0 && (
                       <p className="text-sm text-slate-400 text-center py-2">Nenhum exame registrado ainda.</p>
@@ -5187,14 +5346,16 @@ export default function Home() {
                   <>
                     <div className="flex items-center justify-between">
                       <p className="text-xs text-slate-400">{vacinas.length} registrada{vacinas.length === 1 ? '' : 's'}</p>
-                      <button
-                        onClick={abrirNovaVacina}
-                        aria-label="Nova vacina"
-                        className="flex items-center gap-1 text-sm font-semibold text-teal-700"
-                      >
-                        <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
-                        nova
-                      </button>
+                      {abaInferior !== 'consultar' && (
+                        <button
+                          onClick={abrirNovaVacina}
+                          aria-label="Nova vacina"
+                          className="flex items-center gap-1 text-sm font-semibold text-teal-700"
+                        >
+                          <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+                          nova
+                        </button>
+                      )}
                     </div>
                     {vacinas.length === 0 && (
                       <p className="text-sm text-slate-400 text-center py-2">Nenhuma vacina registrada ainda.</p>
@@ -5978,14 +6139,16 @@ export default function Home() {
                 {!mostrarFormCrescimento && (
                   <div className="flex items-center justify-between">
                     <p className="text-xs text-slate-400">{crescimento.length} registrada{crescimento.length === 1 ? '' : 's'}</p>
-                    <button
-                      onClick={abrirNovaMedicaoCrescimento}
-                      aria-label="Nova medição"
-                      className="flex items-center gap-1 text-sm font-semibold text-teal-700"
-                    >
-                      <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
-                      nova
-                    </button>
+                    {abaInferior !== 'consultar' && (
+                      <button
+                        onClick={abrirNovaMedicaoCrescimento}
+                        aria-label="Nova medição"
+                        className="flex items-center gap-1 text-sm font-semibold text-teal-700"
+                      >
+                        <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+                        nova
+                      </button>
+                    )}
                   </div>
                 )}
                 {!mostrarFormCrescimento && crescimento.length >= 2 && (
@@ -6198,6 +6361,82 @@ export default function Home() {
               </div>
             )}
 
+            {telaDetalhe === 'feedeventos' && (() => {
+              const eventosFiltrados = obterEventosUnificados();
+              return (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-2">
+                    <select
+                      className={inputClasse}
+                      value={filtroFeedTipo}
+                      onChange={(e) => setFiltroFeedTipo(e.target.value)}
+                    >
+                      <option value="todos">Todos os tipos</option>
+                      {(Object.keys(categoriaFeedInfo) as EventoFeed['categoria'][]).map((cat) => (
+                        <option key={cat} value={cat}>{categoriaFeedInfo[cat].label}</option>
+                      ))}
+                    </select>
+                    <input
+                      type="text"
+                      placeholder="Filtrar por médico"
+                      className={inputClasse}
+                      value={filtroFeedMedico}
+                      onChange={(e) => setFiltroFeedMedico(e.target.value)}
+                    />
+                    <input
+                      type="date"
+                      className={inputClasse}
+                      value={filtroFeedDataInicio}
+                      onChange={(e) => setFiltroFeedDataInicio(e.target.value)}
+                    />
+                    <input
+                      type="date"
+                      className={inputClasse}
+                      value={filtroFeedDataFim}
+                      onChange={(e) => setFiltroFeedDataFim(e.target.value)}
+                    />
+                  </div>
+                  {(filtroFeedTipo !== 'todos' || filtroFeedMedico || filtroFeedDataInicio || filtroFeedDataFim) && (
+                    <button
+                      onClick={() => {
+                        setFiltroFeedTipo('todos');
+                        setFiltroFeedMedico('');
+                        setFiltroFeedDataInicio('');
+                        setFiltroFeedDataFim('');
+                      }}
+                      className="text-xs text-teal-700 underline"
+                    >
+                      limpar filtros
+                    </button>
+                  )}
+
+                  {eventosFiltrados.length === 0 && (
+                    <p className="text-sm text-slate-400 text-center py-4">Nenhum evento encontrado com esses filtros.</p>
+                  )}
+
+                  {eventosFiltrados.map((ev) => (
+                    <button
+                      key={ev.id}
+                      onClick={() => setTelaDetalhe(ev.aba)}
+                      className={`w-full flex items-start gap-3 rounded-xl border p-3 text-left transition hover:brightness-95 ${categoriaFeedInfo[ev.categoria].cor}`}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide opacity-70">
+                          {categoriaFeedInfo[ev.categoria].label}
+                        </p>
+                        <p className="text-sm font-medium truncate">{ev.titulo}</p>
+                        <p className="text-xs opacity-70">
+                          {ev.data ? formatarData(ev.data) : 'sem data'}
+                          {ev.subtitulo && ` · ${ev.subtitulo}`}
+                          {ev.medico && ` · Dr(a). ${ev.medico}`}
+                        </p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              );
+            })()}
+
             {telaDetalhe === 'bemestar' && (() => {
               const consultasNutricionista = consultas.filter((c) => (c.especialidade?.nome || '') === 'Nutrição');
               return (
@@ -6254,6 +6493,23 @@ export default function Home() {
 
         )}
       </div>
+
+      {passo === 'painel' && (
+        <nav className={`fixed inset-x-0 bottom-0 z-40 border-t border-[#E5E1DA] bg-white`}>
+          <div className={`mx-auto flex w-full ${larguraContainer} items-stretch justify-between`}>
+            {itensMenuInferior.map((item) => (
+              <button
+                key={item.id}
+                onClick={() => irParaAbaInferior(item.id)}
+                className={`flex flex-1 flex-col items-center gap-0.5 py-2.5 text-[11px] ${abaInferior === item.id ? 'text-teal-700' : 'text-slate-400'}`}
+              >
+                {item.icone}
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </nav>
+      )}
     </main>
   );
 }
