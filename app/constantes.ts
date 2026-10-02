@@ -1,4 +1,4 @@
-import type { RegraGenetica } from './tipos';
+import type { RegraGenetica, DicaSaude } from './tipos';
 
 export const regrasGeneticas: RegraGenetica[] = [
   {
@@ -185,13 +185,61 @@ export const doencasComuns: { nome: string; categoria: string }[] = [
 
 export const categoriasDoencas: string[] = Array.from(new Set(doencasComuns.map((d) => d.categoria))).sort();
 
-// Dicas genéricas de saúde/bem-estar mostradas na Home — por enquanto são fixas e
-// iguais pra todo mundo; no futuro dá pra pensar em personalizar por idade/membro.
-// Cada dica tem um ícone próprio, usado no carrossel da Home.
-export const dicasDeSaude: { texto: string; icone: string }[] = [
+// Atividades físicas/esportivas agrupadas por categoria (categorias e itens dentro de
+// cada uma em ordem alfabética), usado no <select> com <optgroup> da tela de Esportes.
+// "Outra (especificar)" fica fora dos grupos, como opção avulsa no fim do dropdown.
+export const atividadesFisicasComuns: { categoria: string; itens: string[] }[] = [
+  { categoria: 'Aquático', itens: ['Natação', 'Polo Aquático', 'Surfe'] },
+  { categoria: 'Coletivo', itens: ['Basquete', 'Futebol', 'Futsal', 'Handebol', 'Rugby', 'Vôlei'] },
+  { categoria: 'Combate/Artes Marciais', itens: ['Boxe', 'Capoeira', 'Esgrima', 'Jiu-Jitsu', 'Judô', 'Karatê', 'Luta Olímpica', 'Muay Thai', 'Taekwondo'] },
+  { categoria: 'Condicionamento/Bem-estar', itens: ['Crossfit', 'Funcional', 'Musculação/Academia', 'Pilates', 'Yoga'] },
+  { categoria: 'Dança', itens: ['Ballet', 'Dança Contemporânea', 'Dança de Rua', 'Dança de Salão', 'Forró', 'Samba', 'Sapateado'] },
+  { categoria: 'Individual/Atletismo', itens: ['Atletismo', 'Badminton', 'Ciclismo', 'Corrida', 'Escalada', 'Ginástica Artística', 'Ginástica Rítmica', 'Golfe', 'Hipismo/Equitação', 'Patinação', 'Skate', 'Tênis'] },
+  { categoria: 'Mental/Estratégia', itens: ['Xadrez'] },
+];
+
+// Dicas de saúde/bem-estar mostradas no carrossel da Home, filtradas pela idade e sexo
+// biológico do membro selecionado (ver obterDicasFiltradas em page.tsx). idadeMin/idadeMax
+// em anos; ausência de idadeMin/idadeMax/sexo = dica universal (vale pra qualquer um).
+export const dicasDeSaude: DicaSaude[] = [
+  // Universais (qualquer idade/sexo)
   { texto: 'Beber bastante água ao longo do dia ajuda a manter a energia e a concentração.', icone: '💧' },
-  { texto: 'Experimente separar 20-30 minutos por dia pra alguma atividade física, mesmo que seja uma caminhada.', icone: '🚶' },
   { texto: 'Manter um horário regular de sono (inclusive nos fins de semana) melhora a qualidade do descanso.', icone: '😴' },
   { texto: 'Consultas de rotina e exames preventivos ajudam a identificar problemas de saúde antes que piorem.', icone: '🩺' },
   { texto: 'Lavar as mãos com frequência continua sendo uma das formas mais simples de evitar doenças.', icone: '🧼' },
+  { texto: 'Manter as vacinas em dia protege não só quem toma, mas também quem está por perto.', icone: '💉' },
+
+  // Bebês (0-2 anos)
+  { texto: 'O aleitamento materno exclusivo até os 6 meses é recomendado pela OMS sempre que possível.', icone: '🍼', idadeMax: 2 },
+  { texto: 'Deixar o bebê de bruços supervisionado ("tummy time") todo dia ajuda a fortalecer pescoço e tronco.', icone: '🧸', idadeMax: 2 },
+  { texto: 'Acompanhar as curvas de peso e altura nas consultas de rotina ajuda a identificar cedo qualquer desvio no crescimento.', icone: '📈', idadeMax: 2 },
+
+  // Crianças (2-12 anos)
+  { texto: 'Crianças costumam precisar de 9 a 12 horas de sono por noite — rotina de sono ajuda no desenvolvimento.', icone: '🛏️', idadeMin: 2, idadeMax: 12 },
+  { texto: 'Limitar o tempo de tela e incentivar brincadeiras ao ar livre favorece o desenvolvimento motor e social.', icone: '🤸', idadeMin: 2, idadeMax: 12 },
+  { texto: 'O calendário vacinal infantil tem reforços importantes entre 4 e 6 anos — vale conferir a caderneta.', icone: '💉', idadeMin: 2, idadeMax: 12 },
+  { texto: 'Visitas regulares ao dentista desde cedo ajudam a prevenir cáries e criar o hábito de cuidar dos dentes.', icone: '🦷', idadeMin: 2, idadeMax: 12 },
+
+  // Adolescentes (10-19 anos)
+  { texto: 'A adolescência costuma trazer mudanças de humor — manter um canal aberto de conversa ajuda bastante.', icone: '💬', idadeMin: 10, idadeMax: 19 },
+  { texto: 'O HPV é recomendado na faixa dos 9 aos 14 anos, mas pode ser aplicado depois — vale conferir com o pediatra.', icone: '💉', idadeMin: 9, idadeMax: 19 },
+  { texto: 'Hábitos de sono, alimentação e atividade física formados na adolescência costumam se manter na vida adulta.', icone: '🥗', idadeMin: 10, idadeMax: 19 },
+
+  // Adultos (18-59 anos) — universais nessa faixa
+  { texto: 'Pausas regulares ao longo do dia de trabalho ajudam a reduzir tensão muscular e cansaço visual.', icone: '🧘', idadeMin: 18, idadeMax: 59 },
+  { texto: 'Exames de rotina (colesterol, glicemia, pressão) a cada 1-2 anos ajudam a pegar alterações cedo.', icone: '🩸', idadeMin: 18, idadeMax: 59 },
+
+  // Adultas (mulheres, 18-59)
+  { texto: 'O exame preventivo (Papanicolau) costuma ser recomendado a cada 1-3 anos — vale conferir com o ginecologista.', icone: '🌸', idadeMin: 18, idadeMax: 59, sexo: 'feminino' },
+  { texto: 'A mamografia de rastreio costuma ser recomendada a partir dos 40-50 anos — converse com seu médico sobre o momento certo pra você.', icone: '🎗️', idadeMin: 40, idadeMax: 59, sexo: 'feminino' },
+
+  // Adultos (homens, 18-59)
+  { texto: 'Check-ups cardiológicos são especialmente importantes pra homens com histórico familiar de problemas cardíacos.', icone: '❤️', idadeMin: 18, idadeMax: 59, sexo: 'masculino' },
+
+  // Idosos (60+)
+  { texto: 'Exercícios de equilíbrio e fortalecimento ajudam a prevenir quedas, uma das maiores causas de internação na terceira idade.', icone: '🚶‍♂️', idadeMin: 60 },
+  { texto: 'A vacina contra herpes-zóster e o reforço da gripe costumam ser recomendados a partir dos 60 anos.', icone: '💉', idadeMin: 60 },
+  { texto: 'Manter o convívio social ativo faz bem tanto para o humor quanto para a saúde cognitiva.', icone: '👥', idadeMin: 60 },
+  { texto: 'A densitometria óssea ajuda a rastrear osteoporose, mais comum a partir dos 60-65 anos, especialmente em mulheres.', icone: '🦴', idadeMin: 60, sexo: 'feminino' },
+  { texto: 'O exame de PSA costuma entrar na conversa com o urologista a partir dos 50 anos — e antes, se houver histórico familiar.', icone: '🩺', idadeMin: 50, sexo: 'masculino' },
 ];

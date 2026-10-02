@@ -238,6 +238,18 @@ export type MedicaoCrescimento = {
   condicao_relacionada_id: string | null;
 };
 
+export type AtividadeFisica = {
+  id: string;
+  nome_atividade: string;
+  data_inicio: string;
+  data_fim: string | null;
+  frequencia: string | null;
+  local: string | null;
+  instrutor: string | null;
+  nivel: string | null;
+  observacao: string | null;
+};
+
 export type Medico = {
   id: string;
   nome: string;
@@ -259,6 +271,16 @@ export type RegraGenetica = {
   aplicaSexo: 'masculino' | 'feminino' | null;
   idadeRecomendada: number | null;
   mensagem: string;
+};
+
+// Dica de saúde mostrada no carrossel da Home. idadeMin/idadeMax e sexo são critérios
+// de aplicabilidade — quando ausentes, a dica vale pra qualquer idade/sexo (universal).
+export type DicaSaude = {
+  texto: string;
+  icone: string;
+  idadeMin?: number;
+  idadeMax?: number;
+  sexo?: 'masculino' | 'feminino';
 };
 
 export type RiscoGenetico = {

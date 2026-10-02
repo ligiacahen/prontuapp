@@ -6,6 +6,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import type {
   Membro,
   Condicao,
+  DicaSaude,
   Medicacao,
   Consulta,
   Exame,
@@ -17,6 +18,7 @@ import type {
   SaudeMental,
   HabitosVida,
   MedicaoCrescimento,
+  AtividadeFisica,
   Medico,
   Passo,
   Aba,
@@ -36,6 +38,7 @@ import {
   categoriasDoencas,
   regrasGeneticas,
   dicasDeSaude,
+  atividadesFisicasComuns,
 } from './constantes';
 import {
   calcularIdade,
@@ -377,6 +380,20 @@ export default function Home() {
   const [crescimentoEditandoId, setCrescimentoEditandoId] = useState<string | null>(null);
   const [novaCondicaoRelacionadaCrescimento, setNovaCondicaoRelacionadaCrescimento] = useState('');
 
+  const [atividadesFisicas, setAtividadesFisicas] = useState<AtividadeFisica[]>([]);
+  const [mostrarFormAtividadeFisica, setMostrarFormAtividadeFisica] = useState(false);
+  const [atividadeEditandoId, setAtividadeEditandoId] = useState<string | null>(null);
+  const [novoNomeAtividade, setNovoNomeAtividade] = useState('');
+  const [atividadeOutroNome, setAtividadeOutroNome] = useState('');
+  const [novaDataInicioAtividade, setNovaDataInicioAtividade] = useState('');
+  const [novaDataFimAtividade, setNovaDataFimAtividade] = useState('');
+  const [novaFrequenciaAtividade, setNovaFrequenciaAtividade] = useState('');
+  const [novoLocalAtividade, setNovoLocalAtividade] = useState('');
+  const [novoInstrutorAtividade, setNovoInstrutorAtividade] = useState('');
+  const [novoNivelAtividade, setNovoNivelAtividade] = useState('');
+  const [novaObsAtividade, setNovaObsAtividade] = useState('');
+  const [erroAtividadeFisica, setErroAtividadeFisica] = useState('');
+
   // Feed unificado (aba Consultar → "Ver tudo em uma linha do tempo"): junta todos os
   // tipos de evento num só lugar, coloridos por categoria, com filtros simples.
   const [filtroFeedTipo, setFiltroFeedTipo] = useState<string>('todos');
@@ -387,6 +404,9 @@ export default function Home() {
   // fade suave (opacidade) na transição.
   const [dicaIndex, setDicaIndex] = useState(0);
   const [dicaVisivel, setDicaVisivel] = useState(true);
+
+  // Mostrar/esconder a seção "Pendências da família" na Home — fica ligado por padrão.
+  const [mostrarPendenciasFamilia, setMostrarPendenciasFamilia] = useState(true);
   const [filtroFeedMedico, setFiltroFeedMedico] = useState('todos');
 
   const [editandoParentesco, setEditandoParentesco] = useState(false);
@@ -400,18 +420,58 @@ export default function Home() {
     if (passo === 'painel') carregarMembros();
   }, [passo]);
 
+  // Filtra as dicas de saúde pela idade e sexo biológico do membro selecionado.
+  // Dicas sem idadeMin/idadeMax/sexo são universais (valem pra qualquer um). Se nada
+  // bater (ou não houver membro selecionado), cai de volta nas dicas universais.
+  function obterDicasFiltradas(): DicaSaude[] {
+    if (!membroSelecionado) return dicasDeSaude.filter((d) => !d.idadeMin && !d.idadeMax && !d.sexo);
+    const idade = calcularIdade(membroSelecionado.data_nascimento);
+    const aplicaveis = dicasDeSaude.filter((d) => {
+      if (d.idadeMin != null && idade < d.idadeMin) return false;
+      if (d.idadeMax != null && idade > d.idadeMax) return false;
+      if (d.sexo && d.sexo !== membroSelecionado.sexo_biologico) return false;
+      return true;
+    });
+    return aplicaveis.length > 0 ? aplicaveis : dicasDeSaude.filter((d) => !d.idadeMin && !d.idadeMax && !d.sexo);
+  }
+
+  // Lista de dicas "ativa" no carrossel pra esse membro — embaralhada (senão a 1ª dica
+  // universal da lista, tipo "beber água", sempre aparecia primeiro pra todo mundo,
+  // dando a impressão de que a personalização não funcionava) e com uma dica específica
+  // daquele membro (não-universal) puxada pro início, quando existir, pra já mostrar de
+  // cara que é personalizado.
+  const [dicasParaMembro, setDicasParaMembro] = useState<DicaSaude[]>(() => obterDicasFiltradas());
+
+  useEffect(() => {
+    const filtradas = obterDicasFiltradas();
+    const embaralhadas = [...filtradas];
+    for (let i = embaralhadas.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [embaralhadas[i], embaralhadas[j]] = [embaralhadas[j], embaralhadas[i]];
+    }
+    const indiceEspecifica = embaralhadas.findIndex((d) => d.idadeMin != null || d.idadeMax != null || d.sexo);
+    if (indiceEspecifica > 0) {
+      const [especifica] = embaralhadas.splice(indiceEspecifica, 1);
+      embaralhadas.unshift(especifica);
+    }
+    setDicasParaMembro(embaralhadas);
+    setDicaIndex(0);
+    setDicaVisivel(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [membroSelecionado?.id, membroSelecionado?.data_nascimento, membroSelecionado?.sexo_biologico]);
+
   // Troca de dica sozinha a cada 10s: some com um fade curto, avança pra próxima
   // (voltando pra primeira no fim) e aparece de novo.
   useEffect(() => {
     const intervalo = setInterval(() => {
       setDicaVisivel(false);
       setTimeout(() => {
-        setDicaIndex((i) => (i + 1) % dicasDeSaude.length);
+        setDicaIndex((i) => (i + 1) % dicasParaMembro.length);
         setDicaVisivel(true);
       }, 300);
     }, 10000);
     return () => clearInterval(intervalo);
-  }, []);
+  }, [dicasParaMembro]);
 
   useEffect(() => {
     if (passo === 'painel' && abaInferior === 'configuracao') {
@@ -439,6 +499,7 @@ export default function Home() {
       carregarConsultas(membroSelecionado.id);
       carregarExames(membroSelecionado.id);
       carregarVacinas(membroSelecionado.id);
+      carregarAtividadesFisicas(membroSelecionado.id);
       carregarNascimento(membroSelecionado.id);
       carregarDesenvolvimento(membroSelecionado.id);
       carregarAlimentacaoInfantil(membroSelecionado.id);
@@ -522,6 +583,15 @@ export default function Home() {
       .eq('membro_id', membroId)
       .order('data_aplicacao', { ascending: false });
     if (!error && data && membroAtualRef.current === membroId) setVacinas(data);
+  }
+
+  async function carregarAtividadesFisicas(membroId: string) {
+    const { data, error } = await supabase
+      .from('atividade_fisica')
+      .select('id, nome_atividade, data_inicio, data_fim, frequencia, local, instrutor, nivel, observacao')
+      .eq('membro_id', membroId)
+      .order('data_inicio', { ascending: false });
+    if (!error && data && membroAtualRef.current === membroId) setAtividadesFisicas(data);
   }
 
   async function carregarNascimento(membroId: string) {
@@ -1907,6 +1977,90 @@ export default function Home() {
     setVacinaEditandoId(null);
     setMostrarFormVacina(false);
     await carregarVacinas(membroSelecionado.id);
+  }
+
+  function abrirNovaAtividadeFisica() {
+    setAtividadeEditandoId(null);
+    setNovoNomeAtividade('');
+    setAtividadeOutroNome('');
+    setNovaDataInicioAtividade('');
+    setNovaDataFimAtividade('');
+    setNovaFrequenciaAtividade('');
+    setNovoLocalAtividade('');
+    setNovoInstrutorAtividade('');
+    setNovoNivelAtividade('');
+    setNovaObsAtividade('');
+    setErroAtividadeFisica('');
+    setMostrarFormAtividadeFisica(true);
+  }
+
+  function abrirEdicaoAtividadeFisica(a: AtividadeFisica) {
+    setAtividadeEditandoId(a.id);
+    if (atividadesFisicasComuns.some((g) => g.itens.includes(a.nome_atividade))) {
+      setNovoNomeAtividade(a.nome_atividade);
+      setAtividadeOutroNome('');
+    } else {
+      setNovoNomeAtividade('Outra (especificar)');
+      setAtividadeOutroNome(a.nome_atividade);
+    }
+    setNovaDataInicioAtividade(a.data_inicio);
+    setNovaDataFimAtividade(a.data_fim || '');
+    setNovaFrequenciaAtividade(a.frequencia || '');
+    setNovoLocalAtividade(a.local || '');
+    setNovoInstrutorAtividade(a.instrutor || '');
+    setNovoNivelAtividade(a.nivel || '');
+    setNovaObsAtividade(a.observacao || '');
+    setErroAtividadeFisica('');
+    setMostrarFormAtividadeFisica(true);
+  }
+
+  async function salvarAtividadeFisica() {
+    setErroAtividadeFisica('');
+    const nomeFinal = novoNomeAtividade === 'Outra (especificar)' ? atividadeOutroNome.trim() : novoNomeAtividade;
+    if (!nomeFinal || !novaDataInicioAtividade) {
+      setErroAtividadeFisica('Preencha ao menos a atividade e a data de início.');
+      return;
+    }
+    if (!membroSelecionado) return;
+    setCarregando(true);
+
+    const dados = {
+      nome_atividade: nomeFinal,
+      data_inicio: novaDataInicioAtividade,
+      data_fim: novaDataFimAtividade || null,
+      frequencia: novaFrequenciaAtividade || null,
+      local: novoLocalAtividade || null,
+      instrutor: novoInstrutorAtividade || null,
+      nivel: novoNivelAtividade || null,
+      observacao: novaObsAtividade || null,
+    };
+
+    const { error } = atividadeEditandoId
+      ? await supabase.from('atividade_fisica').update(dados).eq('id', atividadeEditandoId)
+      : await supabase.from('atividade_fisica').insert({ membro_id: membroSelecionado.id, ...dados });
+
+    setCarregando(false);
+    if (error) {
+      setErroAtividadeFisica(error.message);
+      return;
+    }
+    setAtividadeEditandoId(null);
+    setMostrarFormAtividadeFisica(false);
+    await carregarAtividadesFisicas(membroSelecionado.id);
+  }
+
+  async function excluirAtividadeFisica() {
+    if (!atividadeEditandoId || !membroSelecionado) return;
+    setCarregando(true);
+    const { error } = await supabase.from('atividade_fisica').delete().eq('id', atividadeEditandoId);
+    setCarregando(false);
+    if (error) {
+      setErroAtividadeFisica(error.message);
+      return;
+    }
+    setAtividadeEditandoId(null);
+    setMostrarFormAtividadeFisica(false);
+    await carregarAtividadesFisicas(membroSelecionado.id);
   }
 
   function abrirEdicaoNascimento() {
@@ -3393,24 +3547,32 @@ export default function Home() {
 
             {pendenciasFamiliares.filter((f) => f.membroId !== membroSelecionado?.id).length > 0 && (
               <div className="mt-6">
-                <h3 className="mb-3 text-sm font-semibold text-slate-800">Pendências da família</h3>
-                <div className="space-y-3">
-                  {pendenciasFamiliares
-                    .filter((f) => f.membroId !== membroSelecionado?.id)
-                    .map((f) => (
-                      <div key={f.membroId} className="rounded-xl border border-[#E5E1DA] bg-white p-3">
-                        <p className="mb-2 text-xs font-semibold text-slate-500">{f.membroNome}</p>
-                        <div className="space-y-1.5">
-                          {f.itens.map((p) => (
-                            <div key={p.id} className="flex items-center gap-2">
-                              <span className="shrink-0">{iconePendencia(p.tipo)}</span>
-                              <p className="min-w-0 truncate text-sm text-slate-700">{p.titulo} · <span className="text-slate-400">{p.detalhe}</span></p>
-                            </div>
-                          ))}
+                <button
+                  onClick={() => setMostrarPendenciasFamilia((v) => !v)}
+                  className="mb-3 flex w-full items-center justify-between"
+                >
+                  <h3 className="text-sm font-semibold text-slate-800">Pendências da família</h3>
+                  <span className="text-xs text-teal-700">{mostrarPendenciasFamilia ? 'ocultar ▲' : 'mostrar ▼'}</span>
+                </button>
+                {mostrarPendenciasFamilia && (
+                  <div className="space-y-3">
+                    {pendenciasFamiliares
+                      .filter((f) => f.membroId !== membroSelecionado?.id)
+                      .map((f) => (
+                        <div key={f.membroId} className="rounded-xl border border-[#E5E1DA] bg-white p-3">
+                          <p className="mb-2 text-xs font-semibold text-slate-500">{f.membroNome}</p>
+                          <div className="space-y-1.5">
+                            {f.itens.map((p) => (
+                              <div key={p.id} className="flex items-center gap-2">
+                                <span className="shrink-0">{iconePendencia(p.tipo)}</span>
+                                <p className="min-w-0 truncate text-sm text-slate-700">{p.titulo} · <span className="text-slate-400">{p.detalhe}</span></p>
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                    ))}
-                </div>
+                      ))}
+                  </div>
+                )}
               </div>
             )}
 
@@ -3420,17 +3582,17 @@ export default function Home() {
                 className={`relative overflow-hidden rounded-2xl border border-teal-100 bg-gradient-to-br from-teal-50 to-emerald-50 p-4 transition-opacity duration-300 ${dicaVisivel ? 'opacity-100' : 'opacity-0'}`}
               >
                 <div className="flex items-start gap-3">
-                  <span className="shrink-0 text-2xl leading-none">{dicasDeSaude[dicaIndex].icone}</span>
-                  <p className="text-sm text-teal-800">{dicasDeSaude[dicaIndex].texto}</p>
+                  <span className="shrink-0 text-2xl leading-none">{dicasParaMembro[dicaIndex % dicasParaMembro.length].icone}</span>
+                  <p className="text-sm text-teal-800">{dicasParaMembro[dicaIndex % dicasParaMembro.length].texto}</p>
                 </div>
               </div>
               <div className="mt-2 flex justify-center gap-1.5">
-                {dicasDeSaude.map((_, i) => (
+                {dicasParaMembro.map((_, i) => (
                   <button
                     key={i}
                     onClick={() => { setDicaVisivel(false); setTimeout(() => { setDicaIndex(i); setDicaVisivel(true); }, 150); }}
                     aria-label={`dica ${i + 1}`}
-                    className={`h-1.5 rounded-full transition-all ${i === dicaIndex ? 'w-4 bg-teal-600' : 'w-1.5 bg-teal-200'}`}
+                    className={`h-1.5 rounded-full transition-all ${i === (dicaIndex % dicasParaMembro.length) ? 'w-4 bg-teal-600' : 'w-1.5 bg-teal-200'}`}
                   />
                 ))}
               </div>
@@ -6509,15 +6671,150 @@ export default function Home() {
 
             {telaDetalhe === 'esportes' && (
               <div className="space-y-3">
-                <div className="rounded-xl border border-dashed border-[#E5E1DA] bg-[#FAFAF8] p-4 text-center">
-                  <p className="text-sm text-slate-600 mb-1">Ainda estamos construindo essa parte</p>
-                  <p className="text-xs text-slate-400">
-                    Em breve você vai poder registrar os esportes/exercícios de cada pessoa, com duração e nível.
-                  </p>
-                </div>
-                <button onClick={() => setTelaDetalhe('bemestar')} className="text-sm text-teal-700">
-                  ← Voltar pra Bem-estar
-                </button>
+                {!mostrarFormAtividadeFisica && (
+                  <>
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs text-slate-400">{atividadesFisicas.length} registrada{atividadesFisicas.length === 1 ? '' : 's'}</p>
+                      {abaInferior !== 'consultar' && (
+                        <button
+                          onClick={abrirNovaAtividadeFisica}
+                          aria-label="Nova atividade"
+                          className="flex items-center gap-1 text-sm font-semibold text-teal-700"
+                        >
+                          <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+                          nova
+                        </button>
+                      )}
+                    </div>
+                    {atividadesFisicas.length === 0 && (
+                      <p className="text-sm text-slate-400 text-center py-2">Nenhuma atividade registrada ainda.</p>
+                    )}
+                    {atividadesFisicas.map((a) => (
+                      <button
+                        key={a.id}
+                        onClick={() => abrirEdicaoAtividadeFisica(a)}
+                        className="w-full rounded-xl border border-[#E5E1DA] p-3 text-left transition hover:bg-[#FAFAF8]"
+                      >
+                        <div className="flex items-center justify-between">
+                          <p className="font-medium text-slate-800">{a.nome_atividade} ✎</p>
+                          {!a.data_fim && (
+                            <span className="text-xs bg-emerald-100 text-emerald-700 rounded-full px-2 py-0.5 shrink-0">em andamento</span>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-400">
+                          {[
+                            `desde ${formatarData(a.data_inicio)}`,
+                            a.data_fim && `até ${formatarData(a.data_fim)}`,
+                            a.frequencia,
+                            a.local,
+                          ].filter(Boolean).join(' · ')}
+                        </p>
+                        {a.instrutor && <p className="text-xs text-slate-500 mt-1">Instrutor(a): {a.instrutor}</p>}
+                        {a.nivel && <p className="text-xs text-slate-500">Nível: {a.nivel}</p>}
+                        {a.observacao && <p className="text-xs text-slate-500 mt-1">📝 {a.observacao}</p>}
+                      </button>
+                    ))}
+                  </>
+                )}
+
+                {mostrarFormAtividadeFisica && (
+                  <>
+                    <button onClick={() => setMostrarFormAtividadeFisica(false)} className="text-sm text-teal-700">
+                      ← Voltar
+                    </button>
+                    <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
+                      <select
+                        className={inputClasse}
+                        value={novoNomeAtividade}
+                        onChange={(e) => {
+                          setNovoNomeAtividade(e.target.value);
+                          setAtividadeOutroNome('');
+                        }}
+                      >
+                        <option value="">selecione a atividade</option>
+                        {atividadesFisicasComuns.map((grupo) => (
+                          <optgroup key={grupo.categoria} label={grupo.categoria}>
+                            {grupo.itens.map((nome) => (
+                              <option key={nome} value={nome}>{nome}</option>
+                            ))}
+                          </optgroup>
+                        ))}
+                        <option value="Outra (especificar)">Outra (especificar)</option>
+                      </select>
+                      {novoNomeAtividade === 'Outra (especificar)' && (
+                        <input
+                          className={inputClasse}
+                          placeholder="qual atividade?"
+                          value={atividadeOutroNome}
+                          onChange={(e) => setAtividadeOutroNome(e.target.value)}
+                        />
+                      )}
+                      <div>
+                        <label className="text-xs text-slate-400 mb-1 block">data de início</label>
+                        <input
+                          className={inputClasse}
+                          type="date"
+                          value={novaDataInicioAtividade}
+                          onChange={(e) => setNovaDataInicioAtividade(e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-slate-400 mb-1 block">data de término (deixe em branco se ainda estiver praticando)</label>
+                        <input
+                          className={inputClasse}
+                          type="date"
+                          value={novaDataFimAtividade}
+                          onChange={(e) => setNovaDataFimAtividade(e.target.value)}
+                        />
+                      </div>
+                      <input
+                        className={inputClasse}
+                        placeholder="frequência (ex: 2x por semana)"
+                        value={novaFrequenciaAtividade}
+                        onChange={(e) => setNovaFrequenciaAtividade(e.target.value)}
+                      />
+                      <input
+                        className={inputClasse}
+                        placeholder="local/escola/clube (opcional)"
+                        value={novoLocalAtividade}
+                        onChange={(e) => setNovoLocalAtividade(e.target.value)}
+                      />
+                      <input
+                        className={inputClasse}
+                        placeholder="professor(a)/instrutor(a) (opcional)"
+                        value={novoInstrutorAtividade}
+                        onChange={(e) => setNovoInstrutorAtividade(e.target.value)}
+                      />
+                      <input
+                        className={inputClasse}
+                        placeholder="nível/graduação (ex: iniciante, faixa branca) (opcional)"
+                        value={novoNivelAtividade}
+                        onChange={(e) => setNovoNivelAtividade(e.target.value)}
+                      />
+                      <textarea
+                        className={inputClasse}
+                        placeholder="observações (opcional)"
+                        rows={2}
+                        value={novaObsAtividade}
+                        onChange={(e) => setNovaObsAtividade(e.target.value)}
+                      />
+                      {erroAtividadeFisica && <p className="text-sm text-red-600">{erroAtividadeFisica}</p>}
+                      <div className="flex gap-2">
+                        <button disabled={carregando} onClick={salvarAtividadeFisica} className={botaoPrimario}>
+                          {carregando ? 'Salvando...' : 'Salvar'}
+                        </button>
+                        <button onClick={() => setMostrarFormAtividadeFisica(false)} className={botaoSecundario}>
+                          Cancelar
+                        </button>
+                      </div>
+                      {atividadeEditandoId && (
+                        <button disabled={carregando} onClick={excluirAtividadeFisica} className="w-full text-sm text-red-600 pt-1">
+                          Excluir esta atividade
+                        </button>
+                      )}
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </div>
