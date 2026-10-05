@@ -151,3 +151,22 @@ export function calcularRiscosGeneticos(
   }
   return resultados;
 }
+
+// Horários de uma medicação a partir da 1ª dose e do intervalo em horas (0 = se necessário).
+export function calcularHorariosMedicacao(primeira: string, intervaloH: number): string[] {
+  if (!intervaloH || !/^\d{2}:\d{2}$/.test(primeira)) return [];
+  const [h, m] = primeira.split(':').map(Number);
+  const out: string[] = [];
+  for (let i = 0; i < 24 / intervaloH; i++) {
+    const hh = (h + i * intervaloH) % 24;
+    out.push(`${String(hh).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+  }
+  return out;
+}
+
+// Soma dias a uma data yyyy-mm-dd e devolve yyyy-mm-dd (usa meio-dia p/ evitar problema de fuso).
+export function somarDias(dataISO: string, dias: number): string {
+  const d = new Date(dataISO + 'T12:00:00');
+  d.setDate(d.getDate() + dias);
+  return d.toISOString().slice(0, 10);
+}

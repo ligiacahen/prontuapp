@@ -23,6 +23,11 @@ import type {
   Passo,
   Aba,
   RiscoGenetico,
+  MedRascunho,
+  VacRascunho,
+  Terapia,
+  TerapiaRascunho,
+  SessaoTerapia,
 } from './tipos';
 import {
   opcoesParentesco,
@@ -30,6 +35,8 @@ import {
   classesMedicamento,
   especialidadesMedicas,
   vacinasComuns,
+  frequenciasMedicacao,
+  tiposTerapia,
 } from './tipos';
 import {
   tipoCondicaoLabels,
@@ -41,6 +48,8 @@ import {
   atividadesFisicasComuns,
 } from './constantes';
 import {
+  calcularHorariosMedicacao,
+  somarDias,
   calcularIdade,
   calcularIdadeEmMeses,
   formatarIdadeEmMeses,
@@ -88,7 +97,7 @@ export default function Home() {
     anamnese: true,
   });
   const [mostrarResumoImpressao, setMostrarResumoImpressao] = useState(false);
-  const [pendenciasFamiliares, setPendenciasFamiliares] = useState<{ membroId: string; membroNome: string; itens: { id: string; tipo: 'consulta' | 'vacina' | 'medicacao'; titulo: string; detalhe: string }[] }[]>([]);
+  const [pendenciasFamiliares, setPendenciasFamiliares] = useState<{ membroId: string; membroNome: string; itens: { id: string; tipo: 'consulta' | 'vacina' | 'medicacao' | 'exame' | 'terapia'; titulo: string; detalhe: string; refId?: string }[] }[]>([]);
 
   const [contaEmail, setContaEmail] = useState('');
   const [novaSenhaConfig, setNovaSenhaConfig] = useState('');
@@ -176,6 +185,36 @@ export default function Home() {
   const [novoLocalConsulta, setNovoLocalConsulta] = useState('');
   const [novoMotivoConsulta, setNovoMotivoConsulta] = useState('');
   const [novoStatusConsulta, setNovoStatusConsulta] = useState('agendada');
+  const [novoLembreteConsulta, setNovoLembreteConsulta] = useState(false);
+  const medVazia = (): MedRascunho => ({ nome: '', dose: '', freq: '8h', primeira: '08:00', inicio: new Date().toISOString().slice(0, 10), duracao: '7', duracaoData: '', como: '' });
+  const vacVazia = (): VacRascunho => ({ nome: '', outroNome: '', quando: 'mes', quandoData: '', obs: '' });
+  const [medsConsulta, setMedsConsulta] = useState<MedRascunho[]>([]);
+  const [examesConsulta, setExamesConsulta] = useState<string[]>([]);
+  const [exameNovoConsulta, setExameNovoConsulta] = useState('');
+  const [exAbertoConsulta, setExAbertoConsulta] = useState(false);
+  const [exPrazoConsulta, setExPrazoConsulta] = useState('30d');
+  const [exPrazoDataConsulta, setExPrazoDataConsulta] = useState('');
+  const [exLembreteConsulta, setExLembreteConsulta] = useState(true);
+  const [vacsConsulta, setVacsConsulta] = useState<VacRascunho[]>([]);
+  const [vacLembreteConsulta, setVacLembreteConsulta] = useState(true);
+  const terapiaVazia = (): TerapiaRascunho => ({ tipo: '', outroTipo: '', frequencia: '', inicio: new Date().toISOString().slice(0, 10), fim: '', profissional: '', local: '', obs: '' });
+  const [terapiasConsulta, setTerapiasConsulta] = useState<TerapiaRascunho[]>([]);
+  const [terapias, setTerapias] = useState<Terapia[]>([]);
+  const [mostrarFormTerapia, setMostrarFormTerapia] = useState(false);
+  const [terapiaEditandoId, setTerapiaEditandoId] = useState<string | null>(null);
+  const [formTerapia, setFormTerapia] = useState<TerapiaRascunho>(terapiaVazia());
+  const [erroTerapia, setErroTerapia] = useState('');
+  const [erroCarregarTerapias, setErroCarregarTerapias] = useState('');
+  const [sessoesTerapia, setSessoesTerapia] = useState<SessaoTerapia[]>([]);
+  const [sessoesNovas, setSessoesNovas] = useState<{ data_hora: string; lembrete: boolean }[]>([]);
+  const [novaSessaoDataHora, setNovaSessaoDataHora] = useState('');
+  const [novaSessaoAlerta, setNovaSessaoAlerta] = useState(true);
+  const [exameStatusOriginal, setExameStatusOriginal] = useState('realizado');
+  const [exameMarcarRealizado, setExameMarcarRealizado] = useState(false);
+  const [vacinaStatusOriginal, setVacinaStatusOriginal] = useState('realizado');
+  const [vacinaMarcarRealizada, setVacinaMarcarRealizada] = useState(false);
+  // Alvo de uma pendência clicada na Home: abre a edição do item quando ele estiver carregado.
+  const [alvoPendencia, setAlvoPendencia] = useState<{ tipo: string; refId: string; membroId: string } | null>(null);
   const [novaAnotacaoConsulta, setNovaAnotacaoConsulta] = useState('');
   const [especialidadeOutroConsulta, setEspecialidadeOutroConsulta] = useState('');
   const [novaDataRetornoConsulta, setNovaDataRetornoConsulta] = useState('');
@@ -500,6 +539,8 @@ export default function Home() {
       carregarExames(membroSelecionado.id);
       carregarVacinas(membroSelecionado.id);
       carregarAtividadesFisicas(membroSelecionado.id);
+      carregarTerapias(membroSelecionado.id);
+      carregarSessoesTerapia(membroSelecionado.id);
       carregarNascimento(membroSelecionado.id);
       carregarDesenvolvimento(membroSelecionado.id);
       carregarAlimentacaoInfantil(membroSelecionado.id);
@@ -561,7 +602,7 @@ export default function Home() {
   async function carregarConsultas(membroId: string) {
     const { data, error } = await supabase
       .from('consulta')
-      .select('id, data_hora, local, motivo, anotacoes, status, especialidade(nome), profissional_saude(nome), data_retorno_sugerida, forma_atendimento, valor_pago, solicitou_reembolso, valor_reembolsado, incluir_ir, obs_financeira, condicao_relacionada_id')
+      .select('id, data_hora, local, motivo, anotacoes, status, especialidade(nome), profissional_saude(nome), data_retorno_sugerida, forma_atendimento, valor_pago, solicitou_reembolso, valor_reembolsado, incluir_ir, obs_financeira, condicao_relacionada_id, lembrete')
       .eq('membro_id', membroId)
       .order('data_hora', { ascending: true });
     if (!error && data && membroAtualRef.current === membroId) setConsultas(data as any);
@@ -570,7 +611,7 @@ export default function Home() {
   async function carregarExames(membroId: string) {
     const { data, error } = await supabase
       .from('exame')
-      .select('id, nome, data_realizacao, laboratorio, resultado_resumo, condicao_relacionada_id')
+      .select('id, nome, data_realizacao, laboratorio, resultado_resumo, condicao_relacionada_id, status')
       .eq('membro_id', membroId)
       .order('data_realizacao', { ascending: false });
     if (!error && data && membroAtualRef.current === membroId) setExames(data);
@@ -579,10 +620,40 @@ export default function Home() {
   async function carregarVacinas(membroId: string) {
     const { data, error } = await supabase
       .from('vacina')
-      .select('id, nome, dose, data_aplicacao, proxima_dose_data, observacoes, condicao_relacionada_id')
+      .select('id, nome, dose, data_aplicacao, proxima_dose_data, observacoes, condicao_relacionada_id, status')
       .eq('membro_id', membroId)
       .order('data_aplicacao', { ascending: false });
     if (!error && data && membroAtualRef.current === membroId) setVacinas(data);
+  }
+
+  async function carregarTerapias(membroId: string) {
+    // select('*') de propósito: não quebra se a tabela tiver colunas a mais/menos.
+    const { data, error } = await supabase
+      .from('terapia')
+      .select('*')
+      .eq('membro_id', membroId);
+    if (membroAtualRef.current !== membroId) return;
+    if (error) {
+      setErroCarregarTerapias(error.message);
+      return;
+    }
+    setErroCarregarTerapias('');
+    const lista = ((data || []) as any[]).sort((a, b) => String(b.data_inicio || '').localeCompare(String(a.data_inicio || '')));
+    setTerapias(lista as Terapia[]);
+  }
+
+  async function carregarSessoesTerapia(membroId: string) {
+    const { data, error } = await supabase
+      .from('sessao_terapia')
+      .select('*')
+      .eq('membro_id', membroId);
+    if (membroAtualRef.current !== membroId) return;
+    if (error) {
+      setErroCarregarTerapias(error.message);
+      return;
+    }
+    const lista = ((data || []) as any[]).sort((a, b) => String(a.data_hora).localeCompare(String(b.data_hora)));
+    setSessoesTerapia(lista as SessaoTerapia[]);
   }
 
   async function carregarAtividadesFisicas(membroId: string) {
@@ -1603,6 +1674,17 @@ export default function Home() {
     setNovoLocalConsulta('');
     setNovoMotivoConsulta('');
     setNovoStatusConsulta('agendada');
+    setNovoLembreteConsulta(false);
+    setMedsConsulta([]);
+    setExamesConsulta([]);
+    setExameNovoConsulta('');
+    setExAbertoConsulta(false);
+    setExPrazoConsulta('30d');
+    setExPrazoDataConsulta('');
+    setExLembreteConsulta(true);
+    setVacsConsulta([]);
+    setVacLembreteConsulta(true);
+    setTerapiasConsulta([]);
     setNovaAnotacaoConsulta('');
     setNovaDataRetornoConsulta('');
     setNovaFormaAtendimento('');
@@ -1630,7 +1712,18 @@ export default function Home() {
     setNovaDataHoraConsulta(c.data_hora ? c.data_hora.slice(0, 16) : '');
     setNovoLocalConsulta(c.local || '');
     setNovoMotivoConsulta(c.motivo || '');
-    setNovoStatusConsulta(c.status);
+    setNovoStatusConsulta(c.status === 'cancelada' ? 'cancelada' : 'agendada');
+    setNovoLembreteConsulta(c.lembrete || false);
+    setMedsConsulta([]);
+    setExamesConsulta([]);
+    setExameNovoConsulta('');
+    setExAbertoConsulta(false);
+    setExPrazoConsulta('30d');
+    setExPrazoDataConsulta('');
+    setExLembreteConsulta(true);
+    setVacsConsulta([]);
+    setVacLembreteConsulta(true);
+    setTerapiasConsulta([]);
     setNovaAnotacaoConsulta(c.anotacoes || '');
     setNovaDataRetornoConsulta(c.data_retorno_sugerida || '');
     setNovaFormaAtendimento(c.forma_atendimento || '');
@@ -1674,7 +1767,8 @@ export default function Home() {
         data_hora: novaDataHoraConsulta,
         local: novoLocalConsulta || null,
         motivo: novoMotivoConsulta || null,
-        status: novoStatusConsulta,
+        status: novoStatusConsulta === 'cancelada' ? 'cancelada' : (new Date(novaDataHoraConsulta) > new Date() ? 'agendada' : 'realizada'),
+        lembrete: new Date(novaDataHoraConsulta) > new Date() ? novoLembreteConsulta : false,
         anotacoes: novaAnotacaoConsulta || null,
         data_retorno_sugerida: novaDataRetornoConsulta || null,
         forma_atendimento: novaFormaAtendimento || null,
@@ -1690,11 +1784,101 @@ export default function Home() {
         condicao_relacionada_id: novaCondicaoRelacionadaConsulta || null,
       };
 
-      const { error } = consultaEditandoId
-        ? await supabase.from('consulta').update(dados).eq('id', consultaEditandoId)
-        : await supabase.from('consulta').insert({ membro_id: membroSelecionado.id, origem_agendamento: 'manual', ...dados });
+      let consultaIdSalva: string | null = consultaEditandoId;
+      if (consultaEditandoId) {
+        const { error } = await supabase.from('consulta').update(dados).eq('id', consultaEditandoId);
+        if (error) throw error;
+      } else {
+        const { data: criada, error } = await supabase
+          .from('consulta')
+          .insert({ membro_id: membroSelecionado.id, origem_agendamento: 'manual', ...dados })
+          .select('id')
+          .single();
+        if (error) throw error;
+        consultaIdSalva = criada?.id || null;
+      }
 
-      if (error) throw error;
+      // Itens gerados pela consulta ("O médico pediu algo?")
+      const dataConsultaISO = novaDataHoraConsulta.slice(0, 10);
+      const condicaoLigada = novaCondicaoRelacionadaConsulta || null;
+      for (const m of medsConsulta) {
+        if (!m.nome.trim()) continue;
+        const f = frequenciasMedicacao.find((x) => x.id === m.freq);
+        const horarios = f ? calcularHorariosMedicacao(m.primeira, f.intervaloH) : [];
+        const inicio = m.inicio || dataConsultaISO;
+        const dataFim = m.duracao === 'continuo' ? null : m.duracao === 'data' ? (m.duracaoData || null) : somarDias(inicio, Number(m.duracao));
+        const { error } = await supabase.from('medicacao').insert({
+          membro_id: membroSelecionado.id,
+          nome: m.nome.trim(),
+          dosagem: m.dose.trim() || null,
+          frequencia: f?.label || null,
+          horario: horarios.length ? horarios.join(' · ') : null,
+          data_inicio: inicio,
+          data_fim: dataFim,
+          condicao_relacionada_id: condicaoLigada,
+          consulta_relacionada_id: consultaIdSalva,
+          observacao: m.como.trim() || null,
+        });
+        if (error) throw error;
+      }
+      if (examesConsulta.length > 0) {
+        const hoje = new Date().toISOString().slice(0, 10);
+        const prazo =
+          exPrazoConsulta === 'data' && exPrazoDataConsulta ? exPrazoDataConsulta
+          : exPrazoConsulta === 'retorno' && novaDataRetornoConsulta ? somarDias(novaDataRetornoConsulta, -7)
+          : exPrazoConsulta === '7d' ? somarDias(hoje, 7)
+          : somarDias(hoje, 30);
+        for (const nome of examesConsulta) {
+          const { error } = await supabase.from('exame').insert({
+            membro_id: membroSelecionado.id,
+            nome,
+            data_realizacao: prazo,
+            status: 'solicitado',
+            lembrete: exLembreteConsulta,
+            consulta_relacionada_id: consultaIdSalva,
+            condicao_relacionada_id: condicaoLigada,
+          });
+          if (error) throw error;
+        }
+      }
+      for (const t of terapiasConsulta) {
+        const tipoFinal = t.tipo === 'Outra (especificar)' ? t.outroTipo.trim() : t.tipo;
+        if (!tipoFinal) continue;
+        const { error } = await supabase.from('terapia').insert({
+          membro_id: membroSelecionado.id,
+          tipo: tipoFinal,
+          frequencia: t.frequencia.trim() || null,
+          data_inicio: t.inicio || dataConsultaISO,
+          data_fim: t.fim || null,
+          profissional: t.profissional.trim() || null,
+          local: t.local.trim() || null,
+          observacao: t.obs.trim() || null,
+          consulta_relacionada_id: consultaIdSalva,
+          condicao_relacionada_id: condicaoLigada,
+        });
+        if (error) throw error;
+      }
+      for (const v of vacsConsulta) {
+        const nomeVac = v.nome === 'Outra (especificar)' ? v.outroNome.trim() : v.nome;
+        if (!nomeVac) continue;
+        const hoje = new Date().toISOString().slice(0, 10);
+        const quando =
+          v.quando === 'agora' ? hoje
+          : v.quando === '3m' ? somarDias(hoje, 90)
+          : v.quando === 'data' && v.quandoData ? v.quandoData
+          : somarDias(hoje, 30);
+        const { error } = await supabase.from('vacina').insert({
+          membro_id: membroSelecionado.id,
+          nome: nomeVac,
+          data_aplicacao: quando,
+          observacoes: v.obs.trim() || null,
+          status: 'indicada',
+          lembrete: vacLembreteConsulta,
+          consulta_relacionada_id: consultaIdSalva,
+          condicao_relacionada_id: condicaoLigada,
+        });
+        if (error) throw error;
+      }
 
       setConsultaEditandoId(null);
       setNovaEspecialidadeConsulta('');
@@ -1704,6 +1888,17 @@ export default function Home() {
       setNovoLocalConsulta('');
       setNovoMotivoConsulta('');
       setNovoStatusConsulta('agendada');
+      setNovoLembreteConsulta(false);
+      setMedsConsulta([]);
+      setExamesConsulta([]);
+      setExameNovoConsulta('');
+    setExAbertoConsulta(false);
+      setExPrazoConsulta('30d');
+      setExPrazoDataConsulta('');
+      setExLembreteConsulta(true);
+      setVacsConsulta([]);
+      setVacLembreteConsulta(true);
+      setTerapiasConsulta([]);
       setNovaAnotacaoConsulta('');
       setNovaDataRetornoConsulta('');
       setNovaFormaAtendimento('');
@@ -1715,6 +1910,10 @@ export default function Home() {
       setNovaCondicaoRelacionadaConsulta('');
       setMostrarFormConsulta(false);
       await carregarConsultas(membroSelecionado.id);
+      if (medsConsulta.length) await carregarMedicacoes(membroSelecionado.id);
+      if (examesConsulta.length) await carregarExames(membroSelecionado.id);
+      if (vacsConsulta.length) await carregarVacinas(membroSelecionado.id);
+      if (terapiasConsulta.length) await carregarTerapias(membroSelecionado.id);
       if (voltarResumoEventoId) {
         setCondicaoResumoId(voltarResumoEventoId);
         setVoltarResumoEventoId(null);
@@ -1799,6 +1998,8 @@ export default function Home() {
   }
 
   function abrirNovoExame() {
+    setExameStatusOriginal('realizado');
+    setExameMarcarRealizado(false);
     setExameEditandoId(null);
     setNovoNomeExame('');
     setNovaDataExame('');
@@ -1809,10 +2010,12 @@ export default function Home() {
     setMostrarFormExame(true);
   }
 
-  function abrirEdicaoExame(e: Exame) {
+  function abrirEdicaoExame(e: Exame, marcarRealizado: boolean = false) {
     setExameEditandoId(e.id);
+    setExameStatusOriginal(e.status || 'realizado');
+    setExameMarcarRealizado(marcarRealizado);
     setNovoNomeExame(e.nome);
-    setNovaDataExame(e.data_realizacao);
+    setNovaDataExame(marcarRealizado ? new Date().toISOString().slice(0, 10) : e.data_realizacao);
     setNovoLaboratorioExame(e.laboratorio || '');
     setNovoResultadoExame(e.resultado_resumo || '');
     setNovaCondicaoRelacionadaExame(e.condicao_relacionada_id || '');
@@ -1842,6 +2045,7 @@ export default function Home() {
       laboratorio: novoLaboratorioExame || null,
       resultado_resumo: novoResultadoExame || null,
       condicao_relacionada_id: novaCondicaoRelacionadaExame || null,
+      ...(exameEditandoId ? { status: exameMarcarRealizado ? 'realizado' : exameStatusOriginal } : {}),
     };
 
     const { error } = exameEditandoId
@@ -1883,6 +2087,8 @@ export default function Home() {
   }
 
   function abrirNovaVacina() {
+    setVacinaStatusOriginal('realizado');
+    setVacinaMarcarRealizada(false);
     setVacinaEditandoId(null);
     setNovoNomeVacina('');
     setVacinaOutroNome('');
@@ -1895,8 +2101,10 @@ export default function Home() {
     setMostrarFormVacina(true);
   }
 
-  function abrirEdicaoVacina(v: Vacina) {
+  function abrirEdicaoVacina(v: Vacina, marcarTomada: boolean = false) {
     setVacinaEditandoId(v.id);
+    setVacinaStatusOriginal(v.status || 'realizado');
+    setVacinaMarcarRealizada(marcarTomada);
     if (vacinasComuns.includes(v.nome)) {
       setNovoNomeVacina(v.nome);
       setVacinaOutroNome('');
@@ -1905,7 +2113,7 @@ export default function Home() {
       setVacinaOutroNome(v.nome);
     }
     setNovaDoseVacina(v.dose || '');
-    setNovaDataVacina(v.data_aplicacao);
+    setNovaDataVacina(marcarTomada ? new Date().toISOString().slice(0, 10) : v.data_aplicacao);
     setNovaProximaDoseVacina(v.proxima_dose_data || '');
     setNovaObsVacina(v.observacoes || '');
     setNovaCondicaoRelacionadaVacina(v.condicao_relacionada_id || '');
@@ -1937,6 +2145,7 @@ export default function Home() {
       proxima_dose_data: novaProximaDoseVacina || null,
       observacoes: novaObsVacina || null,
       condicao_relacionada_id: novaCondicaoRelacionadaVacina || null,
+      ...(vacinaEditandoId ? { status: vacinaMarcarRealizada ? 'realizado' : vacinaStatusOriginal } : {}),
     };
 
     const { error } = vacinaEditandoId
@@ -2061,6 +2270,131 @@ export default function Home() {
     setAtividadeEditandoId(null);
     setMostrarFormAtividadeFisica(false);
     await carregarAtividadesFisicas(membroSelecionado.id);
+  }
+
+  function abrirNovaTerapia() {
+    setTerapiaEditandoId(null);
+    setFormTerapia(terapiaVazia());
+    setSessoesNovas([]);
+    setNovaSessaoDataHora('');
+    setNovaSessaoAlerta(true);
+    setErroTerapia('');
+    setMostrarFormTerapia(true);
+  }
+
+  function abrirEdicaoTerapia(t: Terapia) {
+    setTerapiaEditandoId(t.id);
+    setSessoesNovas([]);
+    setNovaSessaoDataHora('');
+    setNovaSessaoAlerta(true);
+    const conhecida = tiposTerapia.includes(t.tipo) && t.tipo !== 'Outra (especificar)';
+    setFormTerapia({
+      tipo: conhecida ? t.tipo : 'Outra (especificar)',
+      outroTipo: conhecida ? '' : t.tipo,
+      frequencia: t.frequencia || '',
+      inicio: t.data_inicio || '',
+      fim: t.data_fim || '',
+      profissional: t.profissional || '',
+      local: t.local || '',
+      obs: t.observacao || '',
+    });
+    setErroTerapia('');
+    setMostrarFormTerapia(true);
+  }
+
+  async function salvarTerapia() {
+    setErroTerapia('');
+    const tipoFinal = formTerapia.tipo === 'Outra (especificar)' ? formTerapia.outroTipo.trim() : formTerapia.tipo;
+    if (!tipoFinal) {
+      setErroTerapia('Escolha o tipo de terapia.');
+      return;
+    }
+    if (!membroSelecionado) return;
+    setCarregando(true);
+    const dados = {
+      tipo: tipoFinal,
+      frequencia: formTerapia.frequencia.trim() || null,
+      data_inicio: formTerapia.inicio || null,
+      data_fim: formTerapia.fim || null,
+      profissional: formTerapia.profissional.trim() || null,
+      local: formTerapia.local.trim() || null,
+      observacao: formTerapia.obs.trim() || null,
+    };
+    let erroSalvar: { message: string } | null = null;
+    if (terapiaEditandoId) {
+      const { error } = await supabase.from('terapia').update(dados).eq('id', terapiaEditandoId);
+      erroSalvar = error;
+    } else {
+      const { data: criada, error } = await supabase
+        .from('terapia')
+        .insert({ membro_id: membroSelecionado.id, ...dados })
+        .select('id')
+        .single();
+      erroSalvar = error;
+      if (!error && criada && sessoesNovas.length > 0) {
+        const { error: erroSessoes } = await supabase.from('sessao_terapia').insert(
+          sessoesNovas.map((s) => ({ membro_id: membroSelecionado.id, terapia_id: criada.id, data_hora: s.data_hora, lembrete: s.lembrete }))
+        );
+        if (erroSessoes) erroSalvar = erroSessoes;
+      }
+    }
+    setCarregando(false);
+    if (erroSalvar) {
+      setErroTerapia(erroSalvar.message);
+      return;
+    }
+    setTerapiaEditandoId(null);
+    setSessoesNovas([]);
+    setMostrarFormTerapia(false);
+    await carregarTerapias(membroSelecionado.id);
+    await carregarSessoesTerapia(membroSelecionado.id);
+  }
+
+  async function excluirTerapia() {
+    if (!terapiaEditandoId || !membroSelecionado) return;
+    setCarregando(true);
+    const { error } = await supabase.from('terapia').delete().eq('id', terapiaEditandoId);
+    setCarregando(false);
+    if (error) {
+      setErroTerapia(error.message);
+      return;
+    }
+    setTerapiaEditandoId(null);
+    setMostrarFormTerapia(false);
+    await carregarTerapias(membroSelecionado.id);
+  }
+
+  // Datas das sessões: numa terapia já salva, adicionar/remover/alternar alerta grava na hora;
+  // numa terapia nova, as datas ficam na lista e são gravadas junto com ela ao salvar.
+  async function adicionarSessaoTerapia() {
+    if (!novaSessaoDataHora || !membroSelecionado) return;
+    if (terapiaEditandoId) {
+      const { error } = await supabase.from('sessao_terapia').insert({
+        membro_id: membroSelecionado.id,
+        terapia_id: terapiaEditandoId,
+        data_hora: novaSessaoDataHora,
+        lembrete: novaSessaoAlerta,
+      });
+      if (error) { setErroTerapia(error.message); return; }
+      await carregarSessoesTerapia(membroSelecionado.id);
+    } else {
+      setSessoesNovas((l) => [...l, { data_hora: novaSessaoDataHora, lembrete: novaSessaoAlerta }].sort((a, b) => a.data_hora.localeCompare(b.data_hora)));
+    }
+    setNovaSessaoDataHora('');
+  }
+
+  async function removerSessaoTerapia(id: string) {
+    if (!membroSelecionado) return;
+    const { error } = await supabase.from('sessao_terapia').delete().eq('id', id);
+    if (error) { setErroTerapia(error.message); return; }
+    await carregarSessoesTerapia(membroSelecionado.id);
+  }
+
+  async function alternarAlertaSessaoTerapia(s: SessaoTerapia) {
+    if (!membroSelecionado) return;
+    const { error } = await supabase.from('sessao_terapia').update({ lembrete: !s.lembrete }).eq('id', s.id);
+    if (error) { setErroTerapia(error.message); return; }
+    await carregarSessoesTerapia(membroSelecionado.id);
   }
 
   function abrirEdicaoNascimento() {
@@ -2619,7 +2953,7 @@ export default function Home() {
   // dose de vacina prevista, e medicação de uso contínuo com horário cadastrado.
   // Usa os dados que já estão carregados em `consultas`/`vacinas`/`medicacoes` —
   // não faz nenhuma busca nova no banco.
-  type ItemPendencia = { id: string; tipo: 'consulta' | 'vacina' | 'medicacao'; titulo: string; detalhe: string };
+  type ItemPendencia = { id: string; tipo: 'consulta' | 'vacina' | 'medicacao' | 'exame' | 'terapia'; titulo: string; detalhe: string; refId?: string };
   function iconePendencia(tipo: ItemPendencia['tipo']) {
     const props = { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: '#0F766E', strokeWidth: 2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
     switch (tipo) {
@@ -2627,12 +2961,24 @@ export default function Home() {
         return <svg {...props}><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>;
       case 'vacina':
         return <svg {...props}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>;
+      case 'terapia':
+        return <svg {...props}><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21l7.8-7.5 1-1.1a5.5 5.5 0 0 0 0-7.8z" /><line x1="12" y1="9" x2="12" y2="15" /><line x1="9" y1="12" x2="15" y2="12" /></svg>;
+      case 'exame':
+        return <svg {...props}><path d="M9 3h6" /><path d="M10 3v6.5L5 19a1.5 1.5 0 0 0 1.3 2.2h11.4A1.5 1.5 0 0 0 19 19l-5-9.5V3" /><path d="M7.5 15h9" /></svg>;
       case 'medicacao':
         return <svg {...props}><path d="m10.5 20.5 10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7Z" /><path d="m8.5 8.5 7 7" /></svg>;
       default:
         return null;
     }
   }
+  // Texto curto das próximas sessões de uma terapia: "12/10 às 15:00 · 19/10 às 15:00 · +2".
+  function textoProximasSessoes(datas: string[]): string {
+    const futuras = datas.map((d) => new Date(d)).filter((d) => d.getTime() >= Date.now()).sort((a, b) => a.getTime() - b.getTime());
+    const fmt = (d: Date) => `${d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} às ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+    const txt = futuras.slice(0, 5).map(fmt).join('\n');
+    return futuras.length > 5 ? `${txt}\n+${futuras.length - 5} sessões` : txt;
+  }
+
   function obterPendencias(): ItemPendencia[] {
     const hoje = new Date();
     hoje.setHours(0, 0, 0, 0);
@@ -2641,12 +2987,13 @@ export default function Home() {
     // Mostra TODAS as consultas agendadas futuras (não só a próxima), da mais próxima
     // pra mais distante.
     const consultasFuturas = consultas
-      .filter((c) => c.status === 'agendada' && new Date(c.data_hora) >= hoje)
+      .filter((c) => c.status === 'agendada' && new Date(c.data_hora) >= new Date())
       .sort((a, b) => new Date(a.data_hora).getTime() - new Date(b.data_hora).getTime());
     for (const c of consultasFuturas) {
       const dh = new Date(c.data_hora);
       itens.push({
         id: `consulta-${c.id}`,
+        refId: c.id,
         tipo: 'consulta',
         titulo: `Consulta: ${c.especialidade?.nome || 'a confirmar'}${c.profissional_saude?.nome ? ' — ' + c.profissional_saude.nome : ''}`,
         detalhe: `${dh.toLocaleDateString('pt-BR')}${c.local ? ' · ' + c.local : ''}`,
@@ -2663,9 +3010,35 @@ export default function Home() {
       const diasRestantes = Math.round((dv.getTime() - hoje.getTime()) / 86400000);
       itens.push({
         id: `vacina-${v.id}`,
+        refId: v.id,
         tipo: 'vacina',
         titulo: `Vacina: ${v.nome}${v.dose ? ' — ' + v.dose : ''}`,
         detalhe: diasRestantes < 0 ? `atrasada desde ${dv.toLocaleDateString('pt-BR')}` : diasRestantes === 0 ? 'hoje' : `vence em ${diasRestantes} dias`,
+      });
+    }
+
+    // Exames solicitados em consulta e ainda não realizados.
+    for (const e of exames.filter((x) => x.status === 'solicitado')) {
+      const dp = new Date(e.data_realizacao + 'T12:00:00');
+      const dias = Math.round((dp.getTime() - hoje.getTime()) / 86400000);
+      itens.push({
+        id: `exame-${e.id}`,
+        refId: e.id,
+        tipo: 'exame',
+        titulo: `Exame: ${e.nome}`,
+        detalhe: dias < 0 ? `prazo vencido em ${dp.toLocaleDateString('pt-BR')}` : dias === 0 ? 'fazer até hoje' : `fazer até ${dp.toLocaleDateString('pt-BR')}`,
+      });
+    }
+
+    // Vacinas indicadas em consulta e ainda não tomadas.
+    for (const v of vacinas.filter((x) => x.status === 'indicada')) {
+      const dv = new Date(v.data_aplicacao + 'T12:00:00');
+      itens.push({
+        id: `vacina-ind-${v.id}`,
+        refId: v.id,
+        tipo: 'vacina',
+        titulo: `Vacina indicada: ${v.nome}`,
+        detalhe: `tomar em ${dv.toLocaleDateString('pt-BR')}`,
       });
     }
 
@@ -2674,14 +3047,63 @@ export default function Home() {
     for (const m of medicacoesAtivas) {
       itens.push({
         id: `medicacao-${m.id}`,
+        refId: m.id,
         tipo: 'medicacao',
         titulo: `Medicação: ${m.nome}`,
         detalhe: m.horario ? `hoje às ${m.horario}` : 'uso contínuo',
       });
     }
 
+    // Terapias em andamento: mostra as datas/horários das próximas sessões com alerta ligado
+    // (sessões que já passaram saem da Home sozinhas).
+    for (const t of terapias.filter((x) => !x.data_fim || new Date(x.data_fim) >= hoje)) {
+      const proximas = textoProximasSessoes(sessoesTerapia.filter((s) => s.terapia_id === t.id && s.lembrete).map((s) => s.data_hora));
+      itens.push({
+        id: `terapia-${t.id}`,
+        refId: t.id,
+        tipo: 'terapia',
+        titulo: `Terapia: ${t.tipo}`,
+        detalhe: proximas || t.frequencia || 'em andamento',
+      });
+    }
+
     return itens;
   }
+
+  // Toque numa pendência da Home: vai para "Consultar", na tela da categoria, e abre os
+  // detalhes do item (dose/horário do remédio, prazo do exame etc.). Para um familiar,
+  // troca o membro selecionado primeiro; o efeito abaixo abre o item quando ele carregar.
+  const telaDaPendencia: Record<string, Aba> = { consulta: 'consultas', vacina: 'vacinas', medicacao: 'medicacoes', exame: 'exames', terapia: 'terapias' };
+  function abrirPendencia(p: ItemPendencia, membroId: string) {
+    if (!p.refId) return;
+    const alvoMembro = membros.find((m) => m.id === membroId);
+    irParaAbaInferior('consultar');
+    if (alvoMembro && alvoMembro.id !== membroSelecionado?.id) setMembroSelecionado(alvoMembro);
+    setTelaDetalhe(telaDaPendencia[p.tipo]);
+    setAlvoPendencia({ tipo: p.tipo, refId: p.refId, membroId });
+  }
+
+  useEffect(() => {
+    if (!alvoPendencia || !membroSelecionado || membroSelecionado.id !== alvoPendencia.membroId) return;
+    const { tipo, refId } = alvoPendencia;
+    if (tipo === 'consulta') {
+      const c = consultas.find((x) => x.id === refId);
+      if (c) { abrirEdicaoConsulta(c); setAlvoPendencia(null); }
+    } else if (tipo === 'medicacao') {
+      const m = medicacoes.find((x) => x.id === refId);
+      if (m) { abrirEdicaoMedicacao(m); setAlvoPendencia(null); }
+    } else if (tipo === 'exame') {
+      const e = exames.find((x) => x.id === refId);
+      if (e) { abrirEdicaoExame(e); setAlvoPendencia(null); }
+    } else if (tipo === 'vacina') {
+      const v = vacinas.find((x) => x.id === refId);
+      if (v) { abrirEdicaoVacina(v); setAlvoPendencia(null); }
+    } else if (tipo === 'terapia') {
+      const t = terapias.find((x) => x.id === refId);
+      if (t) { abrirEdicaoTerapia(t); setAlvoPendencia(null); }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [alvoPendencia, membroSelecionado?.id, consultas, medicacoes, exames, vacinas, terapias]);
 
   // Pendências de TODA a família, mostradas na Home (diferente de obterPendencias(),
   // que só olha o membro selecionado e os dados já carregados no estado). Como esse
@@ -2697,10 +3119,14 @@ export default function Home() {
     hoje.setHours(0, 0, 0, 0);
     const hojeStr = hoje.toISOString().slice(0, 10);
 
-    const [{ data: consultasData }, { data: vacinasData }, { data: medicacoesData }] = await Promise.all([
+    const [{ data: consultasData }, { data: vacinasData }, { data: medicacoesData }, { data: examesData }, { data: vacinasIndData }, { data: terapiasData }, { data: sessoesData }] = await Promise.all([
       supabase.from('consulta').select('id, membro_id, data_hora, status, especialidade(nome), profissional_saude(nome), local').in('membro_id', ids).eq('status', 'agendada').gte('data_hora', new Date().toISOString()),
       supabase.from('vacina').select('id, membro_id, nome, dose, proxima_dose_data').in('membro_id', ids).not('proxima_dose_data', 'is', null),
       supabase.from('medicacao').select('id, membro_id, nome, data_fim, horario').in('membro_id', ids),
+      supabase.from('exame').select('id, membro_id, nome, data_realizacao').in('membro_id', ids).eq('status', 'solicitado'),
+      supabase.from('vacina').select('id, membro_id, nome, data_aplicacao').in('membro_id', ids).eq('status', 'indicada'),
+      supabase.from('terapia').select('*').in('membro_id', ids),
+      supabase.from('sessao_terapia').select('*').in('membro_id', ids).eq('lembrete', true),
     ]);
 
     const porMembro: Record<string, ItemPendencia[]> = {};
@@ -2712,6 +3138,7 @@ export default function Home() {
     (consultasData || []).forEach((c: any) => {
       adicionar(c.membro_id, {
         id: `consulta-${c.id}`,
+        refId: c.id,
         tipo: 'consulta',
         titulo: `Consulta: ${c.especialidade?.nome || 'a confirmar'}${c.profissional_saude?.nome ? ' — ' + c.profissional_saude.nome : ''}`,
         detalhe: `${new Date(c.data_hora).toLocaleDateString('pt-BR')}${c.local ? ' · ' + c.local : ''}`,
@@ -2720,17 +3147,51 @@ export default function Home() {
     (vacinasData || []).forEach((v: any) => {
       adicionar(v.membro_id, {
         id: `vacina-${v.id}`,
+        refId: v.id,
         tipo: 'vacina',
         titulo: `Vacina: ${v.nome}${v.dose ? ' — ' + v.dose : ''}`,
         detalhe: `próxima dose: ${formatarData(v.proxima_dose_data)}`,
       });
     });
+    (examesData || []).forEach((e: any) => {
+      adicionar(e.membro_id, {
+        id: `exame-${e.id}`,
+        refId: e.id,
+        tipo: 'exame',
+        titulo: `Exame: ${e.nome}`,
+        detalhe: `fazer até ${formatarData(e.data_realizacao)}`,
+      });
+    });
+    (vacinasIndData || []).forEach((v: any) => {
+      adicionar(v.membro_id, {
+        id: `vacina-ind-${v.id}`,
+        refId: v.id,
+        tipo: 'vacina',
+        titulo: `Vacina indicada: ${v.nome}`,
+        detalhe: `tomar em ${formatarData(v.data_aplicacao)}`,
+      });
+    });
     (medicacoesData || []).filter((m: any) => !m.data_fim || m.data_fim >= hojeStr).forEach((m: any) => {
       adicionar(m.membro_id, {
         id: `medicacao-${m.id}`,
+        refId: m.id,
         tipo: 'medicacao',
         titulo: `Medicação: ${m.nome}`,
         detalhe: m.horario ? `hoje às ${m.horario}` : 'uso contínuo',
+      });
+    });
+    const sessoesPorTerapia: Record<string, string[]> = {};
+    (sessoesData || []).forEach((s: any) => {
+      if (!sessoesPorTerapia[s.terapia_id]) sessoesPorTerapia[s.terapia_id] = [];
+      sessoesPorTerapia[s.terapia_id].push(s.data_hora);
+    });
+    (terapiasData || []).filter((t: any) => !t.data_fim || t.data_fim >= hojeStr).forEach((t: any) => {
+      adicionar(t.membro_id, {
+        id: `terapia-${t.id}`,
+        refId: t.id,
+        tipo: 'terapia',
+        titulo: `Terapia: ${t.tipo}`,
+        detalhe: textoProximasSessoes(sessoesPorTerapia[t.id] || []) || t.frequencia || 'em andamento',
       });
     });
 
@@ -2788,6 +3249,7 @@ export default function Home() {
     { id: 'odontologia', label: 'Odontologia' },
     { id: 'exames', label: 'Exames' },
     { id: 'vacinas', label: 'Vacinas' },
+    { id: 'terapias', label: 'Terapias' },
     { id: 'crescimento', label: 'Peso e Crescimento' },
     { id: 'riscos', label: 'Cuidados Preventivos', labelCurto: 'Cuidados Prev.' },
     { id: 'bemestar', label: 'Bem-estar' },
@@ -2955,6 +3417,9 @@ export default function Home() {
       case 'vacinas':
         abrirNovaVacina();
         break;
+      case 'terapias':
+        abrirNovaTerapia();
+        break;
       case 'crescimento':
         abrirNovaMedicaoCrescimento();
         break;
@@ -3002,6 +3467,8 @@ export default function Home() {
         return <svg {...props}><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" /></svg>;
       case 'nutricionista':
         return <svg {...props}><path d="M12 6c-1-2-3-3-5-2 0 2 1 3 2 4-3 0-5 2-5 6 0 4 3 7 6 7 1 0 2-.5 2-.5s1 .5 2 .5c3 0 6-3 6-7 0-4-2-6-5-6 1-1 2-2 2-4-2-1-4 0-5 2z" /></svg>;
+      case 'terapias':
+        return <svg {...props}><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21l7.8-7.5 1-1.1a5.5 5.5 0 0 0 0-7.8z" /><line x1="12" y1="9" x2="12" y2="15" /><line x1="9" y1="12" x2="15" y2="12" /></svg>;
       case 'esportes':
         return <svg {...props}><line x1="6" y1="5" x2="6" y2="19" /><line x1="18" y1="5" x2="18" y2="19" /><line x1="2" y1="9" x2="2" y2="15" /><line x1="22" y1="9" x2="22" y2="15" /><line x1="6" y1="12" x2="18" y2="12" /></svg>;
       case 'medicos':
@@ -3210,6 +3677,8 @@ export default function Home() {
   // qualquer categoria/formulário que estivesse aberto na aba anterior), pra nunca
   // aparecer uma tela de uma aba enquanto o menu mostra outra selecionada.
   function irParaAbaInferior(aba: 'home' | 'incluir' | 'consultar' | 'compartilhar' | 'configuracao') {
+    setAlvoPendencia(null);
+    setMostrarFormTerapia(false);
     setAbaInferior(aba);
     setTelaDetalhe(null);
     setMostrarMenuPessoal(false);
@@ -3530,15 +3999,16 @@ export default function Home() {
                 return (
                   <div className="space-y-2">
                     {pendencias.map((p) => (
-                      <div key={p.id} className="flex items-center gap-3 rounded-xl border border-[#E5E1DA] bg-white p-3">
+                      <button key={p.id} onClick={() => abrirPendencia(p, membroSelecionado.id)} className="flex w-full items-center gap-3 rounded-xl border border-[#E5E1DA] bg-white p-3 text-left transition hover:bg-[#FAFAF8]">
                         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#CCFBF1]">
                           {iconePendencia(p.tipo)}
                         </div>
                         <div className="min-w-0">
                           <p className="truncate text-sm font-medium text-slate-800">{p.titulo}</p>
-                          <p className="text-xs text-slate-400">{p.detalhe}</p>
+                          <p className="whitespace-pre-line text-xs text-slate-400">{p.detalhe}</p>
                         </div>
-                      </div>
+                        <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="ml-auto shrink-0 text-slate-300"><path d="M9 18l6-6-6-6" /></svg>
+                      </button>
                     ))}
                   </div>
                 );
@@ -3563,10 +4033,17 @@ export default function Home() {
                           <p className="mb-2 text-xs font-semibold text-slate-500">{f.membroNome}</p>
                           <div className="space-y-1.5">
                             {f.itens.map((p) => (
-                              <div key={p.id} className="flex items-center gap-2">
+                              <button key={p.id} onClick={() => abrirPendencia(p, f.membroId)} className="flex w-full items-center gap-2 text-left">
                                 <span className="shrink-0">{iconePendencia(p.tipo)}</span>
-                                <p className="min-w-0 truncate text-sm text-slate-700">{p.titulo} · <span className="text-slate-400">{p.detalhe}</span></p>
-                              </div>
+                                {p.detalhe.includes('\n') ? (
+                                  <div className="min-w-0 text-sm text-slate-700">
+                                    <p className="truncate">{p.titulo}</p>
+                                    <p className="whitespace-pre-line text-xs text-slate-400">{p.detalhe}</p>
+                                  </div>
+                                ) : (
+                                  <p className="min-w-0 truncate text-sm text-slate-700">{p.titulo} · <span className="text-slate-400">{p.detalhe}</span></p>
+                                )}
+                              </button>
                             ))}
                           </div>
                         </div>
@@ -3850,6 +4327,8 @@ export default function Home() {
                       ? 'Nutricionista'
                       : telaDetalhe === 'esportes'
                       ? 'Exercícios/Esportes'
+                      : telaDetalhe === 'terapias'
+                      ? 'Terapias'
                       : telaDetalhe === 'menupessoal'
                       ? 'Mais informações'
                       : telaDetalhe === 'nascimento'
@@ -5131,113 +5610,412 @@ export default function Home() {
                     <button onClick={() => setMostrarFormConsulta(false)} className="text-sm text-teal-700">
                       ← Voltar
                     </button>
-                    <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
-                    <select
-                      className={inputClasse}
-                      value={novaEspecialidadeConsulta}
-                      onChange={(e) => setNovaEspecialidadeConsulta(e.target.value)}
-                    >
-                      <option value="">especialidade</option>
-                      {especialidadesMedicas.map((esp) => (
-                        <option key={esp} value={esp}>{esp}</option>
-                      ))}
-                    </select>
-                    {novaEspecialidadeConsulta === 'Outros' && (
-                      <input
-                        className={inputClasse}
-                        placeholder="qual especialidade?"
-                        value={especialidadeOutroConsulta}
-                        onChange={(e) => setEspecialidadeOutroConsulta(e.target.value)}
-                      />
-                    )}
-                    <input
-                      className={inputClasse}
-                      placeholder="profissional (opcional, ex: Dr. João Silva)"
-                      list="lista-medicos-cadastrados"
-                      value={novoProfissionalConsulta}
-                      onChange={(e) => setNovoProfissionalConsulta(e.target.value)}
-                    />
-                    <datalist id="lista-medicos-cadastrados">
-                      {medicos.map((m) => (
-                        <option key={m.id} value={m.nome} />
-                      ))}
-                    </datalist>
-                    {medicos.length > 0 && (
-                      <p className="text-xs text-slate-400 -mt-1">
-                        💡 Digite o mesmo nome de um médico já cadastrado em “Médicos” para reaproveitar os dados dele.
-                      </p>
-                    )}
-                    <div>
-                      <label className="text-xs text-slate-400 mb-1 block">data e hora</label>
-                      <input
-                        className={inputClasse}
-                        type="datetime-local"
-                        value={novaDataHoraConsulta}
-                        onChange={(e) => setNovaDataHoraConsulta(e.target.value)}
-                      />
-                    </div>
-                    <input
-                      className={inputClasse}
-                      placeholder="local (opcional)"
-                      value={novoLocalConsulta}
-                      onChange={(e) => setNovoLocalConsulta(e.target.value)}
-                    />
-                    <input
-                      className={inputClasse}
-                      placeholder="motivo (opcional)"
-                      value={novoMotivoConsulta}
-                      onChange={(e) => setNovoMotivoConsulta(e.target.value)}
-                    />
-                    <select
-                      className={inputClasse}
-                      value={novaCondicaoRelacionadaConsulta}
-                      onChange={(e) => setNovaCondicaoRelacionadaConsulta(e.target.value)}
-                    >
-                      <option value="">essa consulta é sobre qual evento de saúde? (opcional)</option>
-                      {condicoes.map((c) => (
-                        <option key={c.id} value={c.id}>{c.nome}</option>
-                      ))}
-                    </select>
-                    <select
-                      className={inputClasse}
-                      value={novoStatusConsulta}
-                      onChange={(e) => setNovoStatusConsulta(e.target.value)}
-                    >
-                      <option value="agendada">Agendada</option>
-                      <option value="realizada">Realizada</option>
-                      <option value="cancelada">Cancelada</option>
-                    </select>
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="text-xs text-slate-400">o que o médico disse, o que acompanhar, exames pedidos... (opcional)</label>
-                        <button
-                          type="button"
-                          onClick={() => alternarReconhecimentoVoz('anotacaoConsulta', setNovaAnotacaoConsulta)}
-                          className={`shrink-0 rounded-full px-2 py-1 text-xs ${gravandoCampo === 'anotacaoConsulta' ? 'bg-red-100 text-red-700 animate-pulse' : 'bg-slate-100 text-slate-600'}`}
-                        >
-                          🎤 {gravandoCampo === 'anotacaoConsulta' ? 'Ouvindo...' : 'Falar'}
-                        </button>
-                      </div>
-                      <textarea
-                        className={inputClasse}
-                        placeholder="o que o médico disse, o que acompanhar, exames pedidos... (opcional)"
-                        rows={3}
-                        value={novaAnotacaoConsulta}
-                        onChange={(e) => setNovaAnotacaoConsulta(e.target.value)}
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs text-slate-400 mb-1 block">agendar retorno (opcional)</label>
-                      <input
-                        className={inputClasse}
-                        type="date"
-                        value={novaDataRetornoConsulta}
-                        onChange={(e) => setNovaDataRetornoConsulta(e.target.value)}
-                      />
-                    </div>
+                    {(() => {
+                      const ehFutura = !!novaDataHoraConsulta && new Date(novaDataHoraConsulta) > new Date();
+                      const ehPassada = !!novaDataHoraConsulta && !ehFutura;
+                      const cartao = 'space-y-3 rounded-2xl bg-white border border-[#E5E1DA] p-4';
+                      const titulo = 'text-xs font-bold uppercase tracking-wider text-teal-800';
+                      const retornoAtalhos: { label: string; meses?: number; dias?: number }[] = [
+                        { label: 'Em 30 dias', dias: 30 },
+                        { label: 'Em 3 meses', meses: 3 },
+                        { label: 'Em 6 meses', meses: 6 },
+                      ];
+                      const calcRetorno = (a: { meses?: number; dias?: number }) => {
+                        const base = novaDataHoraConsulta ? new Date(novaDataHoraConsulta) : new Date();
+                        if (a.meses) base.setMonth(base.getMonth() + a.meses);
+                        if (a.dias) base.setDate(base.getDate() + a.dias);
+                        return base.toISOString().slice(0, 10);
+                      };
+                      return (
+                        <div className="space-y-3">
+                          <div className={cartao}>
+                            <p className={titulo}>Quando e onde</p>
+                            <div>
+                              <label className="text-xs text-slate-500 mb-1 block">Data e horário <span className="text-red-600">*</span></label>
+                              <input
+                                className={inputClasse}
+                                type="datetime-local"
+                                value={novaDataHoraConsulta}
+                                onChange={(e) => setNovaDataHoraConsulta(e.target.value)}
+                              />
+                            </div>
+                            {ehFutura && (
+                              <label className="flex items-start gap-2 rounded-xl bg-teal-50 p-3 text-sm text-slate-700">
+                                <input
+                                  type="checkbox"
+                                  className="mt-1"
+                                  checked={novoLembreteConsulta}
+                                  onChange={(e) => setNovoLembreteConsulta(e.target.checked)}
+                                />
+                                <span>
+                                  <span className="font-medium">Quero um lembrete desta consulta</span>
+                                  <span className="block text-xs text-slate-500">Ela aparece como pendência na Home até acontecer.</span>
+                                </span>
+                              </label>
+                            )}
+                            <input
+                              className={inputClasse}
+                              placeholder="Local (opcional)"
+                              value={novoLocalConsulta}
+                              onChange={(e) => setNovoLocalConsulta(e.target.value)}
+                            />
+                          </div>
 
-                    <div className="rounded-xl border border-[#E5E1DA] p-3 space-y-3">
-                      <p className="text-xs font-medium text-slate-500">Financeiro / reembolso</p>
+                          <div className={cartao}>
+                            <p className={titulo}>Com quem</p>
+                            <select
+                              className={inputClasse}
+                              value={novaEspecialidadeConsulta}
+                              onChange={(e) => setNovaEspecialidadeConsulta(e.target.value)}
+                            >
+                              <option value="">Especialidade *</option>
+                              {especialidadesMedicas.map((esp) => (
+                                <option key={esp} value={esp}>{esp}</option>
+                              ))}
+                            </select>
+                            {novaEspecialidadeConsulta === 'Outros' && (
+                              <input
+                                className={inputClasse}
+                                placeholder="Qual especialidade?"
+                                value={especialidadeOutroConsulta}
+                                onChange={(e) => setEspecialidadeOutroConsulta(e.target.value)}
+                              />
+                            )}
+                            <input
+                              className={inputClasse}
+                              placeholder="Profissional (opcional, ex: Dr. João Silva)"
+                              list="lista-medicos-cadastrados"
+                              value={novoProfissionalConsulta}
+                              onChange={(e) => setNovoProfissionalConsulta(e.target.value)}
+                            />
+                            <datalist id="lista-medicos-cadastrados">
+                              {medicos.map((m) => (
+                                <option key={m.id} value={m.nome} />
+                              ))}
+                            </datalist>
+                            {novoProfissionalConsulta.trim() && !medicos.some((m) => m.nome.toLowerCase() === novoProfissionalConsulta.trim().toLowerCase()) && (
+                              <p className="text-xs text-teal-700 -mt-1">➕ “{novoProfissionalConsulta.trim()}” será cadastrado como novo médico.</p>
+                            )}
+                            {medicos.length > 0 && !novoProfissionalConsulta.trim() && (
+                              <p className="text-xs text-slate-400 -mt-1">
+                                💡 Comece a digitar para escolher entre seus médicos já cadastrados.
+                              </p>
+                            )}
+                          </div>
+
+                          <div className={cartao}>
+                            <p className={titulo}>Sobre o quê</p>
+                            <input
+                              className={inputClasse}
+                              placeholder="Motivo (opcional)"
+                              value={novoMotivoConsulta}
+                              onChange={(e) => setNovoMotivoConsulta(e.target.value)}
+                            />
+                            <select
+                              className={inputClasse}
+                              value={novaCondicaoRelacionadaConsulta}
+                              onChange={(e) => setNovaCondicaoRelacionadaConsulta(e.target.value)}
+                            >
+                              <option value="">Relacionar a um problema de saúde (opcional)</option>
+                              {condicoes.map((c) => (
+                                <option key={c.id} value={c.id}>{c.nome}</option>
+                              ))}
+                            </select>
+                          </div>
+
+                          {ehPassada && (
+                            <div className={cartao}>
+                              <p className={titulo}>Depois da consulta</p>
+                              <div>
+                                <div className="flex items-center justify-between mb-1">
+                                  <label className="text-xs text-slate-500">Anotações: o que o médico disse, o que acompanhar...</label>
+                                  <button
+                                    type="button"
+                                    onClick={() => alternarReconhecimentoVoz('anotacaoConsulta', setNovaAnotacaoConsulta)}
+                                    className={`shrink-0 rounded-full px-2 py-1 text-xs ${gravandoCampo === 'anotacaoConsulta' ? 'bg-red-100 text-red-700 animate-pulse' : 'bg-slate-100 text-slate-600'}`}
+                                  >
+                                    🎤 {gravandoCampo === 'anotacaoConsulta' ? 'Ouvindo...' : 'Falar'}
+                                  </button>
+                                </div>
+                                <textarea
+                                  className={inputClasse}
+                                  placeholder="Anotações (opcional)"
+                                  rows={3}
+                                  value={novaAnotacaoConsulta}
+                                  onChange={(e) => setNovaAnotacaoConsulta(e.target.value)}
+                                />
+                              </div>
+                              <div>
+                                <label className="text-xs text-slate-500 mb-1 block">Retorno (opcional)</label>
+                                <div className="flex flex-wrap gap-2 mb-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => setNovaDataRetornoConsulta('')}
+                                    className={`rounded-full border px-3 py-2 text-sm ${!novaDataRetornoConsulta ? 'bg-teal-700 border-teal-700 text-white font-semibold' : 'border-slate-300 text-slate-700'}`}
+                                  >
+                                    Sem retorno
+                                  </button>
+                                  {retornoAtalhos.map((a) => (
+                                    <button
+                                      key={a.label}
+                                      type="button"
+                                      onClick={() => setNovaDataRetornoConsulta(calcRetorno(a))}
+                                      className={`rounded-full border px-3 py-2 text-sm ${novaDataRetornoConsulta === calcRetorno(a) ? 'bg-teal-700 border-teal-700 text-white font-semibold' : 'border-slate-300 text-slate-700'}`}
+                                    >
+                                      {a.label}
+                                    </button>
+                                  ))}
+                                </div>
+                                <input
+                                  className={inputClasse}
+                                  type="date"
+                                  value={novaDataRetornoConsulta}
+                                  onChange={(e) => setNovaDataRetornoConsulta(e.target.value)}
+                                />
+                              </div>
+                            </div>
+                          )}
+
+                          {ehPassada && (() => {
+                            const algoAberto = medsConsulta.length > 0 || examesConsulta.length > 0 || vacsConsulta.length > 0 || terapiasConsulta.length > 0 || exameNovoConsulta !== '';
+                            const chip = (ativo: boolean) => `rounded-full border px-3 py-2 text-sm ${ativo ? 'bg-teal-700 border-teal-700 text-white font-semibold' : 'border-slate-300 text-slate-700'}`;
+                            const botaoAdd = 'flex w-full items-center gap-3 rounded-2xl border border-dashed border-teal-700/40 bg-white px-4 py-3 text-left text-base font-semibold text-teal-800';
+                            const atualizaMed = (i: number, patch: Partial<MedRascunho>) =>
+                              setMedsConsulta((lista) => lista.map((m, idx) => (idx === i ? { ...m, ...patch } : m)));
+                            const atualizaVac = (i: number, patch: Partial<VacRascunho>) =>
+                              setVacsConsulta((lista) => lista.map((v, idx) => (idx === i ? { ...v, ...patch } : v)));
+                            const atualizaTer = (i: number, patch: Partial<TerapiaRascunho>) =>
+                              setTerapiasConsulta((lista) => lista.map((t, idx) => (idx === i ? { ...t, ...patch } : t)));
+                            const adicionarExame = () => {
+                              const nome = exameNovoConsulta.trim();
+                              if (!nome) return;
+                              setExamesConsulta((l) => [...l, nome]);
+                              setExameNovoConsulta('');
+                            };
+                            const exAberto = examesConsulta.length > 0 || exameNovoConsulta !== '' || exAbertoConsulta;
+                            return (
+                              <div className="space-y-3">
+                                <div>
+                                  <p className={titulo}>{algoAberto || exAberto ? 'Mais alguma coisa?' : 'O médico pediu algo?'}</p>
+                                  <p className="text-sm text-slate-500">{algoAberto || exAberto ? 'Adicione o que mais a consulta gerou.' : 'Toque só no que esta consulta gerou.'}</p>
+                                </div>
+
+                                {medsConsulta.length > 0 && (
+                                  <div className={cartao}>
+                                    <div className="flex items-center justify-between">
+                                      <p className={titulo}>Medicação</p>
+                                      <button type="button" aria-label="Remover medicação" onClick={() => setMedsConsulta([])} className="text-slate-400 text-lg leading-none">✕</button>
+                                    </div>
+                                    {medsConsulta.map((m, i) => {
+                                      const f = frequenciasMedicacao.find((x) => x.id === m.freq);
+                                      const horarios = f ? calcularHorariosMedicacao(m.primeira, f.intervaloH) : [];
+                                      return (
+                                        <div key={i} className="space-y-3 border-t border-[#E5E1DA] pt-3 first:border-t-0 first:pt-0">
+                                          {medsConsulta.length > 1 && (
+                                            <div className="flex items-center justify-between">
+                                              <p className="text-xs text-slate-500">Medicação {i + 1}</p>
+                                              <button type="button" onClick={() => setMedsConsulta((l) => l.filter((_, idx) => idx !== i))} className="text-xs text-red-600">remover</button>
+                                            </div>
+                                          )}
+                                          <input className={inputClasse} placeholder="Remédio *" value={m.nome} onChange={(e) => atualizaMed(i, { nome: e.target.value })} />
+                                          <input className={inputClasse} placeholder="Dose (ex: 5 ml, 1 comprimido)" value={m.dose} onChange={(e) => atualizaMed(i, { dose: e.target.value })} />
+                                          <div>
+                                            <label className="text-xs text-slate-500 mb-1 block">Frequência</label>
+                                            <div className="flex flex-wrap gap-2">
+                                              {frequenciasMedicacao.map((fo) => (
+                                                <button key={fo.id} type="button" onClick={() => atualizaMed(i, { freq: fo.id })} className={chip(m.freq === fo.id)}>{fo.label}</button>
+                                              ))}
+                                            </div>
+                                          </div>
+                                          {horarios.length > 0 && (
+                                            <div className="flex items-center gap-2">
+                                              <label className="text-xs text-slate-500 shrink-0">1ª dose às</label>
+                                              <input type="time" className={inputClasse} value={m.primeira} onChange={(e) => atualizaMed(i, { primeira: e.target.value })} />
+                                            </div>
+                                          )}
+                                          {horarios.length > 0 && <p className="text-xs text-teal-800">Horários: {horarios.join(' · ')}</p>}
+                                          <div>
+                                            <label className="text-xs text-slate-500 mb-1 block">Início</label>
+                                            <input type="date" className={inputClasse} value={m.inicio} onChange={(e) => atualizaMed(i, { inicio: e.target.value })} />
+                                          </div>
+                                          <div>
+                                            <label className="text-xs text-slate-500 mb-1 block">Duração</label>
+                                            <div className="flex flex-wrap gap-2">
+                                              {[['5', '5 dias'], ['7', '7 dias'], ['10', '10 dias'], ['14', '14 dias'], ['continuo', 'Uso contínuo'], ['data', 'Outro']].map(([id, label]) => (
+                                                <button key={id} type="button" onClick={() => atualizaMed(i, { duracao: id })} className={chip(m.duracao === id)}>{label}</button>
+                                              ))}
+                                            </div>
+                                            {m.duracao === 'data' && (
+                                              <input type="date" className={`${inputClasse} mt-2`} value={m.duracaoData} onChange={(e) => atualizaMed(i, { duracaoData: e.target.value })} />
+                                            )}
+                                          </div>
+                                          <input className={inputClasse} placeholder="Como tomar (ex: após as refeições)" value={m.como} onChange={(e) => atualizaMed(i, { como: e.target.value })} />
+                                        </div>
+                                      );
+                                    })}
+                                    <button type="button" onClick={() => setMedsConsulta((l) => [...l, medVazia()])} className="text-sm font-semibold text-teal-800">+ Adicionar outra medicação</button>
+                                  </div>
+                                )}
+
+                                {exAberto && (
+                                  <div className={cartao}>
+                                    <div className="flex items-center justify-between">
+                                      <p className={titulo}>Exames solicitados</p>
+                                      <button type="button" aria-label="Remover exames" onClick={() => { setExamesConsulta([]); setExameNovoConsulta(''); setExAbertoConsulta(false); }} className="text-slate-400 text-lg leading-none">✕</button>
+                                    </div>
+                                    {examesConsulta.map((nome, i) => (
+                                      <div key={i} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2 text-sm">
+                                        <span>{nome}</span>
+                                        <button type="button" aria-label={`Remover ${nome}`} onClick={() => setExamesConsulta((l) => l.filter((_, idx) => idx !== i))} className="text-slate-400">✕</button>
+                                      </div>
+                                    ))}
+                                    <div className="flex gap-2">
+                                      <input
+                                        className={inputClasse}
+                                        placeholder="Nome do exame (ex: hemograma)"
+                                        value={exameNovoConsulta}
+                                        onChange={(e) => setExameNovoConsulta(e.target.value)}
+                                        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); adicionarExame(); } }}
+                                      />
+                                      <button type="button" onClick={adicionarExame} className="shrink-0 rounded-xl border border-teal-700 px-4 text-sm font-semibold text-teal-800">Adicionar</button>
+                                    </div>
+                                    <div>
+                                      <label className="text-xs text-slate-500 mb-1 block">Fazer até</label>
+                                      <div className="flex flex-wrap gap-2">
+                                        {[['retorno', 'Antes do retorno'], ['7d', 'Em 7 dias'], ['30d', 'Em 30 dias'], ['data', 'Escolher data']].map(([id, label]) => (
+                                          <button key={id} type="button" onClick={() => setExPrazoConsulta(id)} className={chip(exPrazoConsulta === id)}>{label}</button>
+                                        ))}
+                                      </div>
+                                      {exPrazoConsulta === 'data' && (
+                                        <input type="date" className={`${inputClasse} mt-2`} value={exPrazoDataConsulta} onChange={(e) => setExPrazoDataConsulta(e.target.value)} />
+                                      )}
+                                      {exPrazoConsulta === 'retorno' && (
+                                        <p className="text-xs text-slate-500 mt-1">
+                                          {novaDataRetornoConsulta ? 'Prazo: 7 dias antes do retorno, para o resultado chegar a tempo.' : 'Defina um retorno acima para calcular o prazo (senão usa 30 dias).'}
+                                        </p>
+                                      )}
+                                    </div>
+                                    <label className="flex items-center gap-2 text-sm text-slate-700">
+                                      <input type="checkbox" checked={exLembreteConsulta} onChange={(e) => setExLembreteConsulta(e.target.checked)} />
+                                      Lembrete para agendar os exames
+                                    </label>
+                                  </div>
+                                )}
+
+                                {vacsConsulta.length > 0 && (
+                                  <div className={cartao}>
+                                    <div className="flex items-center justify-between">
+                                      <p className={titulo}>Vacinas indicadas</p>
+                                      <button type="button" aria-label="Remover vacinas" onClick={() => setVacsConsulta([])} className="text-slate-400 text-lg leading-none">✕</button>
+                                    </div>
+                                    {vacsConsulta.map((v, i) => (
+                                      <div key={i} className="space-y-3 border-t border-[#E5E1DA] pt-3 first:border-t-0 first:pt-0">
+                                        {vacsConsulta.length > 1 && (
+                                          <div className="flex items-center justify-between">
+                                            <p className="text-xs text-slate-500">Vacina {i + 1}</p>
+                                            <button type="button" onClick={() => setVacsConsulta((l) => l.filter((_, idx) => idx !== i))} className="text-xs text-red-600">remover</button>
+                                          </div>
+                                        )}
+                                        <select className={inputClasse} value={v.nome} onChange={(e) => atualizaVac(i, { nome: e.target.value })}>
+                                          <option value="">Vacina * (mesma lista da carteirinha)</option>
+                                          {vacinasComuns.map((vc) => (
+                                            <option key={vc} value={vc}>{vc}</option>
+                                          ))}
+                                          <option value="Outra (especificar)">Outra (especificar)</option>
+                                        </select>
+                                        {v.nome === 'Outra (especificar)' && (
+                                          <input className={inputClasse} placeholder="Qual vacina?" value={v.outroNome} onChange={(e) => atualizaVac(i, { outroNome: e.target.value })} />
+                                        )}
+                                        <div>
+                                          <label className="text-xs text-slate-500 mb-1 block">Quando tomar</label>
+                                          <div className="flex flex-wrap gap-2">
+                                            {[['agora', 'Agora'], ['mes', 'No próximo mês'], ['3m', 'Em 3 meses'], ['data', 'Escolher data']].map(([id, label]) => (
+                                              <button key={id} type="button" onClick={() => atualizaVac(i, { quando: id })} className={chip(v.quando === id)}>{label}</button>
+                                            ))}
+                                          </div>
+                                          {v.quando === 'data' && (
+                                            <input type="date" className={`${inputClasse} mt-2`} value={v.quandoData} onChange={(e) => atualizaVac(i, { quandoData: e.target.value })} />
+                                          )}
+                                        </div>
+                                        <input className={inputClasse} placeholder="Observação (opcional)" value={v.obs} onChange={(e) => atualizaVac(i, { obs: e.target.value })} />
+                                      </div>
+                                    ))}
+                                    <button type="button" onClick={() => setVacsConsulta((l) => [...l, vacVazia()])} className="text-sm font-semibold text-teal-800">+ Adicionar outra vacina</button>
+                                    <label className="flex items-center gap-2 text-sm text-slate-700">
+                                      <input type="checkbox" checked={vacLembreteConsulta} onChange={(e) => setVacLembreteConsulta(e.target.checked)} />
+                                      Lembrete da vacina
+                                    </label>
+                                  </div>
+                                )}
+
+                                {terapiasConsulta.length > 0 && (
+                                  <div className={cartao}>
+                                    <div className="flex items-center justify-between">
+                                      <p className={titulo}>Terapias</p>
+                                      <button type="button" aria-label="Remover terapias" onClick={() => setTerapiasConsulta([])} className="text-slate-400 text-lg leading-none">✕</button>
+                                    </div>
+                                    {terapiasConsulta.map((t, i) => (
+                                      <div key={i} className="space-y-3 border-t border-[#E5E1DA] pt-3 first:border-t-0 first:pt-0">
+                                        {terapiasConsulta.length > 1 && (
+                                          <div className="flex items-center justify-between">
+                                            <p className="text-xs text-slate-500">Terapia {i + 1}</p>
+                                            <button type="button" onClick={() => setTerapiasConsulta((l) => l.filter((_, idx) => idx !== i))} className="text-xs text-red-600">remover</button>
+                                          </div>
+                                        )}
+                                        <select className={inputClasse} value={t.tipo} onChange={(e) => atualizaTer(i, { tipo: e.target.value })}>
+                                          <option value="">Tipo de terapia *</option>
+                                          {tiposTerapia.map((tt) => (
+                                            <option key={tt} value={tt}>{tt}</option>
+                                          ))}
+                                        </select>
+                                        {t.tipo === 'Outra (especificar)' && (
+                                          <input className={inputClasse} placeholder="Qual terapia?" value={t.outroTipo} onChange={(e) => atualizaTer(i, { outroTipo: e.target.value })} />
+                                        )}
+                                        <input className={inputClasse} placeholder="Frequência (ex: 2x por semana)" value={t.frequencia} onChange={(e) => atualizaTer(i, { frequencia: e.target.value })} />
+                                        <div>
+                                          <label className="text-xs text-slate-500 mb-1 block">Início</label>
+                                          <input type="date" className={inputClasse} value={t.inicio} onChange={(e) => atualizaTer(i, { inicio: e.target.value })} />
+                                        </div>
+                                        <input className={inputClasse} placeholder="Profissional/clínica (opcional)" value={t.profissional} onChange={(e) => atualizaTer(i, { profissional: e.target.value })} />
+                                        <input className={inputClasse} placeholder="Observação (opcional)" value={t.obs} onChange={(e) => atualizaTer(i, { obs: e.target.value })} />
+                                      </div>
+                                    ))}
+                                    <button type="button" onClick={() => setTerapiasConsulta((l) => [...l, terapiaVazia()])} className="text-sm font-semibold text-teal-800">+ Adicionar outra terapia</button>
+                                  </div>
+                                )}
+
+                                {medsConsulta.length === 0 && (
+                                  <button type="button" onClick={() => setMedsConsulta([medVazia()])} className={botaoAdd}>
+                                    <span className="text-xl leading-none">+</span> Medicação
+                                  </button>
+                                )}
+                                {!exAberto && (
+                                  <button type="button" onClick={() => setExAbertoConsulta(true)} className={botaoAdd}>
+                                    <span className="text-xl leading-none">+</span> Exames
+                                  </button>
+                                )}
+                                {vacsConsulta.length === 0 && (
+                                  <button type="button" onClick={() => setVacsConsulta([vacVazia()])} className={botaoAdd}>
+                                    <span className="text-xl leading-none">+</span> Vacinas
+                                  </button>
+                                )}
+                                {terapiasConsulta.length === 0 && (
+                                  <button type="button" onClick={() => setTerapiasConsulta([terapiaVazia()])} className={botaoAdd}>
+                                    <span className="text-xl leading-none">+</span> Terapias
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })()}
+
+                          {ehFutura && (
+                            <p className="rounded-xl bg-[#EEF4F1] p-3 text-sm text-slate-700">
+                              ℹ️ Como a data é futura, a consulta fica como agendada. Depois que acontecer, volte aqui para registrar as anotações e o retorno.
+                            </p>
+                          )}
+
+                    <details className="rounded-2xl bg-white border border-[#E5E1DA] p-4 space-y-3">
+                      <summary className="text-xs font-bold uppercase tracking-wider text-teal-800 cursor-pointer">Financeiro / reembolso (opcional)</summary>
                       <div className="flex rounded-xl bg-slate-100 p-1">
                         <button
                           type="button"
@@ -5292,22 +6070,36 @@ export default function Home() {
                         value={novaObsFinanceira}
                         onChange={(e) => setNovaObsFinanceira(e.target.value)}
                       />
-                    </div>
-                    {erroConsulta && <p className="text-sm text-red-600">{erroConsulta}</p>}
-                    <div className="flex gap-2">
-                      <button disabled={carregando} onClick={salvarConsulta} className={botaoPrimario}>
-                        {carregando ? 'Salvando...' : 'Salvar'}
-                      </button>
-                      <button onClick={() => setMostrarFormConsulta(false)} className={botaoSecundario}>
-                        Cancelar
-                      </button>
-                    </div>
-                    {consultaEditandoId && (
-                      <button disabled={carregando} onClick={excluirConsulta} className="w-full text-sm text-red-600 pt-1">
-                        Excluir esta consulta
-                      </button>
-                    )}
-                    </div>
+                    </details>
+
+                          {consultaEditandoId && (
+                            <label className="flex items-center gap-2 text-sm text-slate-600 px-1">
+                              <input
+                                type="checkbox"
+                                checked={novoStatusConsulta === 'cancelada'}
+                                onChange={(e) => setNovoStatusConsulta(e.target.checked ? 'cancelada' : 'agendada')}
+                              />
+                              Consulta cancelada
+                            </label>
+                          )}
+                          <p className="text-xs text-slate-500"><span className="text-red-600">*</span> Campos obrigatórios</p>
+                          {erroConsulta && <p className="text-sm text-red-600">{erroConsulta}</p>}
+                          <div className="flex gap-2">
+                            <button disabled={carregando} onClick={salvarConsulta} className={botaoPrimario}>
+                              {carregando ? 'Salvando...' : 'Salvar consulta'}
+                            </button>
+                            <button onClick={() => setMostrarFormConsulta(false)} className={botaoSecundario}>
+                              Cancelar
+                            </button>
+                          </div>
+                          {consultaEditandoId && (
+                            <button disabled={carregando} onClick={excluirConsulta} className="w-full text-sm text-red-600 pt-1">
+                              Excluir esta consulta
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </>
                 )}
               </div>
@@ -5441,18 +6233,27 @@ export default function Home() {
                       <p className="text-sm text-slate-400 text-center py-2">Nenhum exame registrado ainda.</p>
                     )}
                     {exames.map((e) => (
-                      <button
-                        key={e.id}
-                        onClick={() => abrirEdicaoExame(e)}
-                        className="w-full rounded-xl border border-[#E5E1DA] p-3 text-left transition hover:bg-[#FAFAF8]"
-                      >
-                        <div className="flex items-center justify-between">
-                          <p className="font-medium text-slate-800">{e.nome} ✎</p>
-                          <span className="text-xs text-slate-400">{formatarData(e.data_realizacao)}</span>
-                        </div>
-                        {e.laboratorio && <p className="text-xs text-slate-400">{e.laboratorio}</p>}
-                        {e.resultado_resumo && <p className="text-xs text-slate-500 mt-1">📋 {e.resultado_resumo}</p>}
-                      </button>
+                      <div key={e.id} className="space-y-1">
+                        <button
+                          onClick={() => abrirEdicaoExame(e)}
+                          className="w-full rounded-xl border border-[#E5E1DA] p-3 text-left transition hover:bg-[#FAFAF8]"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="font-medium text-slate-800">{e.nome} ✎</p>
+                            <span className="text-xs text-slate-400 text-right">{e.status === 'solicitado' ? `⏳ solicitado · fazer até ${formatarData(e.data_realizacao)}` : formatarData(e.data_realizacao)}</span>
+                          </div>
+                          {e.laboratorio && <p className="text-xs text-slate-400">{e.laboratorio}</p>}
+                          {e.resultado_resumo && <p className="text-xs text-slate-500 mt-1">📋 {e.resultado_resumo}</p>}
+                        </button>
+                        {e.status === 'solicitado' && (
+                          <button
+                            onClick={() => abrirEdicaoExame(e, true)}
+                            className="w-full rounded-xl bg-teal-50 py-2 text-sm font-semibold text-teal-800"
+                          >
+                            ✓ Marcar como realizado
+                          </button>
+                        )}
+                      </div>
                     ))}
                   </>
                 )}
@@ -5470,7 +6271,7 @@ export default function Home() {
                       onChange={(e) => setNovoNomeExame(e.target.value)}
                     />
                     <div>
-                      <label className="text-xs text-slate-400 mb-1 block">data de realização</label>
+                      <label className="text-xs text-slate-400 mb-1 block">{exameStatusOriginal === 'solicitado' && !exameMarcarRealizado ? 'fazer até' : 'data de realização'}</label>
                       <input
                         className={inputClasse}
                         type="date"
@@ -5478,6 +6279,12 @@ export default function Home() {
                         onChange={(e) => setNovaDataExame(e.target.value)}
                       />
                     </div>
+                    {exameEditandoId && exameStatusOriginal === 'solicitado' && (
+                      <label className="flex items-center gap-2 rounded-xl bg-teal-50 p-3 text-sm text-slate-700">
+                        <input type="checkbox" checked={exameMarcarRealizado} onChange={(e) => setExameMarcarRealizado(e.target.checked)} />
+                        Já realizei este exame (informe a data de realização acima)
+                      </label>
+                    )}
                     <input
                       className={inputClasse}
                       placeholder="laboratório (opcional)"
@@ -5552,14 +6359,14 @@ export default function Home() {
                     {vacinas.map((v) => {
                       const proximaVencida = !!v.proxima_dose_data && v.proxima_dose_data < new Date().toISOString().slice(0, 10);
                       return (
+                        <div key={v.id} className="space-y-1">
                         <button
-                          key={v.id}
                           onClick={() => abrirEdicaoVacina(v)}
                           className="w-full rounded-xl border border-[#E5E1DA] p-3 text-left transition hover:bg-[#FAFAF8]"
                         >
                           <div className="flex items-center justify-between">
                             <p className="font-medium text-slate-800">{v.nome} ✎</p>
-                            <span className="text-xs text-slate-400">{formatarData(v.data_aplicacao)}</span>
+                            <span className="text-xs text-slate-400">{v.status === 'indicada' ? `⏳ indicada · tomar em ${formatarData(v.data_aplicacao)}` : formatarData(v.data_aplicacao)}</span>
                           </div>
                           <p className="text-xs text-slate-400">
                             {[v.dose, v.proxima_dose_data && `próxima dose: ${formatarData(v.proxima_dose_data)}`].filter(Boolean).join(' · ')}
@@ -5571,6 +6378,15 @@ export default function Home() {
                           )}
                           {v.observacoes && <p className="text-xs text-slate-500 mt-1">📝 {v.observacoes}</p>}
                         </button>
+                        {v.status === 'indicada' && (
+                          <button
+                            onClick={() => abrirEdicaoVacina(v, true)}
+                            className="w-full rounded-xl bg-teal-50 py-2 text-sm font-semibold text-teal-800"
+                          >
+                            ✓ Marcar como tomada
+                          </button>
+                        )}
+                        </div>
                       );
                     })}
                   </>
@@ -5610,7 +6426,7 @@ export default function Home() {
                       onChange={(e) => setNovaDoseVacina(e.target.value)}
                     />
                     <div>
-                      <label className="text-xs text-slate-400 mb-1 block">data de aplicação</label>
+                      <label className="text-xs text-slate-400 mb-1 block">{vacinaStatusOriginal === 'indicada' && !vacinaMarcarRealizada ? 'data prevista' : 'data de aplicação'}</label>
                       <input
                         className={inputClasse}
                         type="date"
@@ -5627,6 +6443,12 @@ export default function Home() {
                         onChange={(e) => setNovaProximaDoseVacina(e.target.value)}
                       />
                     </div>
+                    {vacinaEditandoId && vacinaStatusOriginal === 'indicada' && (
+                      <label className="flex items-center gap-2 rounded-xl bg-teal-50 p-3 text-sm text-slate-700">
+                        <input type="checkbox" checked={vacinaMarcarRealizada} onChange={(e) => setVacinaMarcarRealizada(e.target.checked)} />
+                        Já tomei esta vacina (informe a data de aplicação acima)
+                      </label>
+                    )}
                     <select className={inputClasse} value={novaCondicaoRelacionadaVacina} onChange={(e) => setNovaCondicaoRelacionadaVacina(e.target.value)}>
                       <option value="">relacionada a qual evento de saúde? (opcional)</option>
                       {condicoes.map((c) => (
@@ -6661,13 +7483,163 @@ export default function Home() {
                     </div>
                     <div className="flex-1">
                       <p className="text-sm font-medium text-slate-800">Exercícios/Esportes</p>
-                      <p className="text-xs text-slate-400">em breve</p>
+                      <p className="text-xs text-slate-400">{atividadesFisicas.length > 0 ? `${atividadesFisicas.length} registrada${atividadesFisicas.length > 1 ? 's' : ''}` : 'nenhuma atividade registrada ainda'}</p>
                     </div>
                     <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="text-slate-400 shrink-0"><path d="M9 18l6-6-6-6" /></svg>
                   </button>
                 </div>
               );
             })()}
+
+            {telaDetalhe === 'terapias' && (
+              <div className="space-y-3">
+                {!mostrarFormTerapia && (
+                  <>
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs text-slate-400">{terapias.length} registrada{terapias.length === 1 ? '' : 's'}</p>
+                      {abaInferior !== 'consultar' && (
+                        <button onClick={abrirNovaTerapia} aria-label="Nova terapia" className="flex items-center gap-1 text-sm font-semibold text-teal-700">
+                          <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+                          nova
+                        </button>
+                      )}
+                    </div>
+                    {erroCarregarTerapias && (
+                      <p className="rounded-lg bg-red-50 p-2 text-xs text-red-700">Não consegui carregar as terapias: {erroCarregarTerapias}</p>
+                    )}
+                    {terapias.length === 0 && !erroCarregarTerapias && (
+                      <p className="text-sm text-slate-400 text-center py-2">Nenhuma terapia registrada ainda.</p>
+                    )}
+                    {terapias.map((t) => (
+                      <button
+                        key={t.id}
+                        onClick={() => abrirEdicaoTerapia(t)}
+                        className="w-full rounded-xl border border-[#E5E1DA] p-3 text-left transition hover:bg-[#FAFAF8]"
+                      >
+                        <div className="flex items-center justify-between">
+                          <p className="font-medium text-slate-800">{t.tipo} ✎</p>
+                          {!t.data_fim && (
+                            <span className="text-xs bg-emerald-100 text-emerald-700 rounded-full px-2 py-0.5 shrink-0">em andamento</span>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-400">
+                          {[
+                            t.data_inicio && `desde ${formatarData(t.data_inicio)}`,
+                            t.data_fim && `até ${formatarData(t.data_fim)}`,
+                            t.frequencia,
+                            t.profissional,
+                            t.local,
+                          ].filter(Boolean).join(' · ')}
+                        </p>
+                        {t.observacao && <p className="text-xs text-slate-500 mt-1">📝 {t.observacao}</p>}
+                      </button>
+                    ))}
+                  </>
+                )}
+
+                {mostrarFormTerapia && (
+                  <>
+                    <button onClick={() => setMostrarFormTerapia(false)} className="text-sm text-teal-700">
+                      ← Voltar
+                    </button>
+                    <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
+                      <select className={inputClasse} value={formTerapia.tipo} onChange={(e) => setFormTerapia({ ...formTerapia, tipo: e.target.value, outroTipo: '' })}>
+                        <option value="">tipo de terapia</option>
+                        {tiposTerapia.map((tt) => (
+                          <option key={tt} value={tt}>{tt}</option>
+                        ))}
+                      </select>
+                      {formTerapia.tipo === 'Outra (especificar)' && (
+                        <input className={inputClasse} placeholder="qual terapia?" value={formTerapia.outroTipo} onChange={(e) => setFormTerapia({ ...formTerapia, outroTipo: e.target.value })} />
+                      )}
+                      <input className={inputClasse} placeholder="frequência (ex: 2x por semana)" value={formTerapia.frequencia} onChange={(e) => setFormTerapia({ ...formTerapia, frequencia: e.target.value })} />
+                      <div>
+                        <label className="text-xs text-slate-400 mb-1 block">data de início</label>
+                        <input className={inputClasse} type="date" value={formTerapia.inicio} onChange={(e) => setFormTerapia({ ...formTerapia, inicio: e.target.value })} />
+                      </div>
+                      <div>
+                        <label className="text-xs text-slate-400 mb-1 block">data de término (deixe em branco se ainda estiver em andamento)</label>
+                        <input className={inputClasse} type="date" value={formTerapia.fim} onChange={(e) => setFormTerapia({ ...formTerapia, fim: e.target.value })} />
+                      </div>
+                      <input className={inputClasse} placeholder="profissional (opcional)" value={formTerapia.profissional} onChange={(e) => setFormTerapia({ ...formTerapia, profissional: e.target.value })} />
+                      <input className={inputClasse} placeholder="clínica/local (opcional)" value={formTerapia.local} onChange={(e) => setFormTerapia({ ...formTerapia, local: e.target.value })} />
+                      <textarea className={inputClasse} placeholder="observações (opcional)" rows={2} value={formTerapia.obs} onChange={(e) => setFormTerapia({ ...formTerapia, obs: e.target.value })} />
+                      <div className="space-y-2 rounded-xl bg-slate-50 p-3">
+                        <p className="text-xs font-bold uppercase tracking-wider text-teal-800">Datas das sessões</p>
+                        {(() => {
+                          const lista: { chave: string; id?: string; data_hora: string; lembrete: boolean; idx?: number }[] = terapiaEditandoId
+                            ? sessoesTerapia.filter((s) => s.terapia_id === terapiaEditandoId).map((s) => ({ chave: s.id, id: s.id, data_hora: s.data_hora, lembrete: s.lembrete }))
+                            : sessoesNovas.map((s, idx) => ({ chave: `n${idx}`, idx, data_hora: s.data_hora, lembrete: s.lembrete }));
+                          if (lista.length === 0) return <p className="text-xs text-slate-400">Nenhuma data adicionada.</p>;
+                          return lista.map((s) => {
+                            const d = new Date(s.data_hora);
+                            const passou = d.getTime() < Date.now();
+                            return (
+                              <div key={s.chave} className="flex items-center justify-between gap-2 rounded-lg bg-white px-3 py-2 text-sm">
+                                <span className={passou ? 'text-slate-400' : 'text-slate-800'}>
+                                  {d.toLocaleDateString('pt-BR')} às {d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                                <span className="flex items-center gap-3">
+                                  {!passou && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        if (s.id) {
+                                          const original = sessoesTerapia.find((x) => x.id === s.id);
+                                          if (original) alternarAlertaSessaoTerapia(original);
+                                        } else if (s.idx !== undefined) {
+                                          setSessoesNovas((l) => l.map((x, i) => (i === s.idx ? { ...x, lembrete: !x.lembrete } : x)));
+                                        }
+                                      }}
+                                      className={`text-xs rounded-full px-2 py-1 ${s.lembrete ? 'bg-teal-100 text-teal-800' : 'bg-slate-100 text-slate-500'}`}
+                                    >
+                                      {s.lembrete ? '🔔 alerta' : 'sem alerta'}
+                                    </button>
+                                  )}
+                                  <button
+                                    type="button"
+                                    aria-label="Remover data"
+                                    onClick={() => {
+                                      if (s.id) removerSessaoTerapia(s.id);
+                                      else if (s.idx !== undefined) setSessoesNovas((l) => l.filter((_, i) => i !== s.idx));
+                                    }}
+                                    className="text-slate-400"
+                                  >
+                                    ✕
+                                  </button>
+                                </span>
+                              </div>
+                            );
+                          });
+                        })()}
+                        <input className={inputClasse} type="datetime-local" value={novaSessaoDataHora} onChange={(e) => setNovaSessaoDataHora(e.target.value)} />
+                        <label className="flex items-center gap-2 text-sm text-slate-700">
+                          <input type="checkbox" checked={novaSessaoAlerta} onChange={(e) => setNovaSessaoAlerta(e.target.checked)} />
+                          Gerar alerta (aparece na Home até a sessão acontecer)
+                        </label>
+                        <button type="button" onClick={adicionarSessaoTerapia} disabled={!novaSessaoDataHora} className="w-full rounded-xl border border-teal-700 py-2 text-sm font-semibold text-teal-800 disabled:opacity-40">
+                          + Adicionar data
+                        </button>
+                      </div>
+                      {erroTerapia && <p className="text-sm text-red-600">{erroTerapia}</p>}
+                      <div className="flex gap-2">
+                        <button disabled={carregando} onClick={salvarTerapia} className={botaoPrimario}>
+                          {carregando ? 'Salvando...' : 'Salvar'}
+                        </button>
+                        <button onClick={() => setMostrarFormTerapia(false)} className={botaoSecundario}>
+                          Cancelar
+                        </button>
+                      </div>
+                      {terapiaEditandoId && (
+                        <button disabled={carregando} onClick={excluirTerapia} className="w-full text-sm text-red-600 pt-1">
+                          Excluir esta terapia
+                        </button>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
 
             {telaDetalhe === 'esportes' && (
               <div className="space-y-3">

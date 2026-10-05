@@ -142,6 +142,7 @@ export type Consulta = {
   incluir_ir: boolean;
   obs_financeira: string | null;
   condicao_relacionada_id: string | null;
+  lembrete?: boolean;
 };
 
 export type Exame = {
@@ -151,6 +152,7 @@ export type Exame = {
   laboratorio: string | null;
   resultado_resumo: string | null;
   condicao_relacionada_id: string | null;
+  status?: string;
 };
 
 export type Vacina = {
@@ -161,6 +163,7 @@ export type Vacina = {
   proxima_dose_data: string | null;
   observacoes: string | null;
   condicao_relacionada_id: string | null;
+  status?: string;
 };
 
 export type InformacaoNascimento = {
@@ -260,7 +263,7 @@ export type Medico = {
 };
 
 export type Passo = 'login' | 'cadastro' | 'onboarding' | 'painel';
-export type Aba = 'geral' | 'condicoes' | 'cirurgias' | 'medicacoes' | 'consultas' | 'odontologia' | 'exames' | 'vacinas' | 'nascimento' | 'menupessoal' | 'gestacao' | 'desenvolvimento' | 'alimentacaoinfantil' | 'puberdade' | 'saudemental' | 'habitosvida' | 'crescimento' | 'riscos' | 'medicos' | 'bemestar' | 'nutricionista' | 'esportes' | 'novoregistro' | 'onboardingvoz' | 'eventoresumo' | 'feedeventos';
+export type Aba = 'geral' | 'condicoes' | 'cirurgias' | 'medicacoes' | 'consultas' | 'odontologia' | 'exames' | 'vacinas' | 'nascimento' | 'menupessoal' | 'gestacao' | 'desenvolvimento' | 'alimentacaoinfantil' | 'puberdade' | 'saudemental' | 'habitosvida' | 'crescimento' | 'riscos' | 'medicos' | 'bemestar' | 'nutricionista' | 'esportes' | 'novoregistro' | 'onboardingvoz' | 'eventoresumo' | 'feedeventos' | 'terapias';
 
 // ATENÇÃO: estas são orientações gerais de rastreamento, baseadas em diretrizes conhecidas
 // (ex: sociedades de mastologia, coloproctologia, urologia, diabetes). Elas NÃO substituem
@@ -290,3 +293,40 @@ export type RiscoGenetico = {
   idadeRecomendada: number | null;
   categoria: string;
 };
+
+// Rascunhos do bloco "O médico pediu algo?" no formulário de consulta.
+export type MedRascunho = {
+  nome: string;
+  dose: string;
+  freq: string; // id de frequenciasMedicacao
+  primeira: string; // HH:MM da 1ª dose
+  inicio: string; // yyyy-mm-dd
+  duracao: string; // '5' | '7' | '10' | '14' | 'continuo' | 'data'
+  duracaoData: string;
+  como: string;
+};
+export type VacRascunho = { nome: string; outroNome: string; quando: string; quandoData: string; obs: string };
+
+export const frequenciasMedicacao: { id: string; label: string; intervaloH: number }[] = [
+  { id: '1x', label: '1x ao dia', intervaloH: 24 },
+  { id: '12h', label: '12 em 12h', intervaloH: 12 },
+  { id: '8h', label: '8 em 8h', intervaloH: 8 },
+  { id: '6h', label: '6 em 6h', intervaloH: 6 },
+  { id: 'sos', label: 'Se necessário', intervaloH: 0 },
+];
+
+export type Terapia = {
+  id: string;
+  tipo: string;
+  frequencia: string | null;
+  data_inicio: string | null;
+  data_fim: string | null;
+  profissional: string | null;
+  local: string | null;
+  observacao: string | null;
+  consulta_relacionada_id?: string | null;
+};
+export type TerapiaRascunho = { tipo: string; outroTipo: string; frequencia: string; inicio: string; fim: string; profissional: string; local: string; obs: string };
+export const tiposTerapia: string[] = ['Fisioterapia', 'Fonoaudiologia', 'Psicologia', 'Terapia Ocupacional', 'Psicopedagogia', 'Acupuntura', 'Outra (especificar)'];
+
+export type SessaoTerapia = { id: string; terapia_id: string; data_hora: string; lembrete: boolean };
