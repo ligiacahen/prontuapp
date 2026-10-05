@@ -78,6 +78,21 @@ export default function Home() {
   const [codigoConvite, setCodigoConvite] = useState('');
 
   const [codigoGerado, setCodigoGerado] = useState('');
+  // Permissões e papéis
+  type PapelUsuario = 'admin' | 'familiar' | 'cuidador';
+  type LinhaAcesso = { usuario_id: string; nome: string; email: string; papel: PapelUsuario; da_familia: boolean; membro_id: string | null; nivel_acesso: string | null };
+  type ConvitePendente = { id: string; codigo: string; papel: PapelUsuario; apelido: string | null; criado_em: string };
+  const [meuPapel, setMeuPapel] = useState<PapelUsuario | null>(null);
+  const [souDono, setSouDono] = useState(false);
+  const [meuUsuarioId, setMeuUsuarioId] = useState<string | null>(null);
+  const [linhasAcesso, setLinhasAcesso] = useState<LinhaAcesso[]>([]);
+  const [convitesPendentes, setConvitesPendentes] = useState<ConvitePendente[]>([]);
+  const [mostrarFormConvite, setMostrarFormConvite] = useState(false);
+  const [conviteApelido, setConviteApelido] = useState('');
+  const [convitePapel, setConvitePapel] = useState<PapelUsuario>('familiar');
+  const [conviteAcessos, setConviteAcessos] = useState<Record<string, string>>({});
+  const [erroAcessos, setErroAcessos] = useState('');
+  const [confirmandoRemoverId, setConfirmandoRemoverId] = useState<string | null>(null);
 
   // Menu inferior fixo: home (pendências + dicas), incluir/consultar (grade de
   // categorias — cada uma abre direto no modo certo), compartilhar (PDF) e
@@ -517,6 +532,26 @@ export default function Home() {
       supabase.auth.getUser().then(({ data }) => setContaEmail(data.user?.email || ''));
     }
   }, [passo, abaInferior]);
+
+  // Papel do usuário logado (admin / familiar / cuidador) e se é o dono da conta.
+  useEffect(() => {
+    if (passo !== 'painel') return;
+    (async () => {
+      const { data: userData } = await supabase.auth.getUser();
+      const uid = userData.user?.id;
+      if (!uid) return;
+      setMeuUsuarioId(uid);
+      const { data: u } = await supabase.from('usuario').select('papel').eq('id', uid).maybeSingle();
+      setMeuPapel((u?.papel as PapelUsuario) || 'admin');
+      const { data: f } = await supabase.from('familia').select('dono_id').maybeSingle();
+      setSouDono(!!f && f.dono_id === uid);
+    })();
+  }, [passo]);
+
+  useEffect(() => {
+    if (passo === 'painel' && abaInferior === 'configuracao' && meuPapel === 'admin') carregarAcessos();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [passo, abaInferior, meuPapel]);
 
   useEffect(() => {
     if (passo === 'painel' && abaInferior === 'home') carregarPendenciasFamiliares(membros);
@@ -1325,8 +1360,60 @@ export default function Home() {
     setSucessoConfigSenha(true);
   }
 
+  async function carregarAcessos() {
+    const { data, error } = await supabase.rpc('listar_acessos');
+    if (error) {
+      setErroAcessos(error.message);
+    } else {
+      setErroAcessos('');
+      setLinhasAcesso((data || []) as LinhaAcesso[]);
+    }
+    const { data: convs } = await supabase
+      .from('convite')
+      .select('id, codigo, papel, apelido, criado_em')
+      .is('usado_por', null)
+      .order('criado_em', { ascending: false });
+    setConvitesPendentes((convs || []) as ConvitePendente[]);
+  }
+
+  async function definirAcesso(usuarioId: string, membroId: string, nivel: string) {
+    setErroAcessos('');
+    const { error } = await supabase.rpc('definir_acesso', { p_usuario: usuarioId, p_membro: membroId, p_nivel: nivel });
+    if (error) setErroAcessos(error.message);
+    await carregarAcessos();
+  }
+
+  async function definirPapelUsuario(usuarioId: string, papel: 'admin' | 'familiar') {
+    setErroAcessos('');
+    const { error } = await supabase.rpc('definir_papel', { p_usuario: usuarioId, p_papel: papel });
+    if (error) setErroAcessos(error.message);
+    await carregarAcessos();
+  }
+
+  async function removerAcessosUsuario(usuarioId: string) {
+    setErroAcessos('');
+    const { error } = await supabase.rpc('remover_acessos', { p_usuario: usuarioId });
+    if (error) setErroAcessos(error.message);
+    setConfirmandoRemoverId(null);
+    await carregarAcessos();
+  }
+
+  async function apagarConvite(id: string) {
+    await supabase.from('convite').delete().eq('id', id);
+    await carregarAcessos();
+  }
+
+  function abrirFormConvite() {
+    setErroAcessos('');
+    setCodigoGerado('');
+    setConviteApelido('');
+    setConvitePapel('familiar');
+    setConviteAcessos({});
+    setMostrarFormConvite(true);
+  }
+
   async function gerarConvite() {
-    setErro('');
+    setErroAcessos('');
     const { data: userData } = await supabase.auth.getUser();
     const { data: meuUsuario } = await supabase
       .from('usuario')
@@ -1334,16 +1421,29 @@ export default function Home() {
       .eq('id', userData.user?.id)
       .single();
 
+    const acessos = Object.entries(conviteAcessos)
+      .filter(([, nivel]) => nivel === 'visualizar' || nivel === 'editar')
+      .map(([membro_id, nivel]) => ({ membro_id, nivel }));
+    if (convitePapel !== 'admin' && acessos.length === 0) {
+      setErroAcessos('Escolha pelo menos um membro que essa pessoa poderá ver.');
+      return;
+    }
+
     const codigo = Math.random().toString(36).substring(2, 8).toUpperCase();
 
     const { error } = await supabase.from('convite').insert({
       familia_id: meuUsuario?.familia_id,
       codigo,
       criado_por: userData.user?.id,
+      papel: convitePapel,
+      apelido: conviteApelido.trim() || null,
+      acessos: convitePapel === 'admin' ? [] : acessos,
     });
 
-    if (error) return setErro(error.message);
+    if (error) return setErroAcessos(error.message);
     setCodigoGerado(codigo);
+    setMostrarFormConvite(false);
+    await carregarAcessos();
   }
 
   async function adicionarMembro() {
@@ -3855,7 +3955,7 @@ export default function Home() {
               ))}
             </div>
 
-            {!mostrarFormMembro ? (
+            {meuPapel === 'cuidador' ? null : !mostrarFormMembro ? (
               <button onClick={() => setMostrarFormMembro(true)} className={botaoPrimario}>
                 + Adicionar membro
               </button>
@@ -4015,7 +4115,7 @@ export default function Home() {
               })()}
             </div>
 
-            {pendenciasFamiliares.filter((f) => f.membroId !== membroSelecionado?.id).length > 0 && (
+            {meuPapel === 'admin' && pendenciasFamiliares.filter((f) => f.membroId !== membroSelecionado?.id).length > 0 && (
               <div className="mt-6">
                 <button
                   onClick={() => setMostrarPendenciasFamilia((v) => !v)}
@@ -4075,6 +4175,7 @@ export default function Home() {
               </div>
             </div>
 
+            {meuPapel === 'admin' && (
             <div className="mt-8 border-t border-[#E5E1DA] pt-4">
               {!confirmandoExclusaoMembro ? (
                 <button onClick={() => setConfirmandoExclusaoMembro(true)} className="w-full text-sm text-red-600">
@@ -4097,6 +4198,7 @@ export default function Home() {
                 </div>
               )}
             </div>
+            )}
           </div>
         )}
 
@@ -4132,18 +4234,155 @@ export default function Home() {
               </button>
             </div>
 
-            <div className="space-y-2 rounded-xl border border-[#E5E1DA] p-4 text-center">
-              <p className="text-sm font-medium text-slate-800">Família</p>
-              <button onClick={gerarConvite} className="text-sm text-teal-700">
-                Convidar alguém para a família
-              </button>
-              {codigoGerado && (
-                <div className="rounded-xl bg-teal-50 border border-teal-100 p-3">
-                  <p className="text-xs text-slate-500 mb-1">Compartilhe este código:</p>
-                  <p className="text-xl font-mono font-semibold text-teal-700 tracking-widest">{codigoGerado}</p>
+            {meuPapel !== null && meuPapel !== 'admin' && (
+              <div className="space-y-1 rounded-xl border border-[#E5E1DA] p-4">
+                <p className="text-sm font-medium text-slate-800">
+                  Seu acesso: {meuPapel === 'cuidador' ? 'Cuidador(a)' : 'Familiar'}
+                </p>
+                <p className="text-xs text-slate-500">
+                  O administrador da conta escolhe quais membros você pode ver{meuPapel === 'cuidador' ? ' ou editar' : ' e editar'}. Para mudar isso, fale com ele.
+                </p>
+              </div>
+            )}
+
+            {meuPapel === 'admin' && (() => {
+              const rotuloPapel: Record<PapelUsuario, string> = { admin: 'Administrador', familiar: 'Familiar', cuidador: 'Cuidador (fora da família)' };
+              const pessoas = new Map<string, { nome: string; email: string; papel: PapelUsuario; da_familia: boolean; acessos: Record<string, string> }>();
+              for (const l of linhasAcesso) {
+                if (!pessoas.has(l.usuario_id)) pessoas.set(l.usuario_id, { nome: l.nome, email: l.email, papel: l.papel, da_familia: l.da_familia, acessos: {} });
+                if (l.membro_id && l.nivel_acesso) pessoas.get(l.usuario_id)!.acessos[l.membro_id] = l.nivel_acesso;
+              }
+              const listaPessoas = Array.from(pessoas.entries()).filter(([id]) => id !== meuUsuarioId);
+              return (
+                <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
+                  <div>
+                    <p className="text-sm font-medium text-slate-800">Acessos e convites</p>
+                    <p className="text-xs text-slate-500">
+                      Você é administrador{souDono ? ' (dono da conta)' : ''}: vê tudo da família e decide o que cada pessoa pode ver ou editar.
+                    </p>
+                  </div>
+                  {erroAcessos && <p className="rounded-lg bg-red-50 p-2 text-xs text-red-700">{erroAcessos}</p>}
+
+                  {listaPessoas.length === 0 && (
+                    <p className="text-xs text-slate-400">Ninguém além de você tem acesso ainda.</p>
+                  )}
+                  {listaPessoas.map(([id, pessoa]) => (
+                    <div key={id} className="space-y-2 rounded-xl bg-slate-50 p-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-slate-800">{pessoa.nome}</p>
+                          <p className="truncate text-xs text-slate-400">{pessoa.email}</p>
+                        </div>
+                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs ${pessoa.papel === 'admin' ? 'bg-teal-100 text-teal-800' : pessoa.papel === 'cuidador' ? 'bg-amber-100 text-amber-800' : 'bg-slate-200 text-slate-700'}`}>
+                          {rotuloPapel[pessoa.papel]}
+                        </span>
+                      </div>
+                      {pessoa.papel === 'admin' ? (
+                        <p className="text-xs text-slate-500">Acesso total a todos os membros da família.</p>
+                      ) : (
+                        <div className="space-y-1.5">
+                          {membros.map((m) => (
+                            <div key={m.id} className="flex items-center justify-between gap-2">
+                              <span className="truncate text-sm text-slate-700">{m.nome}</span>
+                              <select
+                                className="shrink-0 rounded-lg border border-[#E5E1DA] bg-white px-2 py-1 text-xs"
+                                value={pessoa.acessos[m.id] || 'nenhum'}
+                                onChange={(e) => definirAcesso(id, m.id, e.target.value)}
+                              >
+                                <option value="nenhum">sem acesso</option>
+                                <option value="visualizar">só visualizar</option>
+                                <option value="editar">visualizar e editar</option>
+                              </select>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <div className="flex flex-wrap gap-3 pt-1">
+                        {souDono && pessoa.da_familia && pessoa.papel !== 'cuidador' && (
+                          <button
+                            onClick={() => definirPapelUsuario(id, pessoa.papel === 'admin' ? 'familiar' : 'admin')}
+                            className="text-xs font-semibold text-teal-700"
+                          >
+                            {pessoa.papel === 'admin' ? 'Tirar de administrador' : 'Tornar administrador'}
+                          </button>
+                        )}
+                        {(pessoa.papel !== 'admin' || souDono) && (
+                          confirmandoRemoverId === id ? (
+                            <span className="flex items-center gap-2 text-xs">
+                              <span className="text-red-700">Remover todo o acesso?</span>
+                              <button onClick={() => removerAcessosUsuario(id)} className="font-semibold text-red-700">sim</button>
+                              <button onClick={() => setConfirmandoRemoverId(null)} className="text-slate-500">não</button>
+                            </span>
+                          ) : (
+                            <button onClick={() => setConfirmandoRemoverId(id)} className="text-xs text-red-600">Remover acessos</button>
+                          )
+                        )}
+                      </div>
+                    </div>
+                  ))}
+
+                  {convitesPendentes.length > 0 && (
+                    <div className="space-y-1.5">
+                      <p className="text-xs font-bold uppercase tracking-wider text-teal-800">Convites pendentes</p>
+                      {convitesPendentes.map((c) => (
+                        <div key={c.id} className="flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2 text-sm">
+                          <span className="min-w-0 truncate">
+                            <span className="font-mono font-semibold tracking-widest text-teal-700">{c.codigo}</span>
+                            <span className="text-xs text-slate-500"> · {c.apelido || rotuloPapel[c.papel]}</span>
+                          </span>
+                          <button onClick={() => apagarConvite(c.id)} aria-label="Cancelar convite" className="shrink-0 text-xs text-red-600">cancelar</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {codigoGerado && !mostrarFormConvite && (
+                    <div className="rounded-xl border border-teal-100 bg-teal-50 p-3 text-center">
+                      <p className="mb-1 text-xs text-slate-500">Compartilhe este código (a pessoa usa ao criar a conta):</p>
+                      <p className="font-mono text-xl font-semibold tracking-widest text-teal-700">{codigoGerado}</p>
+                    </div>
+                  )}
+
+                  {!mostrarFormConvite ? (
+                    <button onClick={abrirFormConvite} className={botaoPrimario}>+ Convidar alguém</button>
+                  ) : (
+                    <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-3">
+                      <input className={inputClasse} placeholder="nome ou apelido (ex: Babá Maria)" value={conviteApelido} onChange={(e) => setConviteApelido(e.target.value)} />
+                      <select className={inputClasse} value={convitePapel} onChange={(e) => setConvitePapel(e.target.value as PapelUsuario)}>
+                        <option value="familiar">Familiar (entra na família)</option>
+                        <option value="cuidador">Cuidador(a) (não entra na família)</option>
+                        {souDono && <option value="admin">Administrador (acesso total)</option>}
+                      </select>
+                      {convitePapel === 'admin' ? (
+                        <p className="text-xs text-slate-500">Administradores veem e editam todos os membros e podem convidar e gerenciar acessos.</p>
+                      ) : (
+                        <div className="space-y-1.5">
+                          <p className="text-xs text-slate-500">Quem essa pessoa poderá acessar:</p>
+                          {membros.map((m) => (
+                            <div key={m.id} className="flex items-center justify-between gap-2">
+                              <span className="truncate text-sm text-slate-700">{m.nome}</span>
+                              <select
+                                className="shrink-0 rounded-lg border border-[#E5E1DA] bg-white px-2 py-1 text-xs"
+                                value={conviteAcessos[m.id] || 'nenhum'}
+                                onChange={(e) => setConviteAcessos((a) => ({ ...a, [m.id]: e.target.value }))}
+                              >
+                                <option value="nenhum">sem acesso</option>
+                                <option value="visualizar">só visualizar</option>
+                                <option value="editar">visualizar e editar</option>
+                              </select>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <div className="flex gap-2">
+                        <button onClick={gerarConvite} className={botaoPrimario}>Gerar código</button>
+                        <button onClick={() => setMostrarFormConvite(false)} className={botaoSecundario}>Cancelar</button>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
+              );
+            })()}
 
             <button onClick={sair} className="block w-full text-sm text-slate-400">
               Sair da conta
