@@ -153,6 +153,7 @@ export type Exame = {
   resultado_resumo: string | null;
   condicao_relacionada_id: string | null;
   status?: string;
+  consulta_relacionada_id?: string | null;
 };
 
 export type Vacina = {
@@ -164,6 +165,7 @@ export type Vacina = {
   observacoes: string | null;
   condicao_relacionada_id: string | null;
   status?: string;
+  consulta_relacionada_id?: string | null;
 };
 
 export type InformacaoNascimento = {
@@ -303,6 +305,7 @@ export type MedRascunho = {
   inicio: string; // yyyy-mm-dd
   duracao: string; // '5' | '7' | '10' | '14' | 'continuo' | 'data'
   duracaoData: string;
+  duracaoDias: string; // usado quando duracao === 'dias'
   como: string;
 };
 export type VacRascunho = { nome: string; outroNome: string; quando: string; quandoData: string; obs: string };
@@ -326,7 +329,7 @@ export type Terapia = {
   observacao: string | null;
   consulta_relacionada_id?: string | null;
 };
-export type TerapiaRascunho = { tipo: string; outroTipo: string; frequencia: string; inicio: string; fim: string; profissional: string; local: string; obs: string };
+export type TerapiaRascunho = { tipo: string; outroTipo: string; frequencia: string; inicio: string; fim: string; profissional: string; local: string; obs: string; sessoes?: { data_hora: string; lembrete: boolean }[]; novaSessao?: string; novaSessaoAlerta?: boolean };
 export const tiposTerapia: string[] = ['Fisioterapia', 'Fonoaudiologia', 'Psicologia', 'Terapia Ocupacional', 'Psicopedagogia', 'Acupuntura', 'Outra (especificar)'];
 
 export type SessaoTerapia = { id: string; terapia_id: string; data_hora: string; lembrete: boolean };

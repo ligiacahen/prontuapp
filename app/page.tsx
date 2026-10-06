@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, type ReactNode, type CSSProperties } from 'react';
 import { supabase } from './supabaseClient';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import type {
@@ -64,6 +64,43 @@ import {
   calcularRiscosGeneticos,
 } from './utils';
 
+
+// Ícones de linha (substituem os emojis pequenos espalhados pela tela).
+const caminhosIcone: Record<string, ReactNode> = {
+  mic: <><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" y1="19" x2="12" y2="23" /></>,
+  nota: <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="8" y1="13" x2="16" y2="13" /><line x1="8" y1="17" x2="16" y2="17" /></>,
+  editar: <><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></>,
+  lampada: <><path d="M9 18h6" /><path d="M10 22h4" /><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.2 1 2V17h6v-.3c0-.8.4-1.5 1-2A7 7 0 0 0 12 2z" /></>,
+  cal: <><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></>,
+  pilula: <><path d="M10.5 20.5a5 5 0 0 1-7-7l10-10a5 5 0 0 1 7 7z" /><line x1="8.5" y1="8.5" x2="15.5" y2="15.5" /></>,
+  exame: <><path d="M9 2v6L4 19a2 2 0 0 0 1.8 3h12.4a2 2 0 0 0 1.8-3L15 8V2" /><line x1="8" y1="2" x2="16" y2="2" /></>,
+  vacina: <><path d="M18 2l4 4" /><path d="M17 7l3-3" /><path d="M19 9l-7.5 7.5-4-4L15 5z" /><path d="M5 19l3.5-3.5" /><path d="M2 22l3-3" /></>,
+  grafico: <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />,
+  prancheta: <><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" /><rect x="8" y="2" width="8" height="4" rx="1" /></>,
+  mais: <><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></>,
+  info: <><circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" /></>,
+  alerta: <><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></>,
+  sino: <><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" /></>,
+  impressora: <><polyline points="6 9 6 2 18 2 18 9" /><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" /><rect x="6" y="14" width="12" height="8" /></>,
+  relogio: <><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></>,
+  spark: <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z" />,
+};
+function Ic({ n, size = 14 }: { n: string; size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ display: 'inline-block', verticalAlign: '-2px', marginRight: 4 }}>
+      {caminhosIcone[n]}
+    </svg>
+  );
+}
+// Lupa embutida no campo de busca (os placeholders não aceitam ícone).
+const estiloBusca: CSSProperties = {
+  backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E\")",
+  backgroundRepeat: 'no-repeat',
+  backgroundPosition: '12px center',
+  backgroundSize: '16px',
+  paddingLeft: 36,
+};
+
 export default function Home() {
   const [passo, setPasso] = useState<Passo>('login');
   const [carregando, setCarregando] = useState(false);
@@ -112,7 +149,9 @@ export default function Home() {
     anamnese: true,
   });
   const [mostrarResumoImpressao, setMostrarResumoImpressao] = useState(false);
-  const [pendenciasFamiliares, setPendenciasFamiliares] = useState<{ membroId: string; membroNome: string; itens: { id: string; tipo: 'consulta' | 'vacina' | 'medicacao' | 'exame' | 'terapia'; titulo: string; detalhe: string; refId?: string }[] }[]>([]);
+  const [pendenciasFamiliares, setPendenciasFamiliares] = useState<{ membroId: string; membroNome: string; itens: { id: string; tipo: 'consulta' | 'vacina' | 'medicacao' | 'exame' | 'terapia'; titulo: string; detalhe: string; refId?: string; quando?: string }[] }[]>([]);
+  const [mostrarAvisos, setMostrarAvisos] = useState(false);
+  const [avisoDest, setAvisoDest] = useState<{ usuario_id: string; membro_id: string; recebe: boolean }[]>([]);
 
   const [contaEmail, setContaEmail] = useState('');
   const [novaSenhaConfig, setNovaSenhaConfig] = useState('');
@@ -201,7 +240,7 @@ export default function Home() {
   const [novoMotivoConsulta, setNovoMotivoConsulta] = useState('');
   const [novoStatusConsulta, setNovoStatusConsulta] = useState('agendada');
   const [novoLembreteConsulta, setNovoLembreteConsulta] = useState(false);
-  const medVazia = (): MedRascunho => ({ nome: '', dose: '', freq: '8h', primeira: '08:00', inicio: new Date().toISOString().slice(0, 10), duracao: '7', duracaoData: '', como: '' });
+  const medVazia = (): MedRascunho => ({ nome: '', dose: '', freq: '8h', primeira: '08:00', inicio: new Date().toISOString().slice(0, 10), duracao: '7', duracaoData: '', duracaoDias: '', como: '' });
   const vacVazia = (): VacRascunho => ({ nome: '', outroNome: '', quando: 'mes', quandoData: '', obs: '' });
   const [medsConsulta, setMedsConsulta] = useState<MedRascunho[]>([]);
   const [examesConsulta, setExamesConsulta] = useState<string[]>([]);
@@ -212,8 +251,10 @@ export default function Home() {
   const [exLembreteConsulta, setExLembreteConsulta] = useState(true);
   const [vacsConsulta, setVacsConsulta] = useState<VacRascunho[]>([]);
   const [vacLembreteConsulta, setVacLembreteConsulta] = useState(true);
-  const terapiaVazia = (): TerapiaRascunho => ({ tipo: '', outroTipo: '', frequencia: '', inicio: new Date().toISOString().slice(0, 10), fim: '', profissional: '', local: '', obs: '' });
+  const terapiaVazia = (): TerapiaRascunho => ({ tipo: '', outroTipo: '', frequencia: '', inicio: new Date().toISOString().slice(0, 10), fim: '', profissional: '', local: '', obs: '', sessoes: [], novaSessao: '', novaSessaoAlerta: true });
   const [terapiasConsulta, setTerapiasConsulta] = useState<TerapiaRascunho[]>([]);
+  const [anexosNovosConsulta, setAnexosNovosConsulta] = useState<File[]>([]);
+  const [anexosConsulta, setAnexosConsulta] = useState<{ id: string; caminho: string; nome: string | null; url: string | null }[]>([]);
   const [terapias, setTerapias] = useState<Terapia[]>([]);
   const [mostrarFormTerapia, setMostrarFormTerapia] = useState(false);
   const [terapiaEditandoId, setTerapiaEditandoId] = useState<string | null>(null);
@@ -549,12 +590,12 @@ export default function Home() {
   }, [passo]);
 
   useEffect(() => {
-    if (passo === 'painel' && abaInferior === 'configuracao' && meuPapel === 'admin') carregarAcessos();
+    if (passo === 'painel' && abaInferior === 'configuracao' && meuPapel === 'admin') { carregarAcessos(); carregarAvisoDest(); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [passo, abaInferior, meuPapel]);
 
   useEffect(() => {
-    if (passo === 'painel' && abaInferior === 'home') carregarPendenciasFamiliares(membros);
+    if (passo === 'painel' && abaInferior === 'home') { carregarPendenciasFamiliares(membros); carregarAvisoDest(); }
   }, [passo, abaInferior, membros]);
 
   // Sempre que a tela muda (incluindo cada passo do onboarding), volta pro topo.
@@ -646,7 +687,7 @@ export default function Home() {
   async function carregarExames(membroId: string) {
     const { data, error } = await supabase
       .from('exame')
-      .select('id, nome, data_realizacao, laboratorio, resultado_resumo, condicao_relacionada_id, status')
+      .select('id, nome, data_realizacao, laboratorio, resultado_resumo, condicao_relacionada_id, status, consulta_relacionada_id')
       .eq('membro_id', membroId)
       .order('data_realizacao', { ascending: false });
     if (!error && data && membroAtualRef.current === membroId) setExames(data);
@@ -655,7 +696,7 @@ export default function Home() {
   async function carregarVacinas(membroId: string) {
     const { data, error } = await supabase
       .from('vacina')
-      .select('id, nome, dose, data_aplicacao, proxima_dose_data, observacoes, condicao_relacionada_id, status')
+      .select('id, nome, dose, data_aplicacao, proxima_dose_data, observacoes, condicao_relacionada_id, status, consulta_relacionada_id')
       .eq('membro_id', membroId)
       .order('data_aplicacao', { ascending: false });
     if (!error && data && membroAtualRef.current === membroId) setVacinas(data);
@@ -1297,9 +1338,16 @@ export default function Home() {
   async function cadastrar() {
     setErro('');
     setCarregando(true);
-    const { error } = await supabase.auth.signUp({ email, password: senha });
+    // Garante que nenhuma sessão antiga (de outra conta) continue ativa durante o cadastro —
+    // senão o app pode achar que a conta nova já tem família e pular o passo do código de convite.
+    await supabase.auth.signOut();
+    const { data, error } = await supabase.auth.signUp({ email, password: senha });
     setCarregando(false);
     if (error) return setErro(error.message);
+    if (!data.session) {
+      setErro('Conta criada! Confirme o e-mail que enviamos e depois entre com seu e-mail e senha para continuar.');
+      return;
+    }
     await verificarFamilia();
   }
 
@@ -1767,6 +1815,8 @@ export default function Home() {
 
   function abrirNovaConsulta(especialidadePadrao: string = '') {
     setConsultaEditandoId(null);
+    setAnexosNovosConsulta([]);
+    setAnexosConsulta([]);
     setNovaEspecialidadeConsulta(especialidadePadrao);
     setEspecialidadeOutroConsulta('');
     setNovoProfissionalConsulta('');
@@ -1814,6 +1864,9 @@ export default function Home() {
     setNovoMotivoConsulta(c.motivo || '');
     setNovoStatusConsulta(c.status === 'cancelada' ? 'cancelada' : 'agendada');
     setNovoLembreteConsulta(c.lembrete || false);
+    setAnexosNovosConsulta([]);
+    setAnexosConsulta([]);
+    carregarAnexosConsulta(c.id);
     setMedsConsulta([]);
     setExamesConsulta([]);
     setExameNovoConsulta('');
@@ -1837,6 +1890,68 @@ export default function Home() {
     setMostrarFormConsulta(true);
   }
 
+  // Data de término de uma medicação gerada na consulta. N dias contam o dia de início
+  // (3 dias a partir de 06/10 terminam em 08/10). Uso contínuo = sem data de término.
+  function dataFimMedicacao(m: MedRascunho, inicio: string): string | null {
+    if (m.duracao === 'continuo') return null;
+    if (m.duracao === 'data') return m.duracaoData || null;
+    const dias = m.duracao === 'dias' ? Number(m.duracaoDias) : Number(m.duracao);
+    if (!dias || dias < 1) return null;
+    return somarDias(inicio, dias - 1);
+  }
+
+  // Itens (medicação, exames, vacinas, terapias) registrados a partir de uma consulta.
+  function itensDaConsulta(consultaId: string) {
+    return {
+      meds: medicacoes.filter((m) => m.consulta_relacionada_id === consultaId),
+      exames: exames.filter((e) => e.consulta_relacionada_id === consultaId),
+      vacinas: vacinas.filter((v) => v.consulta_relacionada_id === consultaId),
+      terapias: terapias.filter((t) => t.consulta_relacionada_id === consultaId),
+    };
+  }
+
+  async function carregarAnexosConsulta(consultaId: string) {
+    const { data } = await supabase
+      .from('consulta_anexo')
+      .select('id, caminho, nome')
+      .eq('consulta_id', consultaId)
+      .order('criado_em', { ascending: true });
+    const lista = (data || []) as { id: string; caminho: string; nome: string | null }[];
+    const comUrl = await Promise.all(lista.map(async (a) => {
+      const { data: u } = await supabase.storage.from('anexos-consulta').createSignedUrl(a.caminho, 3600);
+      return { ...a, url: u?.signedUrl || null };
+    }));
+    setAnexosConsulta(comUrl);
+  }
+
+  function escolherAnexosConsulta(arquivos: FileList | null) {
+    if (!arquivos) return;
+    const validos: File[] = [];
+    for (const f of Array.from(arquivos)) {
+      if (!(f.type.startsWith('image/') || f.type === 'application/pdf')) { setErroConsulta('Anexe apenas fotos ou PDF.'); continue; }
+      if (f.size > 10 * 1024 * 1024) { setErroConsulta('Cada arquivo deve ter no máximo 10MB.'); continue; }
+      validos.push(f);
+    }
+    if (validos.length) setAnexosNovosConsulta((l) => [...l, ...validos]);
+  }
+
+  async function enviarAnexosConsulta(consultaId: string, membroId: string) {
+    for (const arquivo of anexosNovosConsulta) {
+      const ext = (arquivo.name.split('.').pop() || 'jpg').toLowerCase();
+      const caminho = `${membroId}/${consultaId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+      const { error: erroUp } = await supabase.storage.from('anexos-consulta').upload(caminho, arquivo);
+      if (erroUp) throw new Error('Não consegui enviar o anexo: ' + erroUp.message);
+      const { error } = await supabase.from('consulta_anexo').insert({ consulta_id: consultaId, membro_id: membroId, caminho, nome: arquivo.name });
+      if (error) throw error;
+    }
+  }
+
+  async function excluirAnexoConsulta(a: { id: string; caminho: string }) {
+    await supabase.storage.from('anexos-consulta').remove([a.caminho]);
+    await supabase.from('consulta_anexo').delete().eq('id', a.id);
+    setAnexosConsulta((l) => l.filter((x) => x.id !== a.id));
+  }
+
   async function salvarConsulta() {
     setErroConsulta('');
     const nomeEspecialidadeFinal =
@@ -1846,6 +1961,18 @@ export default function Home() {
       return;
     }
     if (!membroSelecionado) return;
+    // Valida as medicações ANTES de salvar qualquer coisa, para nunca virar "uso contínuo" sem querer.
+    for (const m of medsConsulta) {
+      if (!m.nome.trim()) continue;
+      if (m.duracao === 'data' && !m.duracaoData) {
+        setErroConsulta(`Informe a data de término de ${m.nome.trim()} (ou escolha outra duração).`);
+        return;
+      }
+      if (m.duracao === 'dias' && !(Number(m.duracaoDias) >= 1)) {
+        setErroConsulta(`Informe por quantos dias usar ${m.nome.trim()}.`);
+        return;
+      }
+    }
     setCarregando(true);
     try {
       const { data: userData } = await supabase.auth.getUser();
@@ -1898,6 +2025,8 @@ export default function Home() {
         consultaIdSalva = criada?.id || null;
       }
 
+      if (consultaIdSalva && anexosNovosConsulta.length) await enviarAnexosConsulta(consultaIdSalva, membroSelecionado.id);
+
       // Itens gerados pela consulta ("O médico pediu algo?")
       const dataConsultaISO = novaDataHoraConsulta.slice(0, 10);
       const condicaoLigada = novaCondicaoRelacionadaConsulta || null;
@@ -1906,7 +2035,7 @@ export default function Home() {
         const f = frequenciasMedicacao.find((x) => x.id === m.freq);
         const horarios = f ? calcularHorariosMedicacao(m.primeira, f.intervaloH) : [];
         const inicio = m.inicio || dataConsultaISO;
-        const dataFim = m.duracao === 'continuo' ? null : m.duracao === 'data' ? (m.duracaoData || null) : somarDias(inicio, Number(m.duracao));
+        const dataFim = dataFimMedicacao(m, inicio);
         const { error } = await supabase.from('medicacao').insert({
           membro_id: membroSelecionado.id,
           nome: m.nome.trim(),
@@ -1944,7 +2073,7 @@ export default function Home() {
       for (const t of terapiasConsulta) {
         const tipoFinal = t.tipo === 'Outra (especificar)' ? t.outroTipo.trim() : t.tipo;
         if (!tipoFinal) continue;
-        const { error } = await supabase.from('terapia').insert({
+        const { data: terCriada, error } = await supabase.from('terapia').insert({
           membro_id: membroSelecionado.id,
           tipo: tipoFinal,
           frequencia: t.frequencia.trim() || null,
@@ -1955,8 +2084,15 @@ export default function Home() {
           observacao: t.obs.trim() || null,
           consulta_relacionada_id: consultaIdSalva,
           condicao_relacionada_id: condicaoLigada,
-        });
+        }).select('id').single();
         if (error) throw error;
+        const sessoesT = (t.sessoes || []).filter((x) => x.data_hora);
+        if (terCriada && sessoesT.length > 0) {
+          const { error: erroSes } = await supabase.from('sessao_terapia').insert(
+            sessoesT.map((x) => ({ membro_id: membroSelecionado.id, terapia_id: terCriada.id, data_hora: x.data_hora, lembrete: x.lembrete }))
+          );
+          if (erroSes) throw erroSes;
+        }
       }
       for (const v of vacsConsulta) {
         const nomeVac = v.nome === 'Outra (especificar)' ? v.outroNome.trim() : v.nome;
@@ -1980,6 +2116,43 @@ export default function Home() {
         if (error) throw error;
       }
 
+      // Retorno vira uma consulta agendada de verdade (com lembrete), ligada a esta consulta.
+      if (consultaIdSalva && novoStatusConsulta !== 'cancelada') {
+        const { data: retornoExistente } = await supabase
+          .from('consulta')
+          .select('id, data_hora, status')
+          .eq('retorno_de_consulta_id', consultaIdSalva)
+          .maybeSingle();
+        if (novaDataRetornoConsulta) {
+          if (!retornoExistente) {
+            const { error } = await supabase.from('consulta').insert({
+              membro_id: membroSelecionado.id,
+              origem_agendamento: 'manual',
+              especialidade_id: especialidadeId,
+              profissional_id: profissionalId,
+              data_hora: `${novaDataRetornoConsulta}T09:00`,
+              local: novoLocalConsulta || null,
+              motivo: 'Retorno',
+              status: 'agendada',
+              lembrete: true,
+              condicao_relacionada_id: condicaoLigada,
+              retorno_de_consulta_id: consultaIdSalva,
+            });
+            if (error) throw error;
+          } else if (retornoExistente.status === 'agendada' && String(retornoExistente.data_hora).slice(0, 10) !== novaDataRetornoConsulta) {
+            const horaAtual = String(retornoExistente.data_hora).slice(11, 16) || '09:00';
+            const { error } = await supabase.from('consulta')
+              .update({ data_hora: `${novaDataRetornoConsulta}T${horaAtual}` })
+              .eq('id', retornoExistente.id);
+            if (error) throw error;
+          }
+        } else if (retornoExistente && retornoExistente.status === 'agendada') {
+          await supabase.from('consulta').delete().eq('id', retornoExistente.id);
+        }
+      }
+
+      setAnexosNovosConsulta([]);
+      setAnexosConsulta([]);
       setConsultaEditandoId(null);
       setNovaEspecialidadeConsulta('');
       setEspecialidadeOutroConsulta('');
@@ -2013,7 +2186,7 @@ export default function Home() {
       if (medsConsulta.length) await carregarMedicacoes(membroSelecionado.id);
       if (examesConsulta.length) await carregarExames(membroSelecionado.id);
       if (vacsConsulta.length) await carregarVacinas(membroSelecionado.id);
-      if (terapiasConsulta.length) await carregarTerapias(membroSelecionado.id);
+      if (terapiasConsulta.length) { await carregarTerapias(membroSelecionado.id); await carregarSessoesTerapia(membroSelecionado.id); }
       if (voltarResumoEventoId) {
         setCondicaoResumoId(voltarResumoEventoId);
         setVoltarResumoEventoId(null);
@@ -3053,7 +3226,7 @@ export default function Home() {
   // dose de vacina prevista, e medicação de uso contínuo com horário cadastrado.
   // Usa os dados que já estão carregados em `consultas`/`vacinas`/`medicacoes` —
   // não faz nenhuma busca nova no banco.
-  type ItemPendencia = { id: string; tipo: 'consulta' | 'vacina' | 'medicacao' | 'exame' | 'terapia'; titulo: string; detalhe: string; refId?: string };
+  type ItemPendencia = { id: string; tipo: 'consulta' | 'vacina' | 'medicacao' | 'exame' | 'terapia'; titulo: string; detalhe: string; refId?: string; quando?: string };
   function iconePendencia(tipo: ItemPendencia['tipo']) {
     const props = { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: '#0F766E', strokeWidth: 2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
     switch (tipo) {
@@ -3151,6 +3324,7 @@ export default function Home() {
         tipo: 'medicacao',
         titulo: `Medicação: ${m.nome}`,
         detalhe: m.horario ? `hoje às ${m.horario}` : 'uso contínuo',
+        quando: m.data_fim || undefined,
       });
     }
 
@@ -3205,6 +3379,51 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [alvoPendencia, membroSelecionado?.id, consultas, medicacoes, exames, vacinas, terapias]);
 
+  function dataLocalISO(d: Date): string {
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const dia = String(d.getDate()).padStart(2, '0');
+    return `${d.getFullYear()}-${m}-${dia}`;
+  }
+
+  // ---- Avisos (sino) ----
+  async function carregarAvisoDest() {
+    const { data } = await supabase.from('aviso_destinatario').select('usuario_id, membro_id, recebe');
+    setAvisoDest((data || []) as { usuario_id: string; membro_id: string; recebe: boolean }[]);
+  }
+  function recebeAviso(usuarioId: string | null, membroId: string): boolean {
+    if (!usuarioId) return true;
+    const linha = avisoDest.find((a) => a.usuario_id === usuarioId && a.membro_id === membroId);
+    return linha ? linha.recebe : true;
+  }
+  async function definirRecebeAviso(usuarioId: string, membroId: string, recebe: boolean) {
+    setAvisoDest((l) => [...l.filter((a) => !(a.usuario_id === usuarioId && a.membro_id === membroId)), { usuario_id: usuarioId, membro_id: membroId, recebe }]);
+    await supabase.from('aviso_destinatario').upsert({ usuario_id: usuarioId, membro_id: membroId, recebe }, { onConflict: 'usuario_id,membro_id' });
+  }
+  // Avisos de hoje: o que é para hoje/amanhã (ou já passou do prazo), dos membros que EU recebo.
+  function obterAvisos() {
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    const limite = new Date(hoje);
+    limite.setDate(limite.getDate() + 2);
+    const hojeStr = dataLocalISO(hoje);
+    const limiteStr = dataLocalISO(limite);
+    const lista: { chave: string; membroId: string; membroNome: string; item: ItemPendencia; rotulo: string; atrasado: boolean }[] = [];
+    for (const f of pendenciasFamiliares) {
+      if (!recebeAviso(meuUsuarioId, f.membroId)) continue;
+      for (const p of f.itens) {
+        if (!p.quando) continue;
+        if (p.quando >= limiteStr) continue;
+        const dias = Math.round((new Date(p.quando + 'T00:00:00').getTime() - hoje.getTime()) / 86400000);
+        const atrasado = p.quando < hojeStr;
+        if (atrasado && (p.tipo === 'consulta' || p.tipo === 'terapia' || p.tipo === 'medicacao')) continue;
+        let rotulo = dias === 0 ? 'hoje' : dias === 1 ? 'amanhã' : atrasado ? `atrasado há ${-dias} dia${-dias > 1 ? 's' : ''}` : `em ${dias} dias`;
+        if (p.tipo === 'medicacao') rotulo = `termina ${rotulo}`;
+        lista.push({ chave: p.id, membroId: f.membroId, membroNome: f.membroNome, item: p, rotulo, atrasado });
+      }
+    }
+    return lista.sort((a, b) => (a.item.quando || '').localeCompare(b.item.quando || ''));
+  }
+
   // Pendências de TODA a família, mostradas na Home (diferente de obterPendencias(),
   // que só olha o membro selecionado e os dados já carregados no estado). Como esse
   // resumo precisa dos dados de todo mundo — não só de quem está selecionado agora —
@@ -3242,6 +3461,7 @@ export default function Home() {
         tipo: 'consulta',
         titulo: `Consulta: ${c.especialidade?.nome || 'a confirmar'}${c.profissional_saude?.nome ? ' — ' + c.profissional_saude.nome : ''}`,
         detalhe: `${new Date(c.data_hora).toLocaleDateString('pt-BR')}${c.local ? ' · ' + c.local : ''}`,
+        quando: dataLocalISO(new Date(c.data_hora)),
       });
     });
     (vacinasData || []).forEach((v: any) => {
@@ -3251,6 +3471,7 @@ export default function Home() {
         tipo: 'vacina',
         titulo: `Vacina: ${v.nome}${v.dose ? ' — ' + v.dose : ''}`,
         detalhe: `próxima dose: ${formatarData(v.proxima_dose_data)}`,
+        quando: v.proxima_dose_data,
       });
     });
     (examesData || []).forEach((e: any) => {
@@ -3260,6 +3481,7 @@ export default function Home() {
         tipo: 'exame',
         titulo: `Exame: ${e.nome}`,
         detalhe: `fazer até ${formatarData(e.data_realizacao)}`,
+        quando: e.data_realizacao,
       });
     });
     (vacinasIndData || []).forEach((v: any) => {
@@ -3269,6 +3491,7 @@ export default function Home() {
         tipo: 'vacina',
         titulo: `Vacina indicada: ${v.nome}`,
         detalhe: `tomar em ${formatarData(v.data_aplicacao)}`,
+        quando: v.data_aplicacao,
       });
     });
     (medicacoesData || []).filter((m: any) => !m.data_fim || m.data_fim >= hojeStr).forEach((m: any) => {
@@ -3292,6 +3515,7 @@ export default function Home() {
         tipo: 'terapia',
         titulo: `Terapia: ${t.tipo}`,
         detalhe: textoProximasSessoes(sessoesPorTerapia[t.id] || []) || t.frequencia || 'em andamento',
+        quando: (sessoesPorTerapia[t.id] || []).map((d) => new Date(d)).filter((d) => d.getTime() >= hoje.getTime()).sort((a, b) => a.getTime() - b.getTime()).map(dataLocalISO)[0],
       });
     });
 
@@ -3307,6 +3531,7 @@ export default function Home() {
   // elas, com uma explicação rápida e opção de pular.
   const passosOnboarding: { aba: Aba; titulo: string; explicacao: string }[] = [
     { aba: 'nascimento', titulo: 'Dados pessoais', explicacao: 'Confira os dados básicos e complete o que quiser: tipo sanguíneo, parentesco, alergias e observações gerais.' },
+    { aba: 'gestacao', titulo: 'Gestação e Nascimento', explicacao: 'Pré-natal, tipo de parto, semanas de gestação, Apgar e intercorrências. Pule se não souber agora.' },
     { aba: 'condicoes', titulo: 'Evento de Saúde', explicacao: 'Registre doenças ou condições de saúde que esta pessoa já teve ou tem atualmente.' },
     { aba: 'cirurgias', titulo: 'Cirurgia/Internação', explicacao: 'Registre cirurgias ou internações pelas quais esta pessoa já passou.' },
     { aba: 'consultas', titulo: 'Consultas', explicacao: 'Registre consultas médicas já feitas ou marcadas para esta pessoa.' },
@@ -3335,6 +3560,7 @@ export default function Home() {
     setMostrarFormExame(false);
     setMostrarFormVacina(false);
     setMostrarFormCrescimento(false);
+    setMostrarFormNascimento(false);
     setOnboardingPasso(novoIndex);
     setTelaDetalhe(passosOnboarding[novoIndex].aba);
   }
@@ -3364,7 +3590,7 @@ export default function Home() {
   // listar tudo junto, ordenado por data, colorido por tipo e filtrável.
   type EventoFeed = {
     id: string;
-    categoria: 'doenca' | 'cirurgia' | 'medicamento' | 'consulta' | 'odontologia' | 'exame' | 'vacina' | 'crescimento';
+    categoria: 'doenca' | 'cirurgia' | 'medicamento' | 'consulta' | 'odontologia' | 'exame' | 'vacina' | 'crescimento' | 'atividade' | 'terapia';
     titulo: string;
     subtitulo: string | null;
     data: string | null; // formato YYYY-MM-DD, pode ser null se o evento não tiver data
@@ -3381,6 +3607,8 @@ export default function Home() {
     exame: { label: 'Exame', cor: 'bg-purple-100 text-purple-700 border-purple-200' },
     vacina: { label: 'Vacina', cor: 'bg-orange-100 text-orange-700 border-orange-200' },
     crescimento: { label: 'Peso e Crescimento', cor: 'bg-slate-200 text-slate-700 border-slate-300' },
+    atividade: { label: 'Atividade Física', cor: 'bg-lime-100 text-lime-700 border-lime-200' },
+    terapia: { label: 'Terapia', cor: 'bg-pink-100 text-pink-700 border-pink-200' },
   };
 
   function obterEventosBrutos(): EventoFeed[] {
@@ -3471,6 +3699,30 @@ export default function Home() {
         data: m.data_medicao,
         medico: null,
         aba: 'crescimento',
+      });
+    }
+
+    for (const a of atividadesFisicas) {
+      eventos.push({
+        id: `atividade-${a.id}`,
+        categoria: 'atividade',
+        titulo: a.nome_atividade,
+        subtitulo: a.frequencia ?? a.local ?? null,
+        data: a.data_inicio,
+        medico: null,
+        aba: 'esportes',
+      });
+    }
+
+    for (const t of terapias) {
+      eventos.push({
+        id: `terapia-${t.id}`,
+        categoria: 'terapia',
+        titulo: t.tipo,
+        subtitulo: t.frequencia ?? t.local ?? null,
+        data: t.data_inicio,
+        medico: t.profissional,
+        aba: 'terapias',
       });
     }
 
@@ -3618,7 +3870,7 @@ export default function Home() {
         <div className="mb-6 flex items-center justify-between print:hidden">
           <button onClick={() => setMostrarResumoImpressao(false)} className="text-sm text-teal-700">← Voltar</button>
           <button onClick={() => window.print()} className="rounded-xl bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700">
-            🖨️ Imprimir / Salvar PDF
+            <Ic n="impressora" /> Imprimir / Salvar PDF
           </button>
         </div>
 
@@ -4029,17 +4281,58 @@ export default function Home() {
               </button>
               <div className="flex items-center gap-3">
                 <button
-                  aria-label="Notificações"
-                  title="Notificações (em breve)"
-                  className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400"
+                  onClick={() => { setMostrarAvisos((v) => !v); setMostrarMenuPessoal(false); }}
+                  aria-label="Avisos"
+                  aria-expanded={mostrarAvisos}
+                  className="relative flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 hover:bg-[#FAFAF8] hover:text-slate-700"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
                     <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
                     <path d="M13.73 21a2 2 0 0 1-3.46 0" />
                   </svg>
+                  {obterAvisos().length > 0 && (
+                    <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-semibold text-white">{obterAvisos().length}</span>
+                  )}
                 </button>
               </div>
             </div>
+
+            {mostrarAvisos && (() => {
+              const avisos = obterAvisos();
+              return (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setMostrarAvisos(false)} />
+                  <div className="absolute right-0 top-10 z-50 w-[92%] max-w-sm overflow-hidden rounded-xl border border-[#E5E1DA] bg-white shadow-lg">
+                    <p className="border-b border-[#F2F0EC] px-4 py-3 text-sm font-semibold text-slate-800">Avisos</p>
+                    {avisos.length === 0 && <p className="px-4 py-4 text-sm text-slate-400">Nada para hoje ou amanhã.</p>}
+                    {avisos.map((a) => (
+                      <button
+                        key={a.chave}
+                        onClick={() => { setMostrarAvisos(false); abrirPendencia(a.item, a.membroId); }}
+                        className="flex w-full items-center gap-3 border-b border-[#F2F0EC] px-4 py-3 text-left last:border-b-0 hover:bg-[#FAFAF8]"
+                      >
+                        <span className="shrink-0">{iconePendencia(a.item.tipo)}</span>
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-medium text-slate-800">{a.item.titulo}</span>
+                          <span className="block truncate text-xs text-slate-400">{a.membroNome} · <span className={a.atrasado ? 'font-semibold text-red-600' : ''}>{a.rotulo}</span></span>
+                        </span>
+                      </button>
+                    ))}
+                    {membros.length > 0 && (
+                      <div className="space-y-1.5 border-t border-[#E5E1DA] bg-[#FAFAF8] px-4 py-3">
+                        <p className="text-xs font-semibold text-slate-500">Receber avisos de:</p>
+                        {membros.map((m) => (
+                          <label key={m.id} className="flex items-center justify-between gap-2 text-sm text-slate-700">
+                            <span className="truncate">{m.nome}</span>
+                            <input type="checkbox" checked={recebeAviso(meuUsuarioId, m.id)} onChange={(e) => meuUsuarioId && definirRecebeAviso(meuUsuarioId, m.id, e.target.checked)} />
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </>
+              );
+            })()}
 
             {mostrarMenuPessoal && (
               <>
@@ -4277,6 +4570,15 @@ export default function Home() {
                           {rotuloPapel[pessoa.papel]}
                         </span>
                       </div>
+                      <div className="space-y-1 rounded-lg bg-white p-2">
+                        <p className="text-xs font-semibold text-slate-500">Recebe avisos de:</p>
+                        {membros.filter((m) => pessoa.papel === 'admin' || (pessoa.acessos[m.id] && pessoa.acessos[m.id] !== 'nenhum')).map((m) => (
+                          <label key={m.id} className="flex items-center justify-between gap-2 text-sm text-slate-700">
+                            <span className="truncate">{m.nome}</span>
+                            <input type="checkbox" checked={recebeAviso(id, m.id)} onChange={(e) => definirRecebeAviso(id, m.id, e.target.checked)} />
+                          </label>
+                        ))}
+                      </div>
                       {pessoa.papel === 'admin' ? (
                         <p className="text-xs text-slate-500">Acesso total a todos os membros da família.</p>
                       ) : (
@@ -4465,7 +4767,7 @@ export default function Home() {
                 onClick={() => setTelaDetalhe('feedeventos')}
                 className="mb-4 flex w-full items-center justify-center gap-2 rounded-xl border border-teal-200 bg-teal-50 px-3 py-2.5 text-sm font-medium text-teal-700 hover:bg-teal-100"
               >
-                🕒 Ver tudo em uma linha do tempo
+                <Ic n="relogio" /> Ver tudo em uma linha do tempo
               </button>
             )}
             <div className="grid grid-cols-3 gap-2">
@@ -4509,7 +4811,7 @@ export default function Home() {
                 <p className="text-xs text-teal-800">{passosOnboarding[onboardingPasso].explicacao}</p>
                 {passosOnboarding[onboardingPasso].aba === 'condicoes' && telaDetalhe !== 'onboardingvoz' && (
                   <button onClick={() => setTelaDetalhe('onboardingvoz')} className="text-xs text-teal-700 underline">
-                    🎤 prefiro contar por voz
+                    <Ic n="mic" /> prefiro contar por voz
                   </button>
                 )}
                 <div className="flex items-center gap-2 pt-1">
@@ -4596,7 +4898,7 @@ export default function Home() {
               <div className="space-y-4">
                 <div className="rounded-xl bg-teal-50 border border-teal-100 p-3">
                   <p className="text-xs text-teal-700">
-                    🤖 Usando IA pra interpretar o que você contar — sempre confira e corrija antes de salvar.
+                    <Ic n="spark" /> Usando IA pra interpretar o que você contar — sempre confira e corrija antes de salvar.
                   </p>
                 </div>
                 <p className="text-sm text-slate-500">
@@ -4610,7 +4912,7 @@ export default function Home() {
                       onClick={() => alternarReconhecimentoVoz('ovFala', setOvTexto)}
                       className={`shrink-0 rounded-full px-3 py-1.5 text-xs ${gravandoCampo === 'ovFala' ? 'bg-red-100 text-red-700 animate-pulse' : 'bg-teal-100 text-teal-700'}`}
                     >
-                      🎤 {gravandoCampo === 'ovFala' ? 'Ouvindo...' : 'Falar'}
+                      <Ic n="mic" /> {gravandoCampo === 'ovFala' ? 'Ouvindo...' : 'Falar'}
                     </button>
                   </div>
                   <textarea
@@ -4725,7 +5027,7 @@ export default function Home() {
                   <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
                     <input
                       className={inputClasse}
-                      placeholder="🔎 buscar evento de saúde já cadastrado"
+                      placeholder="Buscar evento de saúde já cadastrado" style={estiloBusca}
                       value={nrBusca}
                       onChange={(e) => setNrBusca(e.target.value)}
                     />
@@ -4816,7 +5118,7 @@ export default function Home() {
                           onClick={() => alternarReconhecimentoVoz('nrEventoRelato', setNrEventoRelato)}
                           className={`shrink-0 rounded-full px-2 py-1 text-xs ${gravandoCampo === 'nrEventoRelato' ? 'bg-red-100 text-red-700 animate-pulse' : 'bg-slate-100 text-slate-600'}`}
                         >
-                          🎤 {gravandoCampo === 'nrEventoRelato' ? 'Ouvindo...' : 'Falar'}
+                          <Ic n="mic" /> {gravandoCampo === 'nrEventoRelato' ? 'Ouvindo...' : 'Falar'}
                         </button>
                       </div>
                       <textarea className={inputClasse} rows={2} value={nrEventoRelato} onChange={(e) => setNrEventoRelato(e.target.value)} />
@@ -4832,7 +5134,7 @@ export default function Home() {
                   <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
                     <input
                       className={inputClasse}
-                      placeholder="🔎 buscar cirurgia/internação já cadastrada"
+                      placeholder="Buscar cirurgia/internação já cadastrada" style={estiloBusca}
                       value={nrBusca}
                       onChange={(e) => setNrBusca(e.target.value)}
                     />
@@ -4914,7 +5216,7 @@ export default function Home() {
                           onClick={() => alternarReconhecimentoVoz('nrCirurgiaRelato', setNrCirurgiaRelato)}
                           className={`shrink-0 rounded-full px-2 py-1 text-xs ${gravandoCampo === 'nrCirurgiaRelato' ? 'bg-red-100 text-red-700 animate-pulse' : 'bg-slate-100 text-slate-600'}`}
                         >
-                          🎤 {gravandoCampo === 'nrCirurgiaRelato' ? 'Ouvindo...' : 'Falar'}
+                          <Ic n="mic" /> {gravandoCampo === 'nrCirurgiaRelato' ? 'Ouvindo...' : 'Falar'}
                         </button>
                       </div>
                       <textarea className={inputClasse} rows={2} value={nrCirurgiaRelato} onChange={(e) => setNrCirurgiaRelato(e.target.value)} />
@@ -4930,7 +5232,7 @@ export default function Home() {
                   <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
                     <input
                       className={inputClasse}
-                      placeholder="🔎 buscar consulta já cadastrada"
+                      placeholder="Buscar consulta já cadastrada" style={estiloBusca}
                       value={nrBusca}
                       onChange={(e) => setNrBusca(e.target.value)}
                     />
@@ -5028,7 +5330,7 @@ export default function Home() {
                           onClick={() => alternarReconhecimentoVoz('nrConsultaObs', setNrConsultaObs)}
                           className={`shrink-0 rounded-full px-2 py-1 text-xs ${gravandoCampo === 'nrConsultaObs' ? 'bg-red-100 text-red-700 animate-pulse' : 'bg-slate-100 text-slate-600'}`}
                         >
-                          🎤 {gravandoCampo === 'nrConsultaObs' ? 'Ouvindo...' : 'Falar'}
+                          <Ic n="mic" /> {gravandoCampo === 'nrConsultaObs' ? 'Ouvindo...' : 'Falar'}
                         </button>
                       </div>
                       <textarea className={inputClasse} rows={2} value={nrConsultaObs} onChange={(e) => setNrConsultaObs(e.target.value)} />
@@ -5044,7 +5346,7 @@ export default function Home() {
                   <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
                     <input
                       className={inputClasse}
-                      placeholder="🔎 buscar medicamento já cadastrado"
+                      placeholder="Buscar medicamento já cadastrado" style={estiloBusca}
                       value={nrBusca}
                       onChange={(e) => setNrBusca(e.target.value)}
                     />
@@ -5111,7 +5413,7 @@ export default function Home() {
                           onClick={() => alternarReconhecimentoVoz('nrMedObs', setNrMedObs)}
                           className={`shrink-0 rounded-full px-2 py-1 text-xs ${gravandoCampo === 'nrMedObs' ? 'bg-red-100 text-red-700 animate-pulse' : 'bg-slate-100 text-slate-600'}`}
                         >
-                          🎤 {gravandoCampo === 'nrMedObs' ? 'Ouvindo...' : 'Falar'}
+                          <Ic n="mic" /> {gravandoCampo === 'nrMedObs' ? 'Ouvindo...' : 'Falar'}
                         </button>
                       </div>
                       <textarea className={inputClasse} rows={2} value={nrMedObs} onChange={(e) => setNrMedObs(e.target.value)} />
@@ -5148,7 +5450,7 @@ export default function Home() {
                 {!mostrarFormCondicao && condicoesDaTela.length > 0 && (
                   <input
                     className={inputClasse}
-                    placeholder="🔎 buscar por nome, tipo ou status"
+                    placeholder="Buscar por nome, tipo ou status" style={estiloBusca}
                     value={buscaCondicao}
                     onChange={(e) => setBuscaCondicao(e.target.value)}
                   />
@@ -5192,7 +5494,7 @@ export default function Home() {
                           aria-label="Editar evento de saúde"
                           className="text-slate-400 hover:text-teal-700"
                         >
-                          ✎
+                          <Ic n="editar" />
                         </button>
                       </div>
                     </div>
@@ -5201,18 +5503,18 @@ export default function Home() {
                       {c.data_diagnostico_ou_procedimento && ` · ${formatarData(c.data_diagnostico_ou_procedimento)}`}
                       {c.medico && ` · Dr(a). ${c.medico}`}
                     </p>
-                    {c.observacao && <p className="text-xs text-slate-500 mt-1">📝 {c.observacao}</p>}
-                    {c.orientacoes && <p className="text-xs text-teal-700 mt-1">💡 {c.orientacoes}</p>}
+                    {c.observacao && <p className="text-xs text-slate-500 mt-1"><Ic n="nota" /> {c.observacao}</p>}
+                    {c.orientacoes && <p className="text-xs text-teal-700 mt-1"><Ic n="lampada" /> {c.orientacoes}</p>}
                     {(consultasLigadas.length > 0 || medicacoesLigadas.length > 0) && (
                       <div className="flex flex-wrap gap-1 mt-2">
                         {consultasLigadas.length > 0 && (
                           <span className="text-xs bg-slate-100 text-slate-600 rounded-full px-2 py-0.5">
-                            📅 {consultasLigadas.length} consulta{consultasLigadas.length > 1 ? 's' : ''}
+                            <Ic n="cal" /> {consultasLigadas.length} consulta{consultasLigadas.length > 1 ? 's' : ''}
                           </span>
                         )}
                         {medicacoesLigadas.length > 0 && (
                           <span className="text-xs bg-slate-100 text-slate-600 rounded-full px-2 py-0.5">
-                            💊 {medicacoesLigadas.length} medicação{medicacoesLigadas.length > 1 ? 'ões' : ''}
+                            <Ic n="pilula" /> {medicacoesLigadas.length} medicação{medicacoesLigadas.length > 1 ? 'ões' : ''}
                           </span>
                         )}
                       </div>
@@ -5309,7 +5611,7 @@ export default function Home() {
                           onClick={() => alternarReconhecimentoVoz('obsCondicao', setNovaObservacaoCondicao)}
                           className={`shrink-0 rounded-full px-2 py-1 text-xs ${gravandoCampo === 'obsCondicao' ? 'bg-red-100 text-red-700 animate-pulse' : 'bg-slate-100 text-slate-600'}`}
                         >
-                          🎤 {gravandoCampo === 'obsCondicao' ? 'Ouvindo...' : 'Falar'}
+                          <Ic n="mic" /> {gravandoCampo === 'obsCondicao' ? 'Ouvindo...' : 'Falar'}
                         </button>
                       </div>
                       <textarea
@@ -5328,7 +5630,7 @@ export default function Home() {
                           onClick={() => alternarReconhecimentoVoz('orientacaoCondicao', setNovaOrientacaoCondicao)}
                           className={`shrink-0 rounded-full px-2 py-1 text-xs ${gravandoCampo === 'orientacaoCondicao' ? 'bg-red-100 text-red-700 animate-pulse' : 'bg-slate-100 text-slate-600'}`}
                         >
-                          🎤 {gravandoCampo === 'orientacaoCondicao' ? 'Ouvindo...' : 'Falar'}
+                          <Ic n="mic" /> {gravandoCampo === 'orientacaoCondicao' ? 'Ouvindo...' : 'Falar'}
                         </button>
                       </div>
                       <textarea
@@ -5394,16 +5696,16 @@ export default function Home() {
                       className="shrink-0 rounded-lg px-2 py-1 text-sm text-slate-400 hover:bg-[#FAFAF8] hover:text-teal-700"
                       aria-label="Editar evento"
                     >
-                      ✎ editar
+                      <Ic n="editar" /> editar
                     </button>
                   </div>
 
-                  {evento.observacao && <p className="text-sm text-slate-500">📝 {evento.observacao}</p>}
-                  {evento.orientacoes && <p className="text-sm text-teal-700">💡 {evento.orientacoes}</p>}
+                  {evento.observacao && <p className="text-sm text-slate-500"><Ic n="nota" /> {evento.observacao}</p>}
+                  {evento.orientacoes && <p className="text-sm text-teal-700"><Ic n="lampada" /> {evento.orientacoes}</p>}
 
                   <div>
                     <div className="mb-2 flex items-center justify-between">
-                      <h3 className="text-sm font-semibold text-slate-800">💊 Medicações</h3>
+                      <h3 className="text-sm font-semibold text-slate-800"><Ic n="pilula" /> Medicações</h3>
                       <button onClick={() => abrirNovaMedicacaoParaEvento(evento.id)} className="text-xs font-medium text-teal-700">
                         + nova
                       </button>
@@ -5430,7 +5732,7 @@ export default function Home() {
 
                   <div>
                     <div className="mb-2 flex items-center justify-between">
-                      <h3 className="text-sm font-semibold text-slate-800">📅 Consultas</h3>
+                      <h3 className="text-sm font-semibold text-slate-800"><Ic n="cal" /> Consultas</h3>
                       <button onClick={() => abrirNovaConsultaParaEvento(evento.id)} className="text-xs font-medium text-teal-700">
                         + nova
                       </button>
@@ -5455,7 +5757,7 @@ export default function Home() {
 
                   <div>
                     <div className="mb-2 flex items-center justify-between">
-                      <h3 className="text-sm font-semibold text-slate-800">🧪 Exames</h3>
+                      <h3 className="text-sm font-semibold text-slate-800"><Ic n="exame" /> Exames</h3>
                       <button onClick={() => abrirNovoExameParaEvento(evento.id)} className="text-xs font-medium text-teal-700">
                         + novo
                       </button>
@@ -5480,7 +5782,7 @@ export default function Home() {
 
                   <div>
                     <div className="mb-2 flex items-center justify-between">
-                      <h3 className="text-sm font-semibold text-slate-800">💉 Vacinas</h3>
+                      <h3 className="text-sm font-semibold text-slate-800"><Ic n="vacina" /> Vacinas</h3>
                       <button onClick={() => abrirNovaVacinaParaEvento(evento.id)} className="text-xs font-medium text-teal-700">
                         + nova
                       </button>
@@ -5505,7 +5807,7 @@ export default function Home() {
 
                   <div>
                     <div className="mb-2 flex items-center justify-between">
-                      <h3 className="text-sm font-semibold text-slate-800">📈 Crescimento</h3>
+                      <h3 className="text-sm font-semibold text-slate-800"><Ic n="grafico" /> Crescimento</h3>
                       <button onClick={() => abrirNovaMedicaoCrescimentoParaEvento(evento.id)} className="text-xs font-medium text-teal-700">
                         + nova
                       </button>
@@ -5553,7 +5855,7 @@ export default function Home() {
                     {medicacoes.length > 0 && (
                       <input
                         className={inputClasse}
-                        placeholder="🔎 buscar por nome ou classe (ex: antibiótico)"
+                        placeholder="Buscar por nome ou classe (ex: antibiótico)" style={estiloBusca}
                         value={buscaMedicacao}
                         onChange={(e) => setBuscaMedicacao(e.target.value)}
                       />
@@ -5582,7 +5884,7 @@ export default function Home() {
                           className={`w-full rounded-xl border p-3 text-left transition hover:bg-[#FAFAF8] ${continua ? 'border-teal-200 bg-teal-50/40' : 'border-[#E5E1DA]'}`}
                         >
                           <div className="flex items-center justify-between">
-                            <p className="font-medium text-slate-800">{m.nome} ✎</p>
+                            <p className="font-medium text-slate-800">{m.nome} <Ic n="editar" /></p>
                             {continua ? (
                               <span className="flex items-center gap-1 text-xs font-medium rounded-full px-2 py-0.5 bg-teal-600 text-white">
                                 <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round"><circle cx="12" cy="12" r="10" /></svg>
@@ -5610,7 +5912,7 @@ export default function Home() {
                               Receitada em: {consultaLigada.especialidade?.nome || 'consulta'} de {new Date(consultaLigada.data_hora).toLocaleDateString('pt-BR')}
                             </p>
                           )}
-                          {m.observacao && <p className="text-xs text-slate-500 mt-1">📝 {m.observacao}</p>}
+                          {m.observacao && <p className="text-xs text-slate-500 mt-1"><Ic n="nota" /> {m.observacao}</p>}
                         </button>
                       );
                     })}
@@ -5718,7 +6020,7 @@ export default function Home() {
                           onClick={() => alternarReconhecimentoVoz('obsMedicacao', setNovaObservacaoMedicacao)}
                           className={`shrink-0 rounded-full px-2 py-1 text-xs ${gravandoCampo === 'obsMedicacao' ? 'bg-red-100 text-red-700 animate-pulse' : 'bg-slate-100 text-slate-600'}`}
                         >
-                          🎤 {gravandoCampo === 'obsMedicacao' ? 'Ouvindo...' : 'Falar'}
+                          <Ic n="mic" /> {gravandoCampo === 'obsMedicacao' ? 'Ouvindo...' : 'Falar'}
                         </button>
                       </div>
                       <textarea
@@ -5778,7 +6080,7 @@ export default function Home() {
                     {consultasDaTela.length > 0 && (
                       <input
                         className={inputClasse}
-                        placeholder="🔎 buscar por especialidade ou profissional"
+                        placeholder="Buscar por especialidade ou profissional" style={estiloBusca}
                         value={buscaConsulta}
                         onChange={(e) => setBuscaConsulta(e.target.value)}
                       />
@@ -5813,7 +6115,7 @@ export default function Home() {
                           className="w-full rounded-xl border border-[#E5E1DA] p-3 text-left transition hover:bg-[#FAFAF8]"
                         >
                           <div className="flex items-center justify-between">
-                            <p className="font-medium text-slate-800">{c.especialidade?.nome || 'Especialidade'} ✎</p>
+                            <p className="font-medium text-slate-800">{c.especialidade?.nome || 'Especialidade'} <Ic n="editar" /></p>
                             <span className={`text-xs rounded-full px-2 py-0.5 ${statusEstilo}`}>
                               {c.status}
                             </span>
@@ -5827,7 +6129,17 @@ export default function Home() {
                           {condicaoLigadaNome && (
                             <p className="text-xs text-slate-400 mt-1">Sobre: {condicaoLigadaNome}</p>
                           )}
-                          {c.anotacoes && <p className="text-xs text-slate-500 mt-1">📝 {c.anotacoes}</p>}
+                          {c.anotacoes && <p className="text-xs text-slate-500 mt-1"><Ic n="nota" /> {c.anotacoes}</p>}
+                          {(() => {
+                            const it = itensDaConsulta(c.id);
+                            const partes = [
+                              it.meds.length > 0 && `${it.meds.length} medicação${it.meds.length > 1 ? 'ões' : ''}`,
+                              it.exames.length > 0 && `${it.exames.length} exame${it.exames.length > 1 ? 's' : ''}`,
+                              it.vacinas.length > 0 && `${it.vacinas.length} vacina${it.vacinas.length > 1 ? 's' : ''}`,
+                              it.terapias.length > 0 && `${it.terapias.length} terapia${it.terapias.length > 1 ? 's' : ''}`,
+                            ].filter(Boolean);
+                            return partes.length > 0 ? <p className="text-xs text-teal-700 mt-1">Gerou: {partes.join(' · ')}</p> : null;
+                          })()}
                           {c.data_retorno_sugerida && (
                             <span className="inline-block mt-1 mr-1 text-xs bg-teal-50 text-teal-700 rounded-full px-2 py-0.5">
                               retorno: {formatarData(c.data_retorno_sugerida)}
@@ -5933,11 +6245,11 @@ export default function Home() {
                               ))}
                             </datalist>
                             {novoProfissionalConsulta.trim() && !medicos.some((m) => m.nome.toLowerCase() === novoProfissionalConsulta.trim().toLowerCase()) && (
-                              <p className="text-xs text-teal-700 -mt-1">➕ “{novoProfissionalConsulta.trim()}” será cadastrado como novo médico.</p>
+                              <p className="text-xs text-teal-700 -mt-1"><Ic n="mais" /> “{novoProfissionalConsulta.trim()}” será cadastrado como novo médico.</p>
                             )}
                             {medicos.length > 0 && !novoProfissionalConsulta.trim() && (
                               <p className="text-xs text-slate-400 -mt-1">
-                                💡 Comece a digitar para escolher entre seus médicos já cadastrados.
+                                <Ic n="lampada" /> Comece a digitar para escolher entre seus médicos já cadastrados.
                               </p>
                             )}
                           </div>
@@ -5973,7 +6285,7 @@ export default function Home() {
                                     onClick={() => alternarReconhecimentoVoz('anotacaoConsulta', setNovaAnotacaoConsulta)}
                                     className={`shrink-0 rounded-full px-2 py-1 text-xs ${gravandoCampo === 'anotacaoConsulta' ? 'bg-red-100 text-red-700 animate-pulse' : 'bg-slate-100 text-slate-600'}`}
                                   >
-                                    🎤 {gravandoCampo === 'anotacaoConsulta' ? 'Ouvindo...' : 'Falar'}
+                                    <Ic n="mic" /> {gravandoCampo === 'anotacaoConsulta' ? 'Ouvindo...' : 'Falar'}
                                   </button>
                                 </div>
                                 <textarea
@@ -6011,9 +6323,86 @@ export default function Home() {
                                   value={novaDataRetornoConsulta}
                                   onChange={(e) => setNovaDataRetornoConsulta(e.target.value)}
                                 />
+                                {novaDataRetornoConsulta && (
+                                  <p className="mt-1 text-xs text-slate-400">Ao salvar, o retorno entra como consulta agendada às 09:00, com lembrete. Depois você ajusta o horário na própria consulta.</p>
+                                )}
                               </div>
                             </div>
                           )}
+
+                          <div className={cartao}>
+                            <p className={titulo}>Foto do pedido médico</p>
+                            <p className="text-xs text-slate-400">Pedido de exame, receita ou laudo. Fica guardado só para quem tem acesso a este membro.</p>
+                            {anexosConsulta.length > 0 && (
+                              <div className="grid grid-cols-3 gap-2">
+                                {anexosConsulta.map((a) => (
+                                  <div key={a.id} className="relative">
+                                    {a.url && /\.pdf$/i.test(a.caminho) ? (
+                                      <a href={a.url} target="_blank" rel="noreferrer" className="flex h-24 items-center justify-center rounded-xl bg-slate-100 text-xs text-slate-600">PDF</a>
+                                    ) : a.url ? (
+                                      <a href={a.url} target="_blank" rel="noreferrer"><img src={a.url} alt={a.nome || 'anexo'} className="h-24 w-full rounded-xl object-cover" /></a>
+                                    ) : (
+                                      <div className="flex h-24 items-center justify-center rounded-xl bg-slate-100 text-xs text-slate-400">indisponível</div>
+                                    )}
+                                    <button type="button" aria-label="Remover anexo" onClick={() => excluirAnexoConsulta(a)} className="absolute right-1 top-1 rounded-full bg-white/90 px-1.5 text-xs text-red-600">✕</button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            {anexosNovosConsulta.length > 0 && (
+                              <div className="space-y-1">
+                                {anexosNovosConsulta.map((f, i) => (
+                                  <div key={i} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2 text-sm">
+                                    <span className="min-w-0 truncate text-slate-700">{f.name}</span>
+                                    <button type="button" onClick={() => setAnexosNovosConsulta((l) => l.filter((_, idx) => idx !== i))} className="text-xs text-red-600">remover</button>
+                                  </div>
+                                ))}
+                                <p className="text-xs text-slate-400">Será enviado ao salvar a consulta.</p>
+                              </div>
+                            )}
+                            <label className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-2xl border border-dashed border-teal-700/40 bg-white px-4 py-3 text-sm font-semibold text-teal-800">
+                              <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" /></svg>
+                              Tirar foto ou escolher arquivo
+                              <input type="file" accept="image/*,application/pdf" multiple className="hidden" onChange={(e) => { escolherAnexosConsulta(e.target.files); e.target.value = ''; }} />
+                            </label>
+                          </div>
+
+                          {consultaEditandoId && (() => {
+                            const it = itensDaConsulta(consultaEditandoId);
+                            const linhas: { chave: string; rotulo: string; detalhe: string; abrir: () => void }[] = [
+                              ...it.meds.map((m) => ({
+                                chave: `m${m.id}`, rotulo: 'Medicação', detalhe: `${m.nome}${m.dosagem ? ' · ' + m.dosagem : ''}${m.data_fim ? ' · até ' + formatarData(m.data_fim) : ' · uso contínuo'}`,
+                                abrir: () => { setMostrarFormConsulta(false); setTelaDetalhe('medicacoes'); abrirEdicaoMedicacao(m); },
+                              })),
+                              ...it.exames.map((e) => ({
+                                chave: `e${e.id}`, rotulo: 'Exame', detalhe: `${e.nome}${e.status === 'solicitado' ? ' · solicitado, fazer até ' + formatarData(e.data_realizacao) : ' · ' + formatarData(e.data_realizacao)}`,
+                                abrir: () => { setMostrarFormConsulta(false); setTelaDetalhe('exames'); abrirEdicaoExame(e); },
+                              })),
+                              ...it.vacinas.map((v) => ({
+                                chave: `v${v.id}`, rotulo: 'Vacina', detalhe: `${v.nome}${v.status === 'indicada' ? ' · indicada para ' + formatarData(v.data_aplicacao) : ' · ' + formatarData(v.data_aplicacao)}`,
+                                abrir: () => { setMostrarFormConsulta(false); setTelaDetalhe('vacinas'); abrirEdicaoVacina(v); },
+                              })),
+                              ...it.terapias.map((t) => ({
+                                chave: `t${t.id}`, rotulo: 'Terapia', detalhe: `${t.tipo}${t.frequencia ? ' · ' + t.frequencia : ''}`,
+                                abrir: () => { setMostrarFormConsulta(false); setTelaDetalhe('terapias'); abrirEdicaoTerapia(t); },
+                              })),
+                            ];
+                            if (linhas.length === 0) return null;
+                            return (
+                              <div className={cartao}>
+                                <p className={titulo}>Registrado a partir desta consulta</p>
+                                {linhas.map((l) => (
+                                  <button key={l.chave} type="button" onClick={l.abrir} className="flex w-full items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2 text-left text-sm">
+                                    <span className="min-w-0">
+                                      <span className="block text-xs text-slate-400">{l.rotulo}</span>
+                                      <span className="block truncate text-slate-800">{l.detalhe}</span>
+                                    </span>
+                                    <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-slate-300"><path d="M9 18l6-6-6-6" /></svg>
+                                  </button>
+                                ))}
+                              </div>
+                            );
+                          })()}
 
                           {ehPassada && (() => {
                             const algoAberto = medsConsulta.length > 0 || examesConsulta.length > 0 || vacsConsulta.length > 0 || terapiasConsulta.length > 0 || exameNovoConsulta !== '';
@@ -6080,13 +6469,24 @@ export default function Home() {
                                           <div>
                                             <label className="text-xs text-slate-500 mb-1 block">Duração</label>
                                             <div className="flex flex-wrap gap-2">
-                                              {[['5', '5 dias'], ['7', '7 dias'], ['10', '10 dias'], ['14', '14 dias'], ['continuo', 'Uso contínuo'], ['data', 'Outro']].map(([id, label]) => (
+                                              {[['3', '3 dias'], ['5', '5 dias'], ['7', '7 dias'], ['10', '10 dias'], ['14', '14 dias'], ['continuo', 'Uso contínuo'], ['dias', 'Outro (nº de dias)'], ['data', 'Escolher data de término']].map(([id, label]) => (
                                                 <button key={id} type="button" onClick={() => atualizaMed(i, { duracao: id })} className={chip(m.duracao === id)}>{label}</button>
                                               ))}
                                             </div>
+                                            {m.duracao === 'dias' && (
+                                              <input type="number" min={1} inputMode="numeric" className={`${inputClasse} mt-2`} placeholder="quantos dias?" value={m.duracaoDias} onChange={(e) => atualizaMed(i, { duracaoDias: e.target.value })} />
+                                            )}
                                             {m.duracao === 'data' && (
                                               <input type="date" className={`${inputClasse} mt-2`} value={m.duracaoData} onChange={(e) => atualizaMed(i, { duracaoData: e.target.value })} />
                                             )}
+                                            {(() => {
+                                              const fim = dataFimMedicacao(m, m.inicio || new Date().toISOString().slice(0, 10));
+                                              return (
+                                                <p className="mt-1 text-xs text-teal-800">
+                                                  {m.duracao === 'continuo' ? 'Uso contínuo: sem data de término.' : fim ? `Termina em ${formatarData(fim)}.` : 'Informe a duração para calcular o término.'}
+                                                </p>
+                                              );
+                                            })()}
                                           </div>
                                           <input className={inputClasse} placeholder="Como tomar (ex: após as refeições)" value={m.como} onChange={(e) => atualizaMed(i, { como: e.target.value })} />
                                         </div>
@@ -6216,6 +6616,31 @@ export default function Home() {
                                           <input type="date" className={inputClasse} value={t.inicio} onChange={(e) => atualizaTer(i, { inicio: e.target.value })} />
                                         </div>
                                         <input className={inputClasse} placeholder="Profissional/clínica (opcional)" value={t.profissional} onChange={(e) => atualizaTer(i, { profissional: e.target.value })} />
+                                        <div className="space-y-2">
+                                          <label className="text-xs text-slate-500 block">Datas das sessões (opcional)</label>
+                                          {(t.sessoes || []).map((s, si) => (
+                                            <div key={si} className="flex items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2 text-sm">
+                                              <span className="text-slate-800">{formatarData(s.data_hora.slice(0, 10))} às {s.data_hora.slice(11, 16)}</span>
+                                              <span className="flex items-center gap-3">
+                                                <button type="button" onClick={() => atualizaTer(i, { sessoes: (t.sessoes || []).map((x, xi) => (xi === si ? { ...x, lembrete: !x.lembrete } : x)) })} className={`text-xs ${s.lembrete ? 'text-teal-700 font-semibold' : 'text-slate-400'}`}>{s.lembrete ? 'com alerta' : 'sem alerta'}</button>
+                                                <button type="button" aria-label="Remover sessão" onClick={() => atualizaTer(i, { sessoes: (t.sessoes || []).filter((_, xi) => xi !== si) })} className="text-xs text-red-600">✕</button>
+                                              </span>
+                                            </div>
+                                          ))}
+                                          <input type="datetime-local" className={inputClasse} value={t.novaSessao || ''} onChange={(e) => atualizaTer(i, { novaSessao: e.target.value })} />
+                                          <label className="flex items-center gap-2 text-sm text-slate-700">
+                                            <input type="checkbox" checked={t.novaSessaoAlerta !== false} onChange={(e) => atualizaTer(i, { novaSessaoAlerta: e.target.checked })} />
+                                            Gerar alerta (aparece na Home)
+                                          </label>
+                                          <button
+                                            type="button"
+                                            disabled={!t.novaSessao}
+                                            onClick={() => atualizaTer(i, { sessoes: [...(t.sessoes || []), { data_hora: t.novaSessao || '', lembrete: t.novaSessaoAlerta !== false }].sort((a, b) => a.data_hora.localeCompare(b.data_hora)), novaSessao: '' })}
+                                            className="text-sm font-semibold text-teal-800 disabled:opacity-40"
+                                          >
+                                            + Adicionar data
+                                          </button>
+                                        </div>
                                         <input className={inputClasse} placeholder="Observação (opcional)" value={t.obs} onChange={(e) => atualizaTer(i, { obs: e.target.value })} />
                                       </div>
                                     ))}
@@ -6249,7 +6674,7 @@ export default function Home() {
 
                           {ehFutura && (
                             <p className="rounded-xl bg-[#EEF4F1] p-3 text-sm text-slate-700">
-                              ℹ️ Como a data é futura, a consulta fica como agendada. Depois que acontecer, volte aqui para registrar as anotações e o retorno.
+                              <Ic n="info" /> Como a data é futura, a consulta fica como agendada. Depois que acontecer, volte aqui para registrar as anotações e o retorno.
                             </p>
                           )}
 
@@ -6372,11 +6797,11 @@ export default function Home() {
                         onClick={() => abrirEdicaoMedico(m)}
                         className="w-full rounded-xl border border-[#E5E1DA] p-3 text-left transition hover:bg-[#FAFAF8]"
                       >
-                        <p className="font-medium text-slate-800">{m.nome} ✎</p>
+                        <p className="font-medium text-slate-800">{m.nome} <Ic n="editar" /></p>
                         <p className="text-xs text-slate-400">
                           {[m.especialidade, m.telefone, m.local].filter(Boolean).join(' · ')}
                         </p>
-                        {m.observacao && <p className="text-xs text-slate-500 mt-1">📝 {m.observacao}</p>}
+                        {m.observacao && <p className="text-xs text-slate-500 mt-1"><Ic n="nota" /> {m.observacao}</p>}
                       </button>
                     ))}
                   </>
@@ -6478,11 +6903,11 @@ export default function Home() {
                           className="w-full rounded-xl border border-[#E5E1DA] p-3 text-left transition hover:bg-[#FAFAF8]"
                         >
                           <div className="flex items-center justify-between gap-2">
-                            <p className="font-medium text-slate-800">{e.nome} ✎</p>
+                            <p className="font-medium text-slate-800">{e.nome} <Ic n="editar" /></p>
                             <span className="text-xs text-slate-400 text-right">{e.status === 'solicitado' ? `⏳ solicitado · fazer até ${formatarData(e.data_realizacao)}` : formatarData(e.data_realizacao)}</span>
                           </div>
                           {e.laboratorio && <p className="text-xs text-slate-400">{e.laboratorio}</p>}
-                          {e.resultado_resumo && <p className="text-xs text-slate-500 mt-1">📋 {e.resultado_resumo}</p>}
+                          {e.resultado_resumo && <p className="text-xs text-slate-500 mt-1"><Ic n="prancheta" /> {e.resultado_resumo}</p>}
                         </button>
                         {e.status === 'solicitado' && (
                           <button
@@ -6544,7 +6969,7 @@ export default function Home() {
                           onClick={() => alternarReconhecimentoVoz('resultadoExame', setNovoResultadoExame)}
                           className={`shrink-0 rounded-full px-2 py-1 text-xs ${gravandoCampo === 'resultadoExame' ? 'bg-red-100 text-red-700 animate-pulse' : 'bg-slate-100 text-slate-600'}`}
                         >
-                          🎤 {gravandoCampo === 'resultadoExame' ? 'Ouvindo...' : 'Falar'}
+                          <Ic n="mic" /> {gravandoCampo === 'resultadoExame' ? 'Ouvindo...' : 'Falar'}
                         </button>
                       </div>
                       <textarea
@@ -6604,7 +7029,7 @@ export default function Home() {
                           className="w-full rounded-xl border border-[#E5E1DA] p-3 text-left transition hover:bg-[#FAFAF8]"
                         >
                           <div className="flex items-center justify-between">
-                            <p className="font-medium text-slate-800">{v.nome} ✎</p>
+                            <p className="font-medium text-slate-800">{v.nome} <Ic n="editar" /></p>
                             <span className="text-xs text-slate-400">{v.status === 'indicada' ? `⏳ indicada · tomar em ${formatarData(v.data_aplicacao)}` : formatarData(v.data_aplicacao)}</span>
                           </div>
                           <p className="text-xs text-slate-400">
@@ -6615,7 +7040,7 @@ export default function Home() {
                               próxima dose atrasada
                             </span>
                           )}
-                          {v.observacoes && <p className="text-xs text-slate-500 mt-1">📝 {v.observacoes}</p>}
+                          {v.observacoes && <p className="text-xs text-slate-500 mt-1"><Ic n="nota" /> {v.observacoes}</p>}
                         </button>
                         {v.status === 'indicada' && (
                           <button
@@ -6702,7 +7127,7 @@ export default function Home() {
                           onClick={() => alternarReconhecimentoVoz('obsVacina', setNovaObsVacina)}
                           className={`shrink-0 rounded-full px-2 py-1 text-xs ${gravandoCampo === 'obsVacina' ? 'bg-red-100 text-red-700 animate-pulse' : 'bg-slate-100 text-slate-600'}`}
                         >
-                          🎤 {gravandoCampo === 'obsVacina' ? 'Ouvindo...' : 'Falar'}
+                          <Ic n="mic" /> {gravandoCampo === 'obsVacina' ? 'Ouvindo...' : 'Falar'}
                         </button>
                       </div>
                       <textarea
@@ -6798,7 +7223,7 @@ export default function Home() {
                         }}
                         className="rounded-xl bg-[#FAFAF8] p-3 text-left transition hover:bg-slate-100"
                       >
-                        <p className="text-xs text-slate-400">Tipo sanguíneo ✎</p>
+                        <p className="text-xs text-slate-400">Tipo sanguíneo <Ic n="editar" /></p>
                         <p className="text-sm font-medium text-slate-800">{membroSelecionado.tipo_sanguineo || 'toque para informar'}</p>
                       </button>
                     ) : (
@@ -6837,7 +7262,7 @@ export default function Home() {
                         }}
                         className="col-span-2 rounded-xl bg-[#FAFAF8] p-3 text-left transition hover:bg-slate-100"
                       >
-                        <p className="text-xs text-slate-400">Grau de parentesco ✎</p>
+                        <p className="text-xs text-slate-400">Grau de parentesco <Ic n="editar" /></p>
                         <p className="text-sm font-medium text-slate-800">
                           {opcoesParentesco.find((p) => p.value === membroSelecionado.parentesco)?.label || 'toque para informar'}
                         </p>
@@ -6869,7 +7294,7 @@ export default function Home() {
                       }}
                       className="w-full rounded-xl bg-[#FAFAF8] p-3 text-left transition hover:bg-slate-100"
                     >
-                      <p className="text-xs text-slate-400">Observações ✎</p>
+                      <p className="text-xs text-slate-400">Observações <Ic n="editar" /></p>
                       <p className="text-sm text-slate-700">{membroSelecionado.observacoes_gerais || 'toque para adicionar'}</p>
                     </button>
                   ) : (
@@ -6881,7 +7306,7 @@ export default function Home() {
                           onClick={() => alternarReconhecimentoVoz('obsGeral', setValorObsEdit)}
                           className={`shrink-0 rounded-full px-2 py-1 text-xs ${gravandoCampo === 'obsGeral' ? 'bg-red-100 text-red-700 animate-pulse' : 'bg-slate-100 text-slate-600'}`}
                         >
-                          🎤 {gravandoCampo === 'obsGeral' ? 'Ouvindo...' : 'Falar'}
+                          <Ic n="mic" /> {gravandoCampo === 'obsGeral' ? 'Ouvindo...' : 'Falar'}
                         </button>
                       </div>
                       <textarea
@@ -6924,19 +7349,19 @@ export default function Home() {
                       }}
                       className="w-full rounded-xl bg-red-50 p-3 text-left transition hover:bg-red-100"
                     >
-                      <p className="text-xs text-red-600 font-medium">⚠️ Alergias e condições importantes ✎</p>
+                      <p className="text-xs text-red-600 font-medium"><Ic n="alerta" /> Alergias e condições importantes <Ic n="editar" /></p>
                       <p className="text-sm text-red-900">{membroSelecionado.alergias || 'toque para adicionar (ex: alergia a penicilina)'}</p>
                     </button>
                   ) : (
                     <div className="rounded-xl bg-red-50 p-3 space-y-2">
                       <div className="flex items-center justify-between">
-                        <p className="text-xs text-red-600 font-medium">⚠️ Alergias e condições importantes</p>
+                        <p className="text-xs text-red-600 font-medium"><Ic n="alerta" /> Alergias e condições importantes</p>
                         <button
                           type="button"
                           onClick={() => alternarReconhecimentoVoz('alergiasMembro', setValorAlergiasEdit)}
                           className={`shrink-0 rounded-full px-2 py-1 text-xs ${gravandoCampo === 'alergiasMembro' ? 'bg-red-200 text-red-800 animate-pulse' : 'bg-white text-slate-600'}`}
                         >
-                          🎤 {gravandoCampo === 'alergiasMembro' ? 'Ouvindo...' : 'Falar'}
+                          <Ic n="mic" /> {gravandoCampo === 'alergiasMembro' ? 'Ouvindo...' : 'Falar'}
                         </button>
                       </div>
                       <textarea
@@ -7143,7 +7568,7 @@ export default function Home() {
                           onClick={() => alternarReconhecimentoVoz('intercorrencias', setNovasIntercorrencias)}
                           className={`shrink-0 rounded-full px-2 py-1 text-xs ${gravandoCampo === 'intercorrencias' ? 'bg-red-100 text-red-700 animate-pulse' : 'bg-slate-100 text-slate-600'}`}
                         >
-                          🎤 {gravandoCampo === 'intercorrencias' ? 'Ouvindo...' : 'Falar'}
+                          <Ic n="mic" /> {gravandoCampo === 'intercorrencias' ? 'Ouvindo...' : 'Falar'}
                         </button>
                       </div>
                       <textarea
@@ -7448,7 +7873,7 @@ export default function Home() {
                       className="w-full rounded-xl border border-[#E5E1DA] p-3 text-left transition hover:bg-[#FAFAF8]"
                     >
                       <div className="flex items-center justify-between">
-                        <p className="font-medium text-slate-800">{formatarData(m.data_medicao)} ✎</p>
+                        <p className="font-medium text-slate-800">{formatarData(m.data_medicao)} <Ic n="editar" /></p>
                         <span className="text-xs text-slate-400">{formatarIdadeEmMeses(idadeMeses)}</span>
                       </div>
                       <p className="text-xs text-slate-400">
@@ -7756,7 +8181,7 @@ export default function Home() {
                         className="w-full rounded-xl border border-[#E5E1DA] p-3 text-left transition hover:bg-[#FAFAF8]"
                       >
                         <div className="flex items-center justify-between">
-                          <p className="font-medium text-slate-800">{t.tipo} ✎</p>
+                          <p className="font-medium text-slate-800">{t.tipo} <Ic n="editar" /></p>
                           {!t.data_fim && (
                             <span className="text-xs bg-emerald-100 text-emerald-700 rounded-full px-2 py-0.5 shrink-0">em andamento</span>
                           )}
@@ -7770,7 +8195,7 @@ export default function Home() {
                             t.local,
                           ].filter(Boolean).join(' · ')}
                         </p>
-                        {t.observacao && <p className="text-xs text-slate-500 mt-1">📝 {t.observacao}</p>}
+                        {t.observacao && <p className="text-xs text-slate-500 mt-1"><Ic n="nota" /> {t.observacao}</p>}
                       </button>
                     ))}
                   </>
@@ -7832,7 +8257,7 @@ export default function Home() {
                                       }}
                                       className={`text-xs rounded-full px-2 py-1 ${s.lembrete ? 'bg-teal-100 text-teal-800' : 'bg-slate-100 text-slate-500'}`}
                                     >
-                                      {s.lembrete ? '🔔 alerta' : 'sem alerta'}
+                                      {s.lembrete ? <><Ic n="sino" /> alerta</> : 'sem alerta'}
                                     </button>
                                   )}
                                   <button
@@ -7907,7 +8332,7 @@ export default function Home() {
                         className="w-full rounded-xl border border-[#E5E1DA] p-3 text-left transition hover:bg-[#FAFAF8]"
                       >
                         <div className="flex items-center justify-between">
-                          <p className="font-medium text-slate-800">{a.nome_atividade} ✎</p>
+                          <p className="font-medium text-slate-800">{a.nome_atividade} <Ic n="editar" /></p>
                           {!a.data_fim && (
                             <span className="text-xs bg-emerald-100 text-emerald-700 rounded-full px-2 py-0.5 shrink-0">em andamento</span>
                           )}
@@ -7922,7 +8347,7 @@ export default function Home() {
                         </p>
                         {a.instrutor && <p className="text-xs text-slate-500 mt-1">Instrutor(a): {a.instrutor}</p>}
                         {a.nivel && <p className="text-xs text-slate-500">Nível: {a.nivel}</p>}
-                        {a.observacao && <p className="text-xs text-slate-500 mt-1">📝 {a.observacao}</p>}
+                        {a.observacao && <p className="text-xs text-slate-500 mt-1"><Ic n="nota" /> {a.observacao}</p>}
                       </button>
                     ))}
                   </>
