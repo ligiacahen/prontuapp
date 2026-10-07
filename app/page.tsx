@@ -28,6 +28,7 @@ import type {
   Terapia,
   TerapiaRascunho,
   SessaoTerapia,
+  LembreteConsulta,
 } from './tipos';
 import {
   opcoesParentesco,
@@ -37,6 +38,9 @@ import {
   vacinasComuns,
   frequenciasMedicacao,
   tiposTerapia,
+  rotinaSugerida,
+  intervalosRotina,
+  opcoesAntecedencia,
 } from './tipos';
 import {
   tipoCondicaoLabels,
@@ -50,6 +54,7 @@ import {
 import {
   calcularHorariosMedicacao,
   somarDias,
+  somarMeses,
   calcularIdade,
   calcularIdadeEmMeses,
   formatarIdadeEmMeses,
@@ -149,8 +154,19 @@ export default function Home() {
     anamnese: true,
   });
   const [mostrarResumoImpressao, setMostrarResumoImpressao] = useState(false);
-  const [pendenciasFamiliares, setPendenciasFamiliares] = useState<{ membroId: string; membroNome: string; itens: { id: string; tipo: 'consulta' | 'vacina' | 'medicacao' | 'exame' | 'terapia'; titulo: string; detalhe: string; refId?: string; quando?: string }[] }[]>([]);
+  const [pendenciasFamiliares, setPendenciasFamiliares] = useState<{ membroId: string; membroNome: string; itens: { id: string; tipo: 'consulta' | 'vacina' | 'medicacao' | 'exame' | 'terapia' | 'agendar'; titulo: string; detalhe: string; refId?: string; quando?: string; prazo?: string }[] }[]>([]);
   const [mostrarAvisos, setMostrarAvisos] = useState(false);
+  const [lembretesConsulta, setLembretesConsulta] = useState<LembreteConsulta[]>([]);
+  const [agendarRetorno, setAgendarRetorno] = useState(false);
+  const [agendarRetornoQuando, setAgendarRetornoQuando] = useState<'7' | '15' | '30' | 'm1' | 'm3' | 'm6' | 'm12' | 'data'>('15');
+  const [agendarRetornoData, setAgendarRetornoData] = useState('');
+  const [formRotina, setFormRotina] = useState<null | 'periodico' | 'unico'>(null);
+  const [rotinaEsp, setRotinaEsp] = useState('');
+  const [rotinaMeses, setRotinaMeses] = useState(12);
+  const [rotinaAntec, setRotinaAntec] = useState(30);
+  const [agendarAntec, setAgendarAntec] = useState(7);
+  const [rotinaData, setRotinaData] = useState('');
+  const [erroRotina, setErroRotina] = useState('');
   const [avisoDest, setAvisoDest] = useState<{ usuario_id: string; membro_id: string; recebe: boolean }[]>([]);
 
   const [contaEmail, setContaEmail] = useState('');
@@ -616,6 +632,7 @@ export default function Home() {
       carregarVacinas(membroSelecionado.id);
       carregarAtividadesFisicas(membroSelecionado.id);
       carregarTerapias(membroSelecionado.id);
+      carregarLembretesConsulta(membroSelecionado.id);
       carregarSessoesTerapia(membroSelecionado.id);
       carregarNascimento(membroSelecionado.id);
       carregarDesenvolvimento(membroSelecionado.id);
@@ -1817,6 +1834,10 @@ export default function Home() {
     setConsultaEditandoId(null);
     setAnexosNovosConsulta([]);
     setAnexosConsulta([]);
+    setAgendarRetorno(false);
+    setAgendarRetornoQuando('15');
+    setAgendarRetornoData('');
+    setAgendarAntec(7);
     setNovaEspecialidadeConsulta(especialidadePadrao);
     setEspecialidadeOutroConsulta('');
     setNovoProfissionalConsulta('');
@@ -1866,6 +1887,10 @@ export default function Home() {
     setNovoLembreteConsulta(c.lembrete || false);
     setAnexosNovosConsulta([]);
     setAnexosConsulta([]);
+    setAgendarRetorno(false);
+    setAgendarRetornoQuando('15');
+    setAgendarRetornoData('');
+    setAgendarAntec(7);
     carregarAnexosConsulta(c.id);
     setMedsConsulta([]);
     setExamesConsulta([]);
@@ -2027,6 +2052,28 @@ export default function Home() {
 
       if (consultaIdSalva && anexosNovosConsulta.length) await enviarAnexosConsulta(consultaIdSalva, membroSelecionado.id);
 
+      // Lembrete de "agendar consulta" (avulso). Se há retorno marcado, vale para a consulta DEPOIS dele.
+      if (consultaIdSalva && agendarRetorno) {
+        const hojeISO = dataLocalISO(new Date());
+        const baseData = novaDataRetornoConsulta || hojeISO;
+        const q0 = agendarRetornoQuando;
+        const q = novaDataRetornoConsulta ? (q0 === 'data' || q0.startsWith('m') ? q0 : 'm3') : (q0.startsWith('m') ? '15' : q0);
+        const lembrarEm =
+          q === 'data' && agendarRetornoData ? agendarRetornoData
+          : q.startsWith('m') ? somarMeses(baseData, Number(q.slice(1)))
+          : somarDias(hojeISO, q === 'data' ? 15 : Number(q));
+        const { error: erroLemb } = await supabase.from('lembrete_consulta').insert({
+          membro_id: membroSelecionado.id,
+          especialidade: nomeEspecialidadeFinal,
+          tipo: 'unico',
+          lembrar_em: lembrarEm,
+          depois_de: baseData,
+          antecedencia_dias: agendarAntec,
+          consulta_origem_id: consultaIdSalva,
+        });
+        if (erroLemb) throw erroLemb;
+      }
+
       // Itens gerados pela consulta ("O médico pediu algo?")
       const dataConsultaISO = novaDataHoraConsulta.slice(0, 10);
       const condicaoLigada = novaCondicaoRelacionadaConsulta || null;
@@ -2153,6 +2200,10 @@ export default function Home() {
 
       setAnexosNovosConsulta([]);
       setAnexosConsulta([]);
+      setAgendarRetorno(false);
+      setAgendarRetornoQuando('15');
+      setAgendarRetornoData('');
+    setAgendarAntec(7);
       setConsultaEditandoId(null);
       setNovaEspecialidadeConsulta('');
       setEspecialidadeOutroConsulta('');
@@ -2186,6 +2237,7 @@ export default function Home() {
       if (medsConsulta.length) await carregarMedicacoes(membroSelecionado.id);
       if (examesConsulta.length) await carregarExames(membroSelecionado.id);
       if (vacsConsulta.length) await carregarVacinas(membroSelecionado.id);
+      await carregarLembretesConsulta(membroSelecionado.id);
       if (terapiasConsulta.length) { await carregarTerapias(membroSelecionado.id); await carregarSessoesTerapia(membroSelecionado.id); }
       if (voltarResumoEventoId) {
         setCondicaoResumoId(voltarResumoEventoId);
@@ -3226,7 +3278,7 @@ export default function Home() {
   // dose de vacina prevista, e medicação de uso contínuo com horário cadastrado.
   // Usa os dados que já estão carregados em `consultas`/`vacinas`/`medicacoes` —
   // não faz nenhuma busca nova no banco.
-  type ItemPendencia = { id: string; tipo: 'consulta' | 'vacina' | 'medicacao' | 'exame' | 'terapia'; titulo: string; detalhe: string; refId?: string; quando?: string };
+  type ItemPendencia = { id: string; tipo: 'consulta' | 'vacina' | 'medicacao' | 'exame' | 'terapia' | 'agendar'; titulo: string; detalhe: string; refId?: string; quando?: string; prazo?: string };
   function iconePendencia(tipo: ItemPendencia['tipo']) {
     const props = { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: '#0F766E', strokeWidth: 2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
     switch (tipo) {
@@ -3234,6 +3286,8 @@ export default function Home() {
         return <svg {...props}><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>;
       case 'vacina':
         return <svg {...props}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>;
+      case 'agendar':
+        return <svg {...props}><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /><line x1="12" y1="13" x2="12" y2="19" /><line x1="9" y1="16" x2="15" y2="16" /></svg>;
       case 'terapia':
         return <svg {...props}><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21l7.8-7.5 1-1.1a5.5 5.5 0 0 0 0-7.8z" /><line x1="12" y1="9" x2="12" y2="15" /><line x1="9" y1="12" x2="15" y2="12" /></svg>;
       case 'exame':
@@ -3341,13 +3395,19 @@ export default function Home() {
       });
     }
 
+    // Lembretes de agendar consulta e rotina periódica (cardiologista, dentista etc.).
+    itens.push(...calcularPendenciasAgendar(
+      lembretesConsulta,
+      consultas.map((c) => ({ esp: c.especialidade?.nome || '', data: c.data_hora, status: c.status })),
+    ));
+
     return itens;
   }
 
   // Toque numa pendência da Home: vai para "Consultar", na tela da categoria, e abre os
   // detalhes do item (dose/horário do remédio, prazo do exame etc.). Para um familiar,
   // troca o membro selecionado primeiro; o efeito abaixo abre o item quando ele carregar.
-  const telaDaPendencia: Record<string, Aba> = { consulta: 'consultas', vacina: 'vacinas', medicacao: 'medicacoes', exame: 'exames', terapia: 'terapias' };
+  const telaDaPendencia: Record<string, Aba> = { consulta: 'consultas', vacina: 'vacinas', medicacao: 'medicacoes', exame: 'exames', terapia: 'terapias', agendar: 'consultas' };
   function abrirPendencia(p: ItemPendencia, membroId: string) {
     if (!p.refId) return;
     const alvoMembro = membros.find((m) => m.id === membroId);
@@ -3372,17 +3432,141 @@ export default function Home() {
     } else if (tipo === 'vacina') {
       const v = vacinas.find((x) => x.id === refId);
       if (v) { abrirEdicaoVacina(v); setAlvoPendencia(null); }
+    } else if (tipo === 'agendar') {
+      const l = lembretesConsulta.find((x) => x.id === refId);
+      if (l) { abrirNovaConsulta(l.especialidade); setAlvoPendencia(null); }
     } else if (tipo === 'terapia') {
       const t = terapias.find((x) => x.id === refId);
       if (t) { abrirEdicaoTerapia(t); setAlvoPendencia(null); }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [alvoPendencia, membroSelecionado?.id, consultas, medicacoes, exames, vacinas, terapias]);
+  }, [alvoPendencia, membroSelecionado?.id, consultas, medicacoes, exames, vacinas, terapias, lembretesConsulta]);
 
   function dataLocalISO(d: Date): string {
     const m = String(d.getMonth() + 1).padStart(2, '0');
     const dia = String(d.getDate()).padStart(2, '0');
     return `${d.getFullYear()}-${m}-${dia}`;
+  }
+
+  // ---- Lembretes de agendamento e rotina de consultas ----
+  async function carregarLembretesConsulta(membroId: string) {
+    const { data } = await supabase.from('lembrete_consulta').select('*').eq('membro_id', membroId).eq('ativo', true).order('criado_em', { ascending: true });
+    if (membroAtualRef.current === membroId) setLembretesConsulta((data || []) as LembreteConsulta[]);
+  }
+
+  // Especialidades que contam como "a mesma" para a rotina (ex.: ortodontia conta como dentista).
+  function mesmoGrupoEspecialidade(a: string, b: string): boolean {
+    if (a === b) return true;
+    const dent = ['Odontologia', 'Ortodontia'];
+    return dent.includes(a) && dent.includes(b);
+  }
+
+  // Um lembrete avulso fica "atendido" quando existe consulta da especialidade depois da data-base
+  // (a data do retorno já marcado, ou o dia em que o lembrete foi criado).
+  function lembreteUnicoAtendido(l: LembreteConsulta, consultasMembro: { esp: string; data: string; status: string }[]): boolean {
+    const base = l.depois_de || dataLocalISO(new Date(l.criado_em));
+    return consultasMembro.some((c) => c.status !== 'cancelada' && mesmoGrupoEspecialidade(c.esp, l.especialidade) && dataLocalISO(new Date(c.data)) > base);
+  }
+
+  // Dado os lembretes e as consultas de um membro, devolve o que deve aparecer como pendência.
+  function calcularPendenciasAgendar(
+    lembretes: LembreteConsulta[],
+    consultasMembro: { esp: string; data: string; status: string }[],
+  ): ItemPendencia[] {
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    const hojeStr = dataLocalISO(hoje);
+    const agora = Date.now();
+    const itens: ItemPendencia[] = [];
+    for (const l of lembretes) {
+      if (!l.ativo) continue;
+      const doGrupo = consultasMembro.filter((c) => c.status !== 'cancelada' && mesmoGrupoEspecialidade(c.esp, l.especialidade));
+      const temFutura = doGrupo.some((c) => new Date(c.data).getTime() > agora);
+      if (l.tipo === 'unico') {
+        if (lembreteUnicoAtendido(l, consultasMembro)) continue;
+        // lembrar_em = prazo para agendar; o aviso aparece "antecedencia_dias" antes dele (como um alerta de calendário).
+        const prazo = l.lembrar_em || hojeStr;
+        const avisarEm = somarDias(prazo, -(l.antecedencia_dias ?? 0));
+        if (avisarEm > hojeStr) continue;
+        itens.push({
+          id: `agendar-${l.id}`,
+          refId: l.id,
+          tipo: 'agendar',
+          titulo: `Agendar consulta: ${l.especialidade}`,
+          detalhe: prazo < hojeStr ? `o prazo passou em ${formatarData(prazo)}` : prazo === hojeStr ? 'agendar até hoje' : `agendar até ${formatarData(prazo)}`,
+          quando: avisarEm,
+          prazo,
+        });
+      } else {
+        if (temFutura) continue;
+        const meses = l.intervalo_meses || 12;
+        const passadas = doGrupo.filter((c) => new Date(c.data).getTime() <= agora).map((c) => dataLocalISO(new Date(c.data))).sort();
+        const ultima = passadas.length ? passadas[passadas.length - 1] : null;
+        const vence = ultima ? somarMeses(ultima, meses) : dataLocalISO(new Date(l.criado_em));
+        if (vence > somarDias(hojeStr, l.antecedencia_dias ?? 30)) continue;
+        const [ua, um] = (ultima || '').split('-');
+        const detalhe = !ultima
+          ? 'nenhuma consulta registrada ainda'
+          : vence < hojeStr
+          ? `última em ${um}/${ua} · já passou da hora`
+          : `última em ${um}/${ua} · vence em ${formatarData(vence)}`;
+        itens.push({ id: `agendar-${l.id}`, refId: l.id, tipo: 'agendar', titulo: `Agendar consulta: ${l.especialidade}`, detalhe });
+      }
+    }
+    return itens;
+  }
+
+  async function criarLembreteConsulta(esp: string, tipo: 'unico' | 'periodico', meses: number | null, lembrarEm: string | null, origemId: string | null = null, antecedencia: number = 30) {
+    if (!membroSelecionado) return false;
+    const { error } = await supabase.from('lembrete_consulta').insert({
+      membro_id: membroSelecionado.id,
+      especialidade: esp,
+      tipo,
+      intervalo_meses: tipo === 'periodico' ? meses : null,
+      lembrar_em: tipo === 'unico' ? lembrarEm : null,
+      consulta_origem_id: origemId,
+      antecedencia_dias: antecedencia,
+    });
+    if (error) {
+      setErroRotina(error.code === '23505' ? 'Essa especialidade já está na rotina.' : error.message);
+      return false;
+    }
+    await carregarLembretesConsulta(membroSelecionado.id);
+    return true;
+  }
+
+  async function atualizarAntecedencia(id: string, dias: number) {
+    if (!membroSelecionado) return;
+    setLembretesConsulta((l) => l.map((x) => (x.id === id ? { ...x, antecedencia_dias: dias } : x)));
+    await supabase.from('lembrete_consulta').update({ antecedencia_dias: dias }).eq('id', id);
+  }
+
+  async function apagarLembreteConsulta(id: string) {
+    if (!membroSelecionado) return;
+    await supabase.from('lembrete_consulta').delete().eq('id', id);
+    await carregarLembretesConsulta(membroSelecionado.id);
+  }
+
+  async function ativarRotinaSugerida() {
+    if (!membroSelecionado) return;
+    setErroRotina('');
+    const jaTem = new Set(lembretesConsulta.filter((l) => l.tipo === 'periodico').map((l) => l.especialidade));
+    for (const r of rotinaSugerida) {
+      if (r.soFeminino && membroSelecionado.sexo_biologico !== 'feminino') continue;
+      if (jaTem.has(r.especialidade)) continue;
+      await criarLembreteConsulta(r.especialidade, 'periodico', r.meses, null);
+    }
+  }
+
+  async function salvarFormRotina() {
+    setErroRotina('');
+    if (!rotinaEsp) { setErroRotina('Escolha a especialidade.'); return; }
+    if (formRotina === 'unico') {
+      const quando = rotinaData || somarDias(dataLocalISO(new Date()), 30);
+      if (await criarLembreteConsulta(rotinaEsp, 'unico', null, quando, null, rotinaAntec)) { setFormRotina(null); setRotinaEsp(''); setRotinaData(''); }
+    } else {
+      if (await criarLembreteConsulta(rotinaEsp, 'periodico', rotinaMeses, null, null, rotinaAntec)) { setFormRotina(null); setRotinaEsp(''); }
+    }
   }
 
   // ---- Avisos (sino) ----
@@ -3413,11 +3597,14 @@ export default function Home() {
       for (const p of f.itens) {
         if (!p.quando) continue;
         if (p.quando >= limiteStr) continue;
-        const dias = Math.round((new Date(p.quando + 'T00:00:00').getTime() - hoje.getTime()) / 86400000);
-        const atrasado = p.quando < hojeStr;
+        const alvo = p.prazo || p.quando;
+        const dias = Math.round((new Date(alvo + 'T00:00:00').getTime() - hoje.getTime()) / 86400000);
+        const atrasado = alvo < hojeStr;
         if (atrasado && (p.tipo === 'consulta' || p.tipo === 'terapia' || p.tipo === 'medicacao')) continue;
+        if (p.tipo === 'agendar' && !p.quando) continue;
         let rotulo = dias === 0 ? 'hoje' : dias === 1 ? 'amanhã' : atrasado ? `atrasado há ${-dias} dia${-dias > 1 ? 's' : ''}` : `em ${dias} dias`;
         if (p.tipo === 'medicacao') rotulo = `termina ${rotulo}`;
+        if (p.tipo === 'agendar') rotulo = atrasado ? `prazo passou há ${-dias} dia${-dias > 1 ? 's' : ''}` : dias === 0 ? 'agendar até hoje' : dias === 1 ? 'agendar até amanhã' : `agendar até ${formatarData(alvo)}`;
         lista.push({ chave: p.id, membroId: f.membroId, membroNome: f.membroNome, item: p, rotulo, atrasado });
       }
     }
@@ -3438,7 +3625,7 @@ export default function Home() {
     hoje.setHours(0, 0, 0, 0);
     const hojeStr = hoje.toISOString().slice(0, 10);
 
-    const [{ data: consultasData }, { data: vacinasData }, { data: medicacoesData }, { data: examesData }, { data: vacinasIndData }, { data: terapiasData }, { data: sessoesData }] = await Promise.all([
+    const [{ data: consultasData }, { data: vacinasData }, { data: medicacoesData }, { data: examesData }, { data: vacinasIndData }, { data: terapiasData }, { data: sessoesData }, { data: lembretesData }, { data: todasConsultasData }] = await Promise.all([
       supabase.from('consulta').select('id, membro_id, data_hora, status, especialidade(nome), profissional_saude(nome), local').in('membro_id', ids).eq('status', 'agendada').gte('data_hora', new Date().toISOString()),
       supabase.from('vacina').select('id, membro_id, nome, dose, proxima_dose_data').in('membro_id', ids).not('proxima_dose_data', 'is', null),
       supabase.from('medicacao').select('id, membro_id, nome, data_fim, horario').in('membro_id', ids),
@@ -3446,6 +3633,8 @@ export default function Home() {
       supabase.from('vacina').select('id, membro_id, nome, data_aplicacao').in('membro_id', ids).eq('status', 'indicada'),
       supabase.from('terapia').select('*').in('membro_id', ids),
       supabase.from('sessao_terapia').select('*').in('membro_id', ids).eq('lembrete', true),
+      supabase.from('lembrete_consulta').select('*').in('membro_id', ids).eq('ativo', true),
+      supabase.from('consulta').select('membro_id, data_hora, status, especialidade(nome)').in('membro_id', ids),
     ]);
 
     const porMembro: Record<string, ItemPendencia[]> = {};
@@ -3518,6 +3707,14 @@ export default function Home() {
         quando: (sessoesPorTerapia[t.id] || []).map((d) => new Date(d)).filter((d) => d.getTime() >= hoje.getTime()).sort((a, b) => a.getTime() - b.getTime()).map(dataLocalISO)[0],
       });
     });
+
+    for (const m of lista) {
+      const itensAgendar = calcularPendenciasAgendar(
+        ((lembretesData || []) as LembreteConsulta[]).filter((l) => l.membro_id === m.id),
+        ((todasConsultasData || []) as any[]).filter((c) => c.membro_id === m.id).map((c) => ({ esp: c.especialidade?.nome || '', data: c.data_hora, status: c.status })),
+      );
+      itensAgendar.forEach((it) => adicionar(m.id, it));
+    }
 
     const resultado = lista
       .map((m) => ({ membroId: m.id, membroNome: m.nome, itens: porMembro[m.id] || [] }))
@@ -6064,6 +6261,108 @@ export default function Home() {
               <div className="space-y-3">
                 {!mostrarFormConsulta ? (
                   <>
+                    {telaDetalhe === 'consultas' && (() => {
+                      const periodicos = lembretesConsulta.filter((l) => l.tipo === 'periodico');
+                      const avulsos = lembretesConsulta.filter((l) => l.tipo === 'unico');
+                      const pendentesIds = new Set(calcularPendenciasAgendar(lembretesConsulta, consultas.map((c) => ({ esp: c.especialidade?.nome || '', data: c.data_hora, status: c.status }))).map((i) => i.refId));
+                      const linhaLembrete = (l: LembreteConsulta) => {
+                        const ultimaData = consultas
+                          .filter((c) => c.status !== 'cancelada' && new Date(c.data_hora).getTime() <= Date.now() && mesmoGrupoEspecialidade(c.especialidade?.nome || '', l.especialidade))
+                          .map((c) => c.data_hora.slice(0, 10)).sort().pop();
+                        const rotuloIntervalo = intervalosRotina.find((x) => x.meses === l.intervalo_meses)?.label || `${l.intervalo_meses} meses`;
+                        return (
+                          <div key={l.id} className="flex items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2">
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-medium text-slate-800">{l.especialidade}</p>
+                              <p className="truncate text-xs text-slate-400">
+                                {l.tipo === 'periodico'
+                                  ? `a cada ${rotuloIntervalo}${ultimaData ? ' · última em ' + formatarData(ultimaData) : ' · nenhuma consulta ainda'}`
+                                  : `agendar até ${l.lembrar_em ? formatarData(l.lembrar_em) : 'hoje'} · avisa ${(opcoesAntecedencia.find((o) => o.dias === (l.antecedencia_dias ?? 0))?.label || 'no dia').toLowerCase()}`}
+                                {pendentesIds.has(l.id) ? ' · na Home' : l.tipo === 'unico' && lembreteUnicoAtendido(l, consultas.map((c) => ({ esp: c.especialidade?.nome || '', data: c.data_hora, status: c.status }))) ? ' · já agendada' : ''}
+                              </p>
+                            </div>
+                            <div className="flex shrink-0 items-center gap-2">
+                                <select
+                                  aria-label="Avisar com antecedência"
+                                  className="rounded-lg border border-[#E5E1DA] bg-white px-1 py-1 text-xs text-slate-600"
+                                  value={l.antecedencia_dias ?? (l.tipo === 'unico' ? 0 : 30)}
+                                  onChange={(e) => atualizarAntecedencia(l.id, Number(e.target.value))}
+                                >
+                                  {opcoesAntecedencia.map((o) => <option key={o.dias} value={o.dias}>{o.label}</option>)}
+                                </select>
+                              <button type="button" aria-label="Remover lembrete" onClick={() => apagarLembreteConsulta(l.id)} className="text-slate-400">✕</button>
+                            </div>
+                          </div>
+                        );
+                      };
+                      return (
+                        <div className="space-y-3 rounded-2xl border border-[#E5E1DA] bg-white p-4">
+                          <div>
+                            <p className="text-xs font-bold uppercase tracking-wider text-teal-800">Rotina de consultas</p>
+                            <p className="text-xs text-slate-400">O app avisa na Home quando está na hora de marcar.</p>
+                          </div>
+                          {periodicos.map(linhaLembrete)}
+                          {periodicos.length === 0 && (
+                            <button type="button" onClick={ativarRotinaSugerida} className="w-full rounded-xl border border-dashed border-teal-700/40 px-3 py-2 text-left text-sm font-semibold text-teal-800">
+                              Ativar rotina sugerida
+                              <span className="block text-xs font-normal text-slate-400">cardiologia, oftalmologia, odontologia{membroSelecionado?.sexo_biologico === 'feminino' ? ' e ginecologia' : ''}; dá para ajustar depois</span>
+                            </button>
+                          )}
+                          {avulsos.length > 0 && (
+                            <div className="space-y-2">
+                              <p className="text-xs text-slate-500">Lembretes para agendar</p>
+                              {avulsos.map(linhaLembrete)}
+                            </div>
+                          )}
+                          {formRotina === null ? (
+                            <div className="flex flex-wrap gap-4">
+                              <button type="button" onClick={() => { setFormRotina('periodico'); setRotinaEsp(''); setRotinaMeses(12); setRotinaAntec(30); setErroRotina(''); }} className="text-sm font-semibold text-teal-800">+ Especialidade na rotina</button>
+                              <button type="button" onClick={() => { setFormRotina('unico'); setRotinaEsp(''); setRotinaData(''); setRotinaAntec(7); setErroRotina(''); }} className="text-sm font-semibold text-teal-800">+ Lembrar de agendar</button>
+                            </div>
+                          ) : (
+                            <div className="space-y-2">
+                              <select className={inputClasse} value={rotinaEsp} onChange={(e) => setRotinaEsp(e.target.value)}>
+                                <option value="">Especialidade</option>
+                                {especialidadesMedicas.filter((e) => e !== 'Outros').map((e) => <option key={e} value={e}>{e}</option>)}
+                              </select>
+                              {formRotina === 'periodico' ? (
+                                <div>
+                                  <label className="text-xs text-slate-500 mb-1 block">Ir a cada</label>
+                                  <div className="flex flex-wrap gap-2">
+                                    {intervalosRotina.map((i) => (
+                                      <button key={i.meses} type="button" onClick={() => setRotinaMeses(i.meses)} className={`rounded-full border px-3 py-2 text-sm ${rotinaMeses === i.meses ? 'bg-teal-700 border-teal-700 text-white font-semibold' : 'border-slate-300 text-slate-700'}`}>{i.label}</button>
+                                    ))}
+                                  </div>
+                                  <label className="text-xs text-slate-500 mt-3 mb-1 block">Avisar na Home</label>
+                                  <div className="flex flex-wrap gap-2">
+                                    {opcoesAntecedencia.map((o) => (
+                                      <button key={o.dias} type="button" onClick={() => setRotinaAntec(o.dias)} className={`rounded-full border px-3 py-2 text-sm ${rotinaAntec === o.dias ? 'bg-teal-700 border-teal-700 text-white font-semibold' : 'border-slate-300 text-slate-700'}`}>{o.label}</button>
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : (
+                                <div>
+                                  <label className="text-xs text-slate-500 mb-1 block">Agendar até (vazio = em 30 dias)</label>
+                                  <input type="date" className={inputClasse} value={rotinaData} onChange={(e) => setRotinaData(e.target.value)} />
+                                  <label className="text-xs text-slate-500 mt-3 mb-1 block">Avisar na Home</label>
+                                  <div className="flex flex-wrap gap-2">
+                                    {opcoesAntecedencia.map((o) => (
+                                      <button key={o.dias} type="button" onClick={() => setRotinaAntec(o.dias)} className={`rounded-full border px-3 py-2 text-sm ${rotinaAntec === o.dias ? 'bg-teal-700 border-teal-700 text-white font-semibold' : 'border-slate-300 text-slate-700'}`}>{o.label}</button>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                              {erroRotina && <p className="text-xs text-red-600">{erroRotina}</p>}
+                              <div className="flex gap-2">
+                                <button type="button" onClick={salvarFormRotina} className={botaoPrimario}>Salvar</button>
+                                <button type="button" onClick={() => setFormRotina(null)} className={botaoSecundario}>Cancelar</button>
+                              </div>
+                            </div>
+                          )}
+                          {formRotina === null && erroRotina && <p className="text-xs text-red-600">{erroRotina}</p>}
+                        </div>
+                      );
+                    })()}
                     <div className="flex items-center justify-between">
                       <p className="text-xs text-slate-400">{consultasDaTela.length} registrada{consultasDaTela.length === 1 ? '' : 's'}</p>
                       {abaInferior !== 'consultar' && (
@@ -6326,6 +6625,36 @@ export default function Home() {
                                 {novaDataRetornoConsulta && (
                                   <p className="mt-1 text-xs text-slate-400">Ao salvar, o retorno entra como consulta agendada às 09:00, com lembrete. Depois você ajusta o horário na própria consulta.</p>
                                 )}
+                                <div className="mt-3 space-y-2 rounded-xl bg-slate-50 p-3">
+                                  <label className="flex items-center gap-2 text-sm text-slate-700">
+                                    <input type="checkbox" checked={agendarRetorno} onChange={(e) => { setAgendarRetorno(e.target.checked); setAgendarRetornoQuando(novaDataRetornoConsulta ? 'm3' : '15'); }} />
+                                    {novaDataRetornoConsulta ? 'Me lembrar de agendar a consulta seguinte, depois do retorno' : 'Ainda não marquei: me lembrar de agendar'}
+                                  </label>
+                                  {agendarRetorno && (
+                                    <>
+                                      <div className="flex flex-wrap gap-2">
+                                        {(novaDataRetornoConsulta
+                                          ? ([['m1', 'Em 1 mês'], ['m3', 'Em 3 meses'], ['m6', 'Em 6 meses'], ['m12', 'Em 1 ano'], ['data', 'Escolher data']] as const)
+                                          : ([['7', 'Em 7 dias'], ['15', 'Em 15 dias'], ['30', 'Em 30 dias'], ['data', 'Escolher data']] as const)
+                                        ).map(([id, label]) => (
+                                          <button key={id} type="button" onClick={() => setAgendarRetornoQuando(id)} className={`rounded-full border px-3 py-2 text-sm ${agendarRetornoQuando === id ? 'bg-teal-700 border-teal-700 text-white font-semibold' : 'border-slate-300 text-slate-700'}`}>{label}</button>
+                                        ))}
+                                      </div>
+                                      {agendarRetornoQuando === 'data' && (
+                                        <input type="date" className={inputClasse} value={agendarRetornoData} onChange={(e) => setAgendarRetornoData(e.target.value)} />
+                                      )}
+                                      <div>
+                                        <label className="text-xs text-slate-500 mb-1 block">Avisar na Home</label>
+                                        <select className={inputClasse} value={agendarAntec} onChange={(e) => setAgendarAntec(Number(e.target.value))}>
+                                          {opcoesAntecedencia.map((o) => <option key={o.dias} value={o.dias}>{o.label}</option>)}
+                                        </select>
+                                      </div>
+                                      <p className="text-xs text-slate-400">
+                                        {novaDataRetornoConsulta ? 'Os prazos contam a partir da data do retorno. ' : ''}A data escolhida é o prazo para agendar. O aviso fica na Home até você marcar uma consulta de {novaEspecialidadeConsulta === 'Outros' ? (especialidadeOutroConsulta || 'outra especialidade') : (novaEspecialidadeConsulta || 'essa especialidade')}{novaDataRetornoConsulta ? ' depois do retorno' : ''}.
+                                      </p>
+                                    </>
+                                  )}
+                                </div>
                               </div>
                             </div>
                           )}

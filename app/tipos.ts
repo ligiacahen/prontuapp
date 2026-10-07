@@ -333,3 +333,32 @@ export type TerapiaRascunho = { tipo: string; outroTipo: string; frequencia: str
 export const tiposTerapia: string[] = ['Fisioterapia', 'Fonoaudiologia', 'Psicologia', 'Terapia Ocupacional', 'Psicopedagogia', 'Acupuntura', 'Outra (especificar)'];
 
 export type SessaoTerapia = { id: string; terapia_id: string; data_hora: string; lembrete: boolean };
+
+export type LembreteConsulta = {
+  id: string;
+  membro_id: string;
+  especialidade: string;
+  tipo: 'unico' | 'periodico';
+  intervalo_meses: number | null;
+  lembrar_em: string | null;
+  consulta_origem_id: string | null;
+  depois_de?: string | null;
+  antecedencia_dias?: number | null;
+  ativo: boolean;
+  criado_em: string;
+};
+export const rotinaSugerida: { especialidade: string; meses: number; soFeminino?: boolean }[] = [
+  { especialidade: 'Cardiologia', meses: 12 },
+  { especialidade: 'Ginecologia e Obstetrícia', meses: 12, soFeminino: true },
+  { especialidade: 'Oftalmologia', meses: 12 },
+  { especialidade: 'Odontologia', meses: 6 },
+];
+export const intervalosRotina: { meses: number; label: string }[] = [
+  { meses: 3, label: '3 meses' }, { meses: 6, label: '6 meses' }, { meses: 12, label: '1 ano' },
+  { meses: 18, label: '1 ano e meio' }, { meses: 24, label: '2 anos' },
+];
+export const opcoesAntecedencia: { dias: number; label: string }[] = [
+  { dias: 0, label: 'No dia' }, { dias: 1, label: '1 dia antes' }, { dias: 3, label: '3 dias antes' },
+  { dias: 7, label: '1 semana antes' }, { dias: 15, label: '15 dias antes' }, { dias: 30, label: '1 mês antes' },
+  { dias: 60, label: '2 meses antes' }, { dias: 90, label: '3 meses antes' },
+];

@@ -170,3 +170,12 @@ export function somarDias(dataISO: string, dias: number): string {
   d.setDate(d.getDate() + dias);
   return d.toISOString().slice(0, 10);
 }
+
+// Soma meses a uma data ISO (YYYY-MM-DD), mantendo o dia quando possível.
+export function somarMeses(dataISO: string, meses: number): string {
+  const [a, m, d] = dataISO.split('-').map(Number);
+  const alvo = new Date(a, m - 1 + meses, 1);
+  const ultimoDia = new Date(alvo.getFullYear(), alvo.getMonth() + 1, 0).getDate();
+  alvo.setDate(Math.min(d, ultimoDia));
+  return `${alvo.getFullYear()}-${String(alvo.getMonth() + 1).padStart(2, '0')}-${String(alvo.getDate()).padStart(2, '0')}`;
+}
