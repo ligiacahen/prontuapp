@@ -271,6 +271,22 @@ export default function Home() {
   const [terapiasConsulta, setTerapiasConsulta] = useState<TerapiaRascunho[]>([]);
   const [anexosNovosConsulta, setAnexosNovosConsulta] = useState<File[]>([]);
   // Abas de cada seção (Agendado/Realizado, Em uso/Encerrado...): 'a' = primeira, 'b' = segunda.
+  // Compartilhamento de perfis entre contas diferentes (ex.: pais -> filho adulto).
+  type CompartItem = { id: string; nivel: string; codigo: string | null; codigo_expira_em: string; usado_por_nome: string | null; usado_em: string | null; acesso_ate: string | null; status: string };
+  type CompartComigo = { id: string; membro_id: string; membro_nome: string; dono_nome: string; nivel: string; acesso_ate: string | null };
+  const [compartMembroId, setCompartMembroId] = useState('');
+  const [compartNivel, setCompartNivel] = useState<'visualizar' | 'editar'>('visualizar');
+  const [compartDias, setCompartDias] = useState('90');
+  const [compartAceite, setCompartAceite] = useState(false);
+  const [compartCodigoNovo, setCompartCodigoNovo] = useState('');
+  const [compartLista, setCompartLista] = useState<CompartItem[]>([]);
+  const [compartComigo, setCompartComigo] = useState<CompartComigo[]>([]);
+  const [compartErro, setCompartErro] = useState('');
+  const [compartOcupado, setCompartOcupado] = useState(false);
+  const [codigoRecebido, setCodigoRecebido] = useState('');
+  const [previaRecebida, setPreviaRecebida] = useState<{ membro_nome: string; dono_nome: string; nivel: string; dias_acesso: number | null } | null>(null);
+  const [aceiteRecebido, setAceiteRecebido] = useState(false);
+  const [compartSucesso, setCompartSucesso] = useState('');
   const [abaStatusSecao, setAbaStatusSecao] = useState<Record<string, 'a' | 'b'>>({});
   // Anexos (PDF/foto) de exames e vacinas: do item aberto no formulário e contagem por item na lista.
   type AnexoSaude = { id: string; caminho: string; nome: string | null; url: string | null };
@@ -536,7 +552,13 @@ export default function Home() {
   const [filtroEspecialidadeRisco, setFiltroEspecialidadeRisco] = useState('');
 
   useEffect(() => {
-    if (passo === 'painel') carregarMembros();
+    if (passo !== 'painel') return;
+    (async () => {
+      // Encerra acessos compartilhados que passaram da validade antes de listar os membros.
+      await supabase.rpc('limpar_compartilhamentos_vencidos');
+      await carregarMembros();
+      carregarCompartComigo();
+    })();
   }, [passo]);
 
   // Filtra as dicas de saúde pela idade e sexo biológico do membro selecionado.
@@ -3486,6 +3508,80 @@ export default function Home() {
     );
     return <div className="grid grid-cols-2 gap-2">{botao('a', rotuloA, contA)}{botao('b', rotuloB, contB)}</div>;
   }
+  // ---- Compartilhamento entre contas ----
+  async function carregarCompartComigo() {
+    const { data, error } = await supabase.rpc('listar_compartilhados_comigo');
+    if (!error) setCompartComigo((data || []) as CompartComigo[]);
+  }
+  async function carregarCompartLista(membroId: string) {
+    if (!membroId) { setCompartLista([]); return; }
+    const { data } = await supabase.rpc('listar_compartilhamentos', { p_membro_id: membroId });
+    setCompartLista((data || []) as CompartItem[]);
+  }
+  async function gerarCompartilhamento() {
+    setCompartErro('');
+    setCompartSucesso('');
+    if (!compartMembroId) { setCompartErro('Escolha qual perfil quer compartilhar.'); return; }
+    if (!compartAceite) { setCompartErro('Marque a caixa para confirmar que você autoriza o compartilhamento.'); return; }
+    setCompartOcupado(true);
+    const { data, error } = await supabase.rpc('gerar_compartilhamento', {
+      p_membro_id: compartMembroId,
+      p_nivel: compartNivel,
+      p_dias_acesso: compartDias ? Number(compartDias) : null,
+    });
+    setCompartOcupado(false);
+    if (error) { setCompartErro(error.message); return; }
+    setCompartCodigoNovo(String(data));
+    setCompartAceite(false);
+    await carregarCompartLista(compartMembroId);
+  }
+  async function revogarCompartilhamento(id: string) {
+    setCompartErro('');
+    const { error } = await supabase.rpc('revogar_compartilhamento', { p_id: id });
+    if (error) { setCompartErro(error.message); return; }
+    await carregarCompartLista(compartMembroId);
+    await carregarCompartComigo();
+    await carregarMembros();
+    if (membroSelecionado && compartComigo.some((c) => c.id === id && c.membro_id === membroSelecionado.id)) {
+      setMembroSelecionado(null);
+      setTelaDetalhe(null);
+    }
+  }
+  async function consultarCodigoRecebido() {
+    setCompartErro('');
+    setCompartSucesso('');
+    setPreviaRecebida(null);
+    setAceiteRecebido(false);
+    if (!codigoRecebido.trim()) { setCompartErro('Digite o código.'); return; }
+    setCompartOcupado(true);
+    const { data, error } = await supabase.rpc('consultar_compartilhamento', { p_codigo: codigoRecebido });
+    setCompartOcupado(false);
+    if (error) { setCompartErro(error.message); return; }
+    const linha = Array.isArray(data) ? data[0] : data;
+    if (!linha) { setCompartErro('Código inválido, já usado ou expirado.'); return; }
+    setPreviaRecebida(linha);
+  }
+  async function aceitarCompartilhamento() {
+    setCompartErro('');
+    if (!aceiteRecebido) { setCompartErro('Marque a caixa para confirmar que entendeu o aviso.'); return; }
+    setCompartOcupado(true);
+    const { data, error } = await supabase.rpc('resgatar_compartilhamento', { p_codigo: codigoRecebido });
+    setCompartOcupado(false);
+    if (error) { setCompartErro(error.message); return; }
+    setCompartSucesso(`Pronto! O perfil de ${data} agora aparece na sua lista de membros.`);
+    setPreviaRecebida(null);
+    setCodigoRecebido('');
+    setAceiteRecebido(false);
+    await carregarMembros();
+    await carregarCompartComigo();
+  }
+  function textoValidade(dias: number | null) {
+    if (!dias) return 'até a pessoa que compartilhou revogar';
+    if (dias >= 365) return 'por 1 ano';
+    return `por ${dias} dias`;
+  }
+  const idsCompartilhadosComigo = new Set(compartComigo.map((c) => c.membro_id));
+
   async function marcarConsultaRealizada(c: Consulta) {
     if (!membroSelecionado) return;
     const { error } = await supabase.from('consulta').update({ status: 'realizada' }).eq('id', c.id);
@@ -4674,6 +4770,11 @@ export default function Home() {
                   <div>
                     <p className="font-medium text-slate-800">{m.nome}</p>
                     <p className="text-xs text-slate-400">{calcularIdade(m.data_nascimento)} anos</p>
+                    {idsCompartilhadosComigo.has(m.id) && (
+                      <span className="mt-0.5 inline-block rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-semibold text-violet-700">
+                        compartilhado por {compartComigo.find((c) => c.membro_id === m.id)?.dono_nome}
+                      </span>
+                    )}
                   </div>
                 </button>
               ))}
@@ -4908,7 +5009,7 @@ export default function Home() {
               </div>
             </div>
 
-            {meuPapel === 'admin' && (
+            {meuPapel === 'admin' && !idsCompartilhadosComigo.has(membroSelecionado.id) && (
             <div className="mt-8 border-t border-[#E5E1DA] pt-4">
               {!confirmandoExclusaoMembro ? (
                 <button onClick={() => setConfirmandoExclusaoMembro(true)} className="w-full text-sm text-red-600">
@@ -4965,6 +5066,127 @@ export default function Home() {
               <button disabled={carregandoSenha} onClick={trocarSenha} className={botaoPrimario}>
                 {carregandoSenha ? 'Salvando...' : 'Salvar nova senha'}
               </button>
+            </div>
+
+            <div className="space-y-4 rounded-xl border border-[#E5E1DA] p-4">
+              <div>
+                <p className="text-sm font-medium text-slate-800">Compartilhar entre contas</p>
+                <p className="text-xs text-slate-500">Para quem tem conta própria no app, como pais e filhos adultos: dá acesso a um perfil sem misturar as famílias.</p>
+              </div>
+              {compartErro && <p className="rounded-lg bg-red-50 p-2 text-sm text-red-700">{compartErro}</p>}
+              {compartSucesso && <p className="rounded-lg bg-teal-50 p-2 text-sm text-teal-800">{compartSucesso}</p>}
+
+              <div className="space-y-2 rounded-xl bg-slate-50 p-3">
+                <p className="text-xs font-bold uppercase tracking-wider text-teal-800">Compartilhar um perfil</p>
+                <select
+                  className={inputClasse}
+                  value={compartMembroId}
+                  onChange={(e) => { setCompartMembroId(e.target.value); setCompartCodigoNovo(''); setCompartAceite(false); setCompartErro(''); carregarCompartLista(e.target.value); }}
+                >
+                  <option value="">qual perfil você quer compartilhar?</option>
+                  {membros.filter((m) => !idsCompartilhadosComigo.has(m.id)).map((m) => (
+                    <option key={m.id} value={m.id}>{m.nome}</option>
+                  ))}
+                </select>
+                {compartMembroId && (
+                  <>
+                    <div className="grid grid-cols-2 gap-2">
+                      {([['visualizar', 'Só ver'], ['editar', 'Ver e editar']] as const).map(([val, rot]) => (
+                        <button key={val} type="button" onClick={() => setCompartNivel(val)} className={`rounded-xl px-3 py-2 text-sm font-medium ${compartNivel === val ? 'bg-teal-700 text-white' : 'bg-white text-slate-600 border border-slate-200'}`}>{rot}</button>
+                      ))}
+                    </div>
+                    <select className={inputClasse} value={compartDias} onChange={(e) => setCompartDias(e.target.value)}>
+                      <option value="30">acesso por 30 dias</option>
+                      <option value="90">acesso por 90 dias</option>
+                      <option value="365">acesso por 1 ano</option>
+                      <option value="">acesso até eu revogar</option>
+                    </select>
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 space-y-1.5">
+                      <p className="font-semibold">Antes de autorizar</p>
+                      <p>Você está autorizando o compartilhamento das informações de saúde de <strong>{membros.find((m) => m.id === compartMembroId)?.nome}</strong> com outra pessoa. Dados de saúde são sensíveis.</p>
+                      <p>Quem usar o código poderá {compartNivel === 'editar' ? 'ver e alterar' : 'ver'} consultas, exames, vacinas, medicações, condições, anexos e demais registros deste perfil.</p>
+                      <p>Envie o código só para alguém de confiança. Ele vale por 7 dias e só pode ser usado uma vez. Você pode revogar o acesso quando quiser.</p>
+                      <label className="flex items-start gap-2 pt-1 text-sm text-slate-800">
+                        <input type="checkbox" className="mt-0.5" checked={compartAceite} onChange={(e) => setCompartAceite(e.target.checked)} />
+                        Li o aviso e autorizo o compartilhamento.
+                      </label>
+                    </div>
+                    <button disabled={compartOcupado} onClick={gerarCompartilhamento} className={botaoPrimario}>
+                      {compartOcupado ? 'Gerando...' : 'Gerar código'}
+                    </button>
+                  </>
+                )}
+                {compartCodigoNovo && (
+                  <div className="rounded-xl border border-teal-200 bg-white p-3 text-center space-y-1">
+                    <p className="text-xs text-slate-500">Envie este código para a pessoa (vale por 7 dias):</p>
+                    <p className="select-all text-2xl font-bold tracking-widest text-teal-800">{compartCodigoNovo.replace(/(.{4})/g, '$1 ').trim()}</p>
+                    <button type="button" onClick={() => { try { navigator.clipboard.writeText(compartCodigoNovo); } catch {} }} className="text-sm font-semibold text-teal-700">copiar código</button>
+                  </div>
+                )}
+                {compartMembroId && compartLista.length > 0 && (
+                  <div className="space-y-2 pt-1">
+                    <p className="text-xs text-slate-500">Compartilhamentos deste perfil</p>
+                    {compartLista.map((c) => (
+                      <div key={c.id} className="flex items-center justify-between gap-2 rounded-lg bg-white px-3 py-2">
+                        <div className="min-w-0 text-sm">
+                          {c.status === 'ativo' ? (
+                            <>
+                              <p className="truncate font-medium text-slate-800">{c.usado_por_nome || 'Pessoa'} · {c.nivel === 'editar' ? 'ver e editar' : 'só ver'}</p>
+                              <p className="text-xs text-slate-400">{c.acesso_ate ? `acesso até ${new Date(c.acesso_ate).toLocaleDateString('pt-BR')}` : 'sem data para acabar'}</p>
+                            </>
+                          ) : (
+                            <>
+                              <p className="font-medium text-slate-800">Código {(c.codigo || '').replace(/(.{4})/g, '$1 ').trim()}</p>
+                              <p className="text-xs text-slate-400">aguardando · vale até {new Date(c.codigo_expira_em).toLocaleDateString('pt-BR')} · {c.nivel === 'editar' ? 'ver e editar' : 'só ver'}</p>
+                            </>
+                          )}
+                        </div>
+                        <button onClick={() => revogarCompartilhamento(c.id)} className="shrink-0 text-xs text-red-600">{c.status === 'ativo' ? 'revogar' : 'cancelar'}</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2 rounded-xl bg-slate-50 p-3">
+                <p className="text-xs font-bold uppercase tracking-wider text-teal-800">Recebi um código</p>
+                <input className={inputClasse} placeholder="código de compartilhamento" value={codigoRecebido} onChange={(e) => { setCodigoRecebido(e.target.value); setPreviaRecebida(null); }} />
+                {!previaRecebida && (
+                  <button disabled={compartOcupado} onClick={consultarCodigoRecebido} className={botaoSecundario}>
+                    {compartOcupado ? 'Verificando...' : 'Verificar código'}
+                  </button>
+                )}
+                {previaRecebida && (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 space-y-1.5">
+                    <p className="font-semibold">Antes de aceitar</p>
+                    <p><strong>{previaRecebida.dono_nome}</strong> quer compartilhar com você as informações de saúde de <strong>{previaRecebida.membro_nome}</strong>.</p>
+                    <p>Você poderá {previaRecebida.nivel === 'editar' ? 'ver e alterar' : 'ver'} esses registros {textoValidade(previaRecebida.dias_acesso)}. São dados sensíveis de outra pessoa: use apenas para acompanhar ou cuidar dela e não repasse a terceiros.</p>
+                    <label className="flex items-start gap-2 pt-1 text-sm text-slate-800">
+                      <input type="checkbox" className="mt-0.5" checked={aceiteRecebido} onChange={(e) => setAceiteRecebido(e.target.checked)} />
+                      Entendi o aviso e aceito.
+                    </label>
+                    <div className="flex gap-2 pt-1">
+                      <button disabled={compartOcupado} onClick={aceitarCompartilhamento} className={botaoPrimario}>{compartOcupado ? 'Aceitando...' : 'Aceitar acesso'}</button>
+                      <button onClick={() => { setPreviaRecebida(null); setCodigoRecebido(''); }} className={botaoSecundario}>Recusar</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {compartComigo.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-bold uppercase tracking-wider text-teal-800">Compartilhados comigo</p>
+                  {compartComigo.map((c) => (
+                    <div key={c.id} className="flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2">
+                      <div className="min-w-0 text-sm">
+                        <p className="truncate font-medium text-slate-800">{c.membro_nome}</p>
+                        <p className="text-xs text-slate-400">por {c.dono_nome} · {c.nivel === 'editar' ? 'ver e editar' : 'só ver'}{c.acesso_ate ? ` · até ${new Date(c.acesso_ate).toLocaleDateString('pt-BR')}` : ''}</p>
+                      </div>
+                      <button onClick={() => revogarCompartilhamento(c.id)} className="shrink-0 text-xs text-red-600">deixar de ver</button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {meuPapel !== null && meuPapel !== 'admin' && (
