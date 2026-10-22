@@ -3314,7 +3314,7 @@ export default function Home() {
     // Mostra TODAS as consultas agendadas futuras (não só a próxima), da mais próxima
     // pra mais distante.
     const consultasFuturas = consultas
-      .filter((c) => c.status === 'agendada' && new Date(c.data_hora) >= new Date())
+      .filter((c) => c.status === 'agendada')
       .sort((a, b) => new Date(a.data_hora).getTime() - new Date(b.data_hora).getTime());
     for (const c of consultasFuturas) {
       const dh = new Date(c.data_hora);
@@ -3323,7 +3323,8 @@ export default function Home() {
         refId: c.id,
         tipo: 'consulta',
         titulo: `Consulta: ${c.especialidade?.nome || 'a confirmar'}${c.profissional_saude?.nome ? ' — ' + c.profissional_saude.nome : ''}`,
-        detalhe: `${dh.toLocaleDateString('pt-BR')}${c.local ? ' · ' + c.local : ''}`,
+        detalhe: `${dh.getTime() < Date.now() ? 'já passou, atualize · ' : ''}${dh.toLocaleDateString('pt-BR')}${c.local ? ' · ' + c.local : ''}`,
+        quando: dataLocalISO(dh),
       });
     }
 
@@ -3341,6 +3342,7 @@ export default function Home() {
         tipo: 'vacina',
         titulo: `Vacina: ${v.nome}${v.dose ? ' — ' + v.dose : ''}`,
         detalhe: diasRestantes < 0 ? `atrasada desde ${dv.toLocaleDateString('pt-BR')}` : diasRestantes === 0 ? 'hoje' : `vence em ${diasRestantes} dias`,
+        quando: v.proxima_dose_data as string,
       });
     }
 
@@ -3354,6 +3356,7 @@ export default function Home() {
         tipo: 'exame',
         titulo: `Exame: ${e.nome}`,
         detalhe: dias < 0 ? `prazo vencido em ${dp.toLocaleDateString('pt-BR')}` : dias === 0 ? 'fazer até hoje' : `fazer até ${dp.toLocaleDateString('pt-BR')}`,
+        quando: e.data_realizacao,
       });
     }
 
@@ -3366,6 +3369,7 @@ export default function Home() {
         tipo: 'vacina',
         titulo: `Vacina indicada: ${v.nome}`,
         detalhe: `tomar em ${dv.toLocaleDateString('pt-BR')}`,
+        quando: v.data_aplicacao,
       });
     }
 
@@ -3380,6 +3384,22 @@ export default function Home() {
         detalhe: m.horario ? `hoje às ${m.horario}` : 'uso contínuo',
         quando: m.data_fim || undefined,
       });
+    }
+    // Ciclo que acabou nos últimos 15 dias: avisa para renovar ou dar baixa.
+    for (const m of medicacoes) {
+      if (!m.data_fim) continue;
+      const fim = new Date(m.data_fim + 'T12:00:00');
+      const diasPassados = Math.round((hoje.getTime() - fim.getTime()) / 86400000);
+      if (diasPassados > 0 && diasPassados <= 15) {
+        itens.push({
+          id: `medicacao-fim-${m.id}`,
+          refId: m.id,
+          tipo: 'medicacao',
+          titulo: `Medicação: ${m.nome}`,
+          detalhe: `o ciclo acabou em ${fim.toLocaleDateString('pt-BR')}`,
+          quando: m.data_fim,
+        });
+      }
     }
 
     // Terapias em andamento: mostra as datas/horários das próximas sessões com alerta ligado
@@ -3402,6 +3422,40 @@ export default function Home() {
     ));
 
     return itens;
+  }
+
+  // ---- Carrossel de pendências (quadradinhos que deslizam para o lado) ----
+  // Data usada para ordenar: a mais antiga/atrasada vem primeiro; sem data vai para o fim.
+  function chaveOrdemPendencia(p: ItemPendencia): string {
+    return p.prazo || p.quando || '9999-12-31';
+  }
+  function renderCarrosselPendencias(cards: { membroId: string; membroNome: string; item: ItemPendencia }[], mostrarDono: boolean) {
+    const hojeStr = dataLocalISO(new Date());
+    const ordenados = [...cards].sort((a, b) => chaveOrdemPendencia(a.item).localeCompare(chaveOrdemPendencia(b.item)));
+    const rotulos: Record<string, string> = { consulta: 'Consulta', vacina: 'Vacina', medicacao: 'Medicação', exame: 'Exame', terapia: 'Terapia', agendar: 'Agendar' };
+    return (
+      <div className="-mx-4 flex snap-x snap-mandatory gap-2.5 overflow-x-auto px-4 pb-2" style={{ scrollbarWidth: 'none' }}>
+        {ordenados.map((c) => {
+          const atrasado = chaveOrdemPendencia(c.item) < hojeStr;
+          const titulo = c.item.titulo.replace(/^[^:]+:\s*/, '');
+          return (
+            <button
+              key={`${c.membroId}-${c.item.id}`}
+              onClick={() => abrirPendencia(c.item, c.membroId)}
+              className={`flex min-h-[92px] w-[36%] min-w-[130px] shrink-0 snap-start flex-col rounded-lg border-y border-r border-l-[3px] bg-white p-2.5 text-left shadow-sm transition hover:shadow ${atrasado ? 'border-slate-200 border-l-rose-400' : 'border-slate-200 border-l-teal-500'} sm:w-[31%]`}
+            >
+              <div className="flex items-center gap-1.5">
+                <span className="shrink-0 opacity-70 [&>svg]:h-3.5 [&>svg]:w-3.5">{iconePendencia(c.item.tipo)}</span>
+                <span className="truncate text-[10px] font-semibold uppercase tracking-wide text-slate-400">{rotulos[c.item.tipo] || ''}</span>
+              </div>
+              <p className="mt-1.5 line-clamp-2 text-[13px] font-semibold leading-snug text-slate-800">{titulo}</p>
+              <p className={`mt-auto line-clamp-2 whitespace-pre-line pt-1 text-[11px] leading-tight ${atrasado ? 'font-medium text-rose-600' : 'text-slate-500'}`}>{c.item.detalhe}</p>
+              {mostrarDono && <p className="mt-1 truncate border-t border-slate-100 pt-1 text-[11px] font-medium text-teal-700">{c.membroNome}</p>}
+            </button>
+          );
+        })}
+      </div>
+    );
   }
 
   // Toque numa pendência da Home: vai para "Consultar", na tela da categoria, e abre os
@@ -3626,7 +3680,7 @@ export default function Home() {
     const hojeStr = hoje.toISOString().slice(0, 10);
 
     const [{ data: consultasData }, { data: vacinasData }, { data: medicacoesData }, { data: examesData }, { data: vacinasIndData }, { data: terapiasData }, { data: sessoesData }, { data: lembretesData }, { data: todasConsultasData }] = await Promise.all([
-      supabase.from('consulta').select('id, membro_id, data_hora, status, especialidade(nome), profissional_saude(nome), local').in('membro_id', ids).eq('status', 'agendada').gte('data_hora', new Date().toISOString()),
+      supabase.from('consulta').select('id, membro_id, data_hora, status, especialidade(nome), profissional_saude(nome), local').in('membro_id', ids).eq('status', 'agendada'),
       supabase.from('vacina').select('id, membro_id, nome, dose, proxima_dose_data').in('membro_id', ids).not('proxima_dose_data', 'is', null),
       supabase.from('medicacao').select('id, membro_id, nome, data_fim, horario').in('membro_id', ids),
       supabase.from('exame').select('id, membro_id, nome, data_realizacao').in('membro_id', ids).eq('status', 'solicitado'),
@@ -3649,7 +3703,7 @@ export default function Home() {
         refId: c.id,
         tipo: 'consulta',
         titulo: `Consulta: ${c.especialidade?.nome || 'a confirmar'}${c.profissional_saude?.nome ? ' — ' + c.profissional_saude.nome : ''}`,
-        detalhe: `${new Date(c.data_hora).toLocaleDateString('pt-BR')}${c.local ? ' · ' + c.local : ''}`,
+        detalhe: `${new Date(c.data_hora).getTime() < Date.now() ? 'já passou, atualize · ' : ''}${new Date(c.data_hora).toLocaleDateString('pt-BR')}${c.local ? ' · ' + c.local : ''}`,
         quando: dataLocalISO(new Date(c.data_hora)),
       });
     });
@@ -3690,6 +3744,19 @@ export default function Home() {
         tipo: 'medicacao',
         titulo: `Medicação: ${m.nome}`,
         detalhe: m.horario ? `hoje às ${m.horario}` : 'uso contínuo',
+      });
+    });
+    (medicacoesData || []).filter((m: any) => m.data_fim && m.data_fim < hojeStr).forEach((m: any) => {
+      const fim = new Date(m.data_fim + 'T12:00:00');
+      const diasPassados = Math.round((hoje.getTime() - fim.getTime()) / 86400000);
+      if (diasPassados > 15) return;
+      adicionar(m.membro_id, {
+        id: `medicacao-fim-${m.id}`,
+        refId: m.id,
+        tipo: 'medicacao',
+        titulo: `Medicação: ${m.nome}`,
+        detalhe: `o ciclo acabou em ${fim.toLocaleDateString('pt-BR')}`,
+        quando: m.data_fim,
       });
     });
     const sessoesPorTerapia: Record<string, string[]> = {};
@@ -4586,21 +4653,9 @@ export default function Home() {
                 if (pendencias.length === 0) {
                   return <p className="text-sm text-slate-400 py-2">Nada pendente por aqui no momento.</p>;
                 }
-                return (
-                  <div className="space-y-2">
-                    {pendencias.map((p) => (
-                      <button key={p.id} onClick={() => abrirPendencia(p, membroSelecionado.id)} className="flex w-full items-center gap-3 rounded-xl border border-[#E5E1DA] bg-white p-3 text-left transition hover:bg-[#FAFAF8]">
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#CCFBF1]">
-                          {iconePendencia(p.tipo)}
-                        </div>
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium text-slate-800">{p.titulo}</p>
-                          <p className="whitespace-pre-line text-xs text-slate-400">{p.detalhe}</p>
-                        </div>
-                        <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="ml-auto shrink-0 text-slate-300"><path d="M9 18l6-6-6-6" /></svg>
-                      </button>
-                    ))}
-                  </div>
+                return renderCarrosselPendencias(
+                  pendencias.map((item) => ({ membroId: membroSelecionado.id, membroNome: membroSelecionado.nome, item })),
+                  false,
                 );
               })()}
             </div>
@@ -4614,31 +4669,11 @@ export default function Home() {
                   <h3 className="text-sm font-semibold text-slate-800">Pendências da família</h3>
                   <span className="text-xs text-teal-700">{mostrarPendenciasFamilia ? 'ocultar ▲' : 'mostrar ▼'}</span>
                 </button>
-                {mostrarPendenciasFamilia && (
-                  <div className="space-y-3">
-                    {pendenciasFamiliares
-                      .filter((f) => f.membroId !== membroSelecionado?.id)
-                      .map((f) => (
-                        <div key={f.membroId} className="rounded-xl border border-[#E5E1DA] bg-white p-3">
-                          <p className="mb-2 text-xs font-semibold text-slate-500">{f.membroNome}</p>
-                          <div className="space-y-1.5">
-                            {f.itens.map((p) => (
-                              <button key={p.id} onClick={() => abrirPendencia(p, f.membroId)} className="flex w-full items-center gap-2 text-left">
-                                <span className="shrink-0">{iconePendencia(p.tipo)}</span>
-                                {p.detalhe.includes('\n') ? (
-                                  <div className="min-w-0 text-sm text-slate-700">
-                                    <p className="truncate">{p.titulo}</p>
-                                    <p className="whitespace-pre-line text-xs text-slate-400">{p.detalhe}</p>
-                                  </div>
-                                ) : (
-                                  <p className="min-w-0 truncate text-sm text-slate-700">{p.titulo} · <span className="text-slate-400">{p.detalhe}</span></p>
-                                )}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                  </div>
+                {mostrarPendenciasFamilia && renderCarrosselPendencias(
+                  pendenciasFamiliares
+                    .filter((f) => f.membroId !== membroSelecionado?.id)
+                    .flatMap((f) => f.itens.map((item) => ({ membroId: f.membroId, membroNome: f.membroNome, item }))),
+                  true,
                 )}
               </div>
             )}
