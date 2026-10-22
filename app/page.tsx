@@ -256,7 +256,7 @@ export default function Home() {
   const [novoMotivoConsulta, setNovoMotivoConsulta] = useState('');
   const [novoStatusConsulta, setNovoStatusConsulta] = useState('agendada');
   const [novoLembreteConsulta, setNovoLembreteConsulta] = useState(false);
-  const medVazia = (): MedRascunho => ({ nome: '', dose: '', freq: '8h', primeira: '08:00', inicio: new Date().toISOString().slice(0, 10), duracao: '7', duracaoData: '', duracaoDias: '', como: '' });
+  const medVazia = (): MedRascunho => ({ nome: '', dose: '', freq: '8h', primeira: '08:00', inicio: dataLocalISO(new Date()), duracao: '7', duracaoData: '', duracaoDias: '', como: '' });
   const vacVazia = (): VacRascunho => ({ nome: '', outroNome: '', quando: 'mes', quandoData: '', obs: '' });
   const [medsConsulta, setMedsConsulta] = useState<MedRascunho[]>([]);
   const [examesConsulta, setExamesConsulta] = useState<string[]>([]);
@@ -267,9 +267,17 @@ export default function Home() {
   const [exLembreteConsulta, setExLembreteConsulta] = useState(true);
   const [vacsConsulta, setVacsConsulta] = useState<VacRascunho[]>([]);
   const [vacLembreteConsulta, setVacLembreteConsulta] = useState(true);
-  const terapiaVazia = (): TerapiaRascunho => ({ tipo: '', outroTipo: '', frequencia: '', inicio: new Date().toISOString().slice(0, 10), fim: '', profissional: '', local: '', obs: '', sessoes: [], novaSessao: '', novaSessaoAlerta: true });
+  const terapiaVazia = (): TerapiaRascunho => ({ tipo: '', outroTipo: '', frequencia: '', inicio: dataLocalISO(new Date()), fim: '', profissional: '', local: '', obs: '', sessoes: [], novaSessao: '', novaSessaoAlerta: true });
   const [terapiasConsulta, setTerapiasConsulta] = useState<TerapiaRascunho[]>([]);
   const [anexosNovosConsulta, setAnexosNovosConsulta] = useState<File[]>([]);
+  // Abas de cada seção (Agendado/Realizado, Em uso/Encerrado...): 'a' = primeira, 'b' = segunda.
+  const [abaStatusSecao, setAbaStatusSecao] = useState<Record<string, 'a' | 'b'>>({});
+  // Anexos (PDF/foto) de exames e vacinas: do item aberto no formulário e contagem por item na lista.
+  type AnexoSaude = { id: string; caminho: string; nome: string | null; url: string | null };
+  const [anexosSaude, setAnexosSaude] = useState<AnexoSaude[]>([]);
+  const [anexosSaudeNovos, setAnexosSaudeNovos] = useState<File[]>([]);
+  const [erroAnexoSaude, setErroAnexoSaude] = useState('');
+  const [contagemAnexos, setContagemAnexos] = useState<Record<string, number>>({});
   const [anexosConsulta, setAnexosConsulta] = useState<{ id: string; caminho: string; nome: string | null; url: string | null }[]>([]);
   const [terapias, setTerapias] = useState<Terapia[]>([]);
   const [mostrarFormTerapia, setMostrarFormTerapia] = useState(false);
@@ -708,6 +716,7 @@ export default function Home() {
       .eq('membro_id', membroId)
       .order('data_realizacao', { ascending: false });
     if (!error && data && membroAtualRef.current === membroId) setExames(data);
+    carregarContagemAnexos(membroId);
   }
 
   async function carregarVacinas(membroId: string) {
@@ -717,6 +726,7 @@ export default function Home() {
       .eq('membro_id', membroId)
       .order('data_aplicacao', { ascending: false });
     if (!error && data && membroAtualRef.current === membroId) setVacinas(data);
+    carregarContagemAnexos(membroId);
   }
 
   async function carregarTerapias(membroId: string) {
@@ -1045,7 +1055,7 @@ export default function Home() {
       membro_id: opts.membroId,
       nome: opts.nome.trim(),
       dosagem: opts.dosagem || null,
-      data_inicio: opts.dataInicio || new Date().toISOString().slice(0, 10),
+      data_inicio: opts.dataInicio || dataLocalISO(new Date()),
       data_fim: opts.usoContinuo ? null : (opts.dataFim || null),
       condicao_relacionada_id: opts.condicaoId || null,
       consulta_relacionada_id: opts.consultaId || null,
@@ -1779,7 +1789,7 @@ export default function Home() {
       // Se desmarcou "uso contínuo" mas não preencheu uma data de término, usa hoje como
       // padrão — sem isso, data_fim ficava null (= "uso contínuo" pro resto do app) mesmo
       // com a caixinha desmarcada.
-      data_fim: usoContinuo ? null : (novaDataFimMed || new Date().toISOString().slice(0, 10)),
+      data_fim: usoContinuo ? null : (novaDataFimMed || dataLocalISO(new Date())),
       condicao_relacionada_id: novaCondicaoRelacionada || null,
       consulta_relacionada_id: novaConsultaRelacionadaMed || null,
       classe: novaClasseMedicacao || null,
@@ -1977,6 +1987,108 @@ export default function Home() {
     setAnexosConsulta((l) => l.filter((x) => x.id !== a.id));
   }
 
+  // ---- Anexos de exames e vacinas (PDF ou foto), guardados na pasta privada 'anexos-saude' ----
+  async function carregarContagemAnexos(membroId: string) {
+    const { data, error } = await supabase.from('anexo_saude').select('tipo, item_id').eq('membro_id', membroId);
+    if (error || !data || membroAtualRef.current !== membroId) return;
+    const c: Record<string, number> = {};
+    for (const a of data as { tipo: string; item_id: string }[]) c[`${a.tipo}-${a.item_id}`] = (c[`${a.tipo}-${a.item_id}`] || 0) + 1;
+    setContagemAnexos(c);
+  }
+
+  async function carregarAnexosSaude(tipo: 'exame' | 'vacina', itemId: string) {
+    const { data } = await supabase
+      .from('anexo_saude')
+      .select('id, caminho, nome')
+      .eq('tipo', tipo)
+      .eq('item_id', itemId)
+      .order('criado_em', { ascending: true });
+    const lista = (data || []) as { id: string; caminho: string; nome: string | null }[];
+    const comUrl = await Promise.all(lista.map(async (a) => {
+      const { data: u } = await supabase.storage.from('anexos-saude').createSignedUrl(a.caminho, 3600);
+      return { ...a, url: u?.signedUrl || null };
+    }));
+    setAnexosSaude(comUrl);
+  }
+
+  function reiniciarAnexosSaude() {
+    setAnexosSaude([]);
+    setAnexosSaudeNovos([]);
+    setErroAnexoSaude('');
+  }
+
+  function escolherAnexosSaude(arquivos: FileList | null) {
+    if (!arquivos) return;
+    setErroAnexoSaude('');
+    const validos: File[] = [];
+    for (const f of Array.from(arquivos)) {
+      if (!(f.type.startsWith('image/') || f.type === 'application/pdf')) { setErroAnexoSaude('Anexe apenas fotos ou PDF.'); continue; }
+      if (f.size > 10 * 1024 * 1024) { setErroAnexoSaude('Cada arquivo deve ter no máximo 10MB.'); continue; }
+      validos.push(f);
+    }
+    if (validos.length) setAnexosSaudeNovos((l) => [...l, ...validos]);
+  }
+
+  async function enviarAnexosSaude(tipo: 'exame' | 'vacina', itemId: string, membroId: string) {
+    for (const arquivo of anexosSaudeNovos) {
+      const ext = (arquivo.name.split('.').pop() || 'jpg').toLowerCase();
+      const caminho = `${membroId}/${tipo}/${itemId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+      const { error: erroUp } = await supabase.storage.from('anexos-saude').upload(caminho, arquivo);
+      if (erroUp) throw new Error('Não consegui enviar o anexo: ' + erroUp.message);
+      const { error } = await supabase.from('anexo_saude').insert({ tipo, item_id: itemId, membro_id: membroId, caminho, nome: arquivo.name });
+      if (error) throw new Error('Não consegui registrar o anexo: ' + error.message);
+    }
+  }
+
+  async function excluirAnexoSaude(a: { id: string; caminho: string }) {
+    await supabase.storage.from('anexos-saude').remove([a.caminho]);
+    await supabase.from('anexo_saude').delete().eq('id', a.id);
+    setAnexosSaude((l) => l.filter((x) => x.id !== a.id));
+    if (membroSelecionado) carregarContagemAnexos(membroSelecionado.id);
+  }
+
+  function renderAnexosSaude(rotuloDica: string) {
+    return (
+      <div className="space-y-2 rounded-xl bg-slate-50 p-3">
+        <p className="text-sm font-semibold text-slate-700">Anexos (PDF ou foto)</p>
+        <p className="text-xs text-slate-400">{rotuloDica} Fica guardado só para quem tem acesso a este membro.</p>
+        {anexosSaude.length > 0 && (
+          <div className="grid grid-cols-3 gap-2">
+            {anexosSaude.map((a) => (
+              <div key={a.id} className="relative">
+                {a.url && /\.pdf$/i.test(a.caminho) ? (
+                  <a href={a.url} target="_blank" rel="noreferrer" className="flex h-24 flex-col items-center justify-center gap-1 rounded-xl bg-white px-1 text-center text-xs text-slate-600"><span className="font-semibold">PDF</span><span className="line-clamp-2 break-all text-[10px] text-slate-400">{a.nome}</span></a>
+                ) : a.url ? (
+                  <a href={a.url} target="_blank" rel="noreferrer"><img src={a.url} alt={a.nome || 'anexo'} className="h-24 w-full rounded-xl object-cover" /></a>
+                ) : (
+                  <div className="flex h-24 items-center justify-center rounded-xl bg-white text-xs text-slate-400">indisponível</div>
+                )}
+                <button type="button" aria-label="Remover anexo" onClick={() => excluirAnexoSaude(a)} className="absolute right-1 top-1 rounded-full bg-white/90 px-1.5 text-xs text-red-600">✕</button>
+              </div>
+            ))}
+          </div>
+        )}
+        {anexosSaudeNovos.length > 0 && (
+          <div className="space-y-1">
+            {anexosSaudeNovos.map((f, i) => (
+              <div key={i} className="flex items-center justify-between rounded-xl bg-white px-3 py-2 text-sm">
+                <span className="min-w-0 truncate text-slate-700">{f.name}</span>
+                <button type="button" onClick={() => setAnexosSaudeNovos((l) => l.filter((_, idx) => idx !== i))} className="text-xs text-red-600">remover</button>
+              </div>
+            ))}
+            <p className="text-xs text-slate-400">Será enviado ao salvar.</p>
+          </div>
+        )}
+        {erroAnexoSaude && <p className="text-sm text-red-600">{erroAnexoSaude}</p>}
+        <label className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-2xl border border-dashed border-teal-700/40 bg-white px-4 py-3 text-sm font-semibold text-teal-800">
+          <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" /></svg>
+          Tirar foto ou escolher arquivo
+          <input type="file" accept="image/*,application/pdf" multiple className="hidden" onChange={(e) => { escolherAnexosSaude(e.target.files); e.target.value = ''; }} />
+        </label>
+      </div>
+    );
+  }
+
   async function salvarConsulta() {
     setErroConsulta('');
     const nomeEspecialidadeFinal =
@@ -2098,7 +2210,7 @@ export default function Home() {
         if (error) throw error;
       }
       if (examesConsulta.length > 0) {
-        const hoje = new Date().toISOString().slice(0, 10);
+        const hoje = dataLocalISO(new Date());
         const prazo =
           exPrazoConsulta === 'data' && exPrazoDataConsulta ? exPrazoDataConsulta
           : exPrazoConsulta === 'retorno' && novaDataRetornoConsulta ? somarDias(novaDataRetornoConsulta, -7)
@@ -2144,7 +2256,7 @@ export default function Home() {
       for (const v of vacsConsulta) {
         const nomeVac = v.nome === 'Outra (especificar)' ? v.outroNome.trim() : v.nome;
         if (!nomeVac) continue;
-        const hoje = new Date().toISOString().slice(0, 10);
+        const hoje = dataLocalISO(new Date());
         const quando =
           v.quando === 'agora' ? hoje
           : v.quando === '3m' ? somarDias(hoje, 90)
@@ -2322,8 +2434,9 @@ export default function Home() {
     setGravandoCampo(campo);
   }
 
-  function abrirNovoExame() {
-    setExameStatusOriginal('realizado');
+  function abrirNovoExame(agendado: boolean = false) {
+    reiniciarAnexosSaude();
+    setExameStatusOriginal(agendado ? 'solicitado' : 'realizado');
     setExameMarcarRealizado(false);
     setExameEditandoId(null);
     setNovoNomeExame('');
@@ -2336,11 +2449,13 @@ export default function Home() {
   }
 
   function abrirEdicaoExame(e: Exame, marcarRealizado: boolean = false) {
+    reiniciarAnexosSaude();
+    carregarAnexosSaude('exame', e.id);
     setExameEditandoId(e.id);
     setExameStatusOriginal(e.status || 'realizado');
     setExameMarcarRealizado(marcarRealizado);
     setNovoNomeExame(e.nome);
-    setNovaDataExame(marcarRealizado ? new Date().toISOString().slice(0, 10) : e.data_realizacao);
+    setNovaDataExame(marcarRealizado ? dataLocalISO(new Date()) : e.data_realizacao);
     setNovoLaboratorioExame(e.laboratorio || '');
     setNovoResultadoExame(e.resultado_resumo || '');
     setNovaCondicaoRelacionadaExame(e.condicao_relacionada_id || '');
@@ -2370,18 +2485,39 @@ export default function Home() {
       laboratorio: novoLaboratorioExame || null,
       resultado_resumo: novoResultadoExame || null,
       condicao_relacionada_id: novaCondicaoRelacionadaExame || null,
-      ...(exameEditandoId ? { status: exameMarcarRealizado ? 'realizado' : exameStatusOriginal } : {}),
+      status: exameEditandoId ? (exameMarcarRealizado ? 'realizado' : exameStatusOriginal) : exameStatusOriginal,
     };
 
-    const { error } = exameEditandoId
-      ? await supabase.from('exame').update(dados).eq('id', exameEditandoId)
-      : await supabase.from('exame').insert({ membro_id: membroSelecionado.id, ...dados });
+    let error: { message: string } | null = null;
+    let idSalvo: string | null = exameEditandoId;
+    if (exameEditandoId) {
+      ({ error } = await supabase.from('exame').update(dados).eq('id', exameEditandoId));
+    } else {
+      const r = await supabase.from('exame').insert({ membro_id: membroSelecionado.id, ...dados }).select('id').single();
+      error = r.error;
+      idSalvo = r.data?.id ?? null;
+    }
+
+    if (!error && idSalvo && anexosSaudeNovos.length > 0) {
+      try {
+        await enviarAnexosSaude('exame', idSalvo, membroSelecionado.id);
+      } catch (e: any) {
+        // O exame já foi salvo; mantém o formulário aberto (agora em edição) para tentar anexar de novo.
+        setCarregando(false);
+        setExameEditandoId(idSalvo);
+        setExameStatusOriginal('realizado');
+        setErroExame((e?.message || 'Não consegui enviar o anexo.') + ' O exame foi salvo; tente anexar de novo.');
+        await carregarExames(membroSelecionado.id);
+        return;
+      }
+    }
 
     setCarregando(false);
     if (error) {
       setErroExame(error.message);
       return;
     }
+    irParaAba('exames', dados.status === 'solicitado' ? 'a' : 'b');
     setExameEditandoId(null);
     setNovoNomeExame('');
     setNovaDataExame('');
@@ -2411,8 +2547,9 @@ export default function Home() {
     await carregarExames(membroSelecionado.id);
   }
 
-  function abrirNovaVacina() {
-    setVacinaStatusOriginal('realizado');
+  function abrirNovaVacina(agendada: boolean = false) {
+    reiniciarAnexosSaude();
+    setVacinaStatusOriginal(agendada ? 'indicada' : 'realizado');
     setVacinaMarcarRealizada(false);
     setVacinaEditandoId(null);
     setNovoNomeVacina('');
@@ -2427,6 +2564,8 @@ export default function Home() {
   }
 
   function abrirEdicaoVacina(v: Vacina, marcarTomada: boolean = false) {
+    reiniciarAnexosSaude();
+    carregarAnexosSaude('vacina', v.id);
     setVacinaEditandoId(v.id);
     setVacinaStatusOriginal(v.status || 'realizado');
     setVacinaMarcarRealizada(marcarTomada);
@@ -2438,7 +2577,7 @@ export default function Home() {
       setVacinaOutroNome(v.nome);
     }
     setNovaDoseVacina(v.dose || '');
-    setNovaDataVacina(marcarTomada ? new Date().toISOString().slice(0, 10) : v.data_aplicacao);
+    setNovaDataVacina(marcarTomada ? dataLocalISO(new Date()) : v.data_aplicacao);
     setNovaProximaDoseVacina(v.proxima_dose_data || '');
     setNovaObsVacina(v.observacoes || '');
     setNovaCondicaoRelacionadaVacina(v.condicao_relacionada_id || '');
@@ -2470,18 +2609,38 @@ export default function Home() {
       proxima_dose_data: novaProximaDoseVacina || null,
       observacoes: novaObsVacina || null,
       condicao_relacionada_id: novaCondicaoRelacionadaVacina || null,
-      ...(vacinaEditandoId ? { status: vacinaMarcarRealizada ? 'realizado' : vacinaStatusOriginal } : {}),
+      status: vacinaEditandoId ? (vacinaMarcarRealizada ? 'realizado' : vacinaStatusOriginal) : vacinaStatusOriginal,
     };
 
-    const { error } = vacinaEditandoId
-      ? await supabase.from('vacina').update(dados).eq('id', vacinaEditandoId)
-      : await supabase.from('vacina').insert({ membro_id: membroSelecionado.id, ...dados });
+    let error: { message: string } | null = null;
+    let idSalvo: string | null = vacinaEditandoId;
+    if (vacinaEditandoId) {
+      ({ error } = await supabase.from('vacina').update(dados).eq('id', vacinaEditandoId));
+    } else {
+      const r = await supabase.from('vacina').insert({ membro_id: membroSelecionado.id, ...dados }).select('id').single();
+      error = r.error;
+      idSalvo = r.data?.id ?? null;
+    }
+
+    if (!error && idSalvo && anexosSaudeNovos.length > 0) {
+      try {
+        await enviarAnexosSaude('vacina', idSalvo, membroSelecionado.id);
+      } catch (e: any) {
+        setCarregando(false);
+        setVacinaEditandoId(idSalvo);
+        setVacinaStatusOriginal('realizado');
+        setErroVacina((e?.message || 'Não consegui enviar o anexo.') + ' A vacina foi salva; tente anexar de novo.');
+        await carregarVacinas(membroSelecionado.id);
+        return;
+      }
+    }
 
     setCarregando(false);
     if (error) {
       setErroVacina(error.message);
       return;
     }
+    irParaAba('vacinas', dados.status === 'indicada' ? 'a' : 'b');
     setVacinaEditandoId(null);
     setNovoNomeVacina('');
     setVacinaOutroNome('');
@@ -3306,6 +3465,44 @@ export default function Home() {
     return futuras.length > 5 ? `${txt}\n+${futuras.length - 5} sessões` : txt;
   }
 
+  function abaAtual(secao: string, contA: number): 'a' | 'b' {
+    return abaStatusSecao[`${membroSelecionado?.id}:${secao}`] ?? (contA > 0 ? 'a' : 'b');
+  }
+  function irParaAba(secao: string, aba: 'a' | 'b') {
+    setAbaStatusSecao((m) => ({ ...m, [`${membroSelecionado?.id}:${secao}`]: aba }));
+  }
+  // Dois retângulos no topo de cada seção, com a contagem de itens em cada um.
+  function renderAbasStatus(secao: string, rotuloA: string, rotuloB: string, contA: number, contB: number) {
+    const atual = abaAtual(secao, contA);
+    const botao = (aba: 'a' | 'b', rotulo: string, cont: number) => (
+      <button
+        type="button"
+        onClick={() => irParaAba(secao, aba)}
+        className={`rounded-xl px-3 py-2.5 text-left transition ${atual === aba ? 'bg-teal-700 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+      >
+        <span className="block text-xl font-semibold leading-none">{cont}</span>
+        <span className="mt-1 block text-xs font-medium">{rotulo}</span>
+      </button>
+    );
+    return <div className="grid grid-cols-2 gap-2">{botao('a', rotuloA, contA)}{botao('b', rotuloB, contB)}</div>;
+  }
+  async function marcarConsultaRealizada(c: Consulta) {
+    if (!membroSelecionado) return;
+    const { error } = await supabase.from('consulta').update({ status: 'realizada' }).eq('id', c.id);
+    if (error) { setErroConsulta(error.message); return; }
+    await carregarConsultas(membroSelecionado.id);
+    irParaAba(telaDetalhe as string, 'b');
+  }
+  const hojeLocalStr = dataLocalISO(new Date());
+  const medsEmUso = medicacoes.filter((m) => !m.data_fim || m.data_fim >= hojeLocalStr);
+  const medsEncerradas = medicacoes.filter((m) => m.data_fim && m.data_fim < hojeLocalStr);
+  const abaMed = abaAtual('medicacoes', medsEmUso.length);
+  const medsVisiveis = abaMed === 'a' ? medsEmUso : medsEncerradas;
+  const abaTer = abaAtual('terapias', terapias.filter((t) => !t.data_fim || t.data_fim >= hojeLocalStr).length);
+  const terapiasEmAndamento = terapias.filter((t) => !t.data_fim || t.data_fim >= hojeLocalStr);
+  const terapiasEncerradas = terapias.filter((t) => t.data_fim && t.data_fim < hojeLocalStr);
+  const terapiasVisiveis = abaTer === 'a' ? terapiasEmAndamento : terapiasEncerradas;
+
   function obterPendencias(): ItemPendencia[] {
     const hoje = new Date();
     hoje.setHours(0, 0, 0, 0);
@@ -3434,19 +3631,30 @@ export default function Home() {
     const ordenados = [...cards].sort((a, b) => chaveOrdemPendencia(a.item).localeCompare(chaveOrdemPendencia(b.item)));
     const rotulos: Record<string, string> = { consulta: 'Consulta', vacina: 'Vacina', medicacao: 'Medicação', exame: 'Exame', terapia: 'Terapia', agendar: 'Agendar' };
     return (
-      <div className="-mx-4 flex snap-x snap-mandatory gap-2.5 overflow-x-auto px-4 pb-2" style={{ scrollbarWidth: 'none' }}>
+      <div className="-mx-3 flex snap-x snap-mandatory gap-2.5 overflow-x-auto px-3 pb-1" style={{ scrollbarWidth: 'none' }}>
         {ordenados.map((c) => {
           const atrasado = chaveOrdemPendencia(c.item) < hojeStr;
+          const chave = chaveOrdemPendencia(c.item);
+          const etiqueta = atrasado
+            ? { texto: 'Atrasada', cor: 'bg-rose-100 text-rose-700' }
+            : chave === hojeStr
+              ? { texto: 'Hoje', cor: 'bg-amber-100 text-amber-700' }
+              : chave === '9999-12-31'
+                ? { texto: 'Contínuo', cor: 'bg-slate-100 text-slate-500' }
+                : { texto: 'Em breve', cor: 'bg-teal-50 text-teal-700' };
           const titulo = c.item.titulo.replace(/^[^:]+:\s*/, '');
           return (
             <button
               key={`${c.membroId}-${c.item.id}`}
               onClick={() => abrirPendencia(c.item, c.membroId)}
-              className={`flex min-h-[92px] w-[36%] min-w-[130px] shrink-0 snap-start flex-col rounded-lg border-y border-r border-l-[3px] bg-white p-2.5 text-left shadow-sm transition hover:shadow ${atrasado ? 'border-slate-200 border-l-rose-400' : 'border-slate-200 border-l-teal-500'} sm:w-[31%]`}
+              className={`flex min-h-[104px] w-[40%] min-w-[148px] shrink-0 snap-start flex-col rounded-lg border-y border-r border-l-[3px] bg-white p-2.5 text-left shadow-sm transition hover:shadow ${atrasado ? 'border-slate-200 border-l-rose-400' : 'border-slate-200 border-l-teal-500'} sm:w-[31%]`}
             >
-              <div className="flex items-center gap-1.5">
-                <span className="shrink-0 opacity-70 [&>svg]:h-3.5 [&>svg]:w-3.5">{iconePendencia(c.item.tipo)}</span>
-                <span className="truncate text-[10px] font-semibold uppercase tracking-wide text-slate-400">{rotulos[c.item.tipo] || ''}</span>
+              <div className="flex items-center justify-between gap-1">
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <span className="shrink-0 opacity-70 [&>svg]:h-3.5 [&>svg]:w-3.5">{iconePendencia(c.item.tipo)}</span>
+                  <span className="truncate text-[10px] font-semibold uppercase tracking-wide text-slate-400">{rotulos[c.item.tipo] || ''}</span>
+                </span>
+                <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-semibold ${etiqueta.cor}`}>{etiqueta.texto}</span>
               </div>
               <p className="mt-1.5 line-clamp-2 text-[13px] font-semibold leading-snug text-slate-800">{titulo}</p>
               <p className={`mt-auto line-clamp-2 whitespace-pre-line pt-1 text-[11px] leading-tight ${atrasado ? 'font-medium text-rose-600' : 'text-slate-500'}`}>{c.item.detalhe}</p>
@@ -3677,7 +3885,7 @@ export default function Home() {
     const ids = lista.map((m) => m.id);
     const hoje = new Date();
     hoje.setHours(0, 0, 0, 0);
-    const hojeStr = hoje.toISOString().slice(0, 10);
+    const hojeStr = dataLocalISO(hoje);
 
     const [{ data: consultasData }, { data: vacinasData }, { data: medicacoesData }, { data: examesData }, { data: vacinasIndData }, { data: terapiasData }, { data: sessoesData }, { data: lembretesData }, { data: todasConsultasData }] = await Promise.all([
       supabase.from('consulta').select('id, membro_id, data_hora, status, especialidade(nome), profissional_saude(nome), local').in('membro_id', ids).eq('status', 'agendada'),
@@ -4646,8 +4854,8 @@ export default function Home() {
               </div>
             </button>
 
-            <div>
-              <h3 className="mb-3 text-sm font-semibold text-slate-800">Pendências de {membroSelecionado.nome}</h3>
+            <div className="rounded-2xl bg-slate-100 p-3">
+              <h3 className="mb-2.5 text-sm font-semibold text-slate-700">Pendências de {membroSelecionado.nome}</h3>
               {(() => {
                 const pendencias = obterPendencias();
                 if (pendencias.length === 0) {
@@ -4661,12 +4869,12 @@ export default function Home() {
             </div>
 
             {meuPapel === 'admin' && pendenciasFamiliares.filter((f) => f.membroId !== membroSelecionado?.id).length > 0 && (
-              <div className="mt-6">
+              <div className="mt-4 rounded-2xl bg-slate-100 p-3">
                 <button
                   onClick={() => setMostrarPendenciasFamilia((v) => !v)}
-                  className="mb-3 flex w-full items-center justify-between"
+                  className={`flex w-full items-center justify-between ${mostrarPendenciasFamilia ? 'mb-2.5' : ''}`}
                 >
-                  <h3 className="text-sm font-semibold text-slate-800">Pendências da família</h3>
+                  <h3 className="text-sm font-semibold text-slate-700">Pendências da família</h3>
                   <span className="text-xs text-teal-700">{mostrarPendenciasFamilia ? 'ocultar ▲' : 'mostrar ▼'}</span>
                 </button>
                 {mostrarPendenciasFamilia && renderCarrosselPendencias(
@@ -4678,8 +4886,8 @@ export default function Home() {
               </div>
             )}
 
-            <div className="mt-6">
-              <h3 className="mb-3 text-sm font-semibold text-slate-800">Dicas de saúde e bem-estar</h3>
+            <div className="mt-4">
+              <h3 className="mb-2.5 text-sm font-semibold text-slate-700">Dicas de saúde e bem-estar</h3>
               <div
                 className={`relative overflow-hidden rounded-2xl border border-teal-100 bg-gradient-to-br from-teal-50 to-emerald-50 p-4 transition-opacity duration-300 ${dicaVisivel ? 'opacity-100' : 'opacity-0'}`}
               >
@@ -6071,8 +6279,9 @@ export default function Home() {
               <div className="space-y-3">
                 {!mostrarFormMedicacao ? (
                   <>
+                    {renderAbasStatus('medicacoes', 'Em uso', 'Encerrado', medsEmUso.length, medsEncerradas.length)}
                     <div className="flex items-center justify-between">
-                      <p className="text-xs text-slate-400">{medicacoes.length} registrada{medicacoes.length === 1 ? '' : 's'}</p>
+                      <p className="text-xs text-slate-400">{medsVisiveis.length} {abaMed === 'a' ? 'em uso' : 'encerrada'}{medsVisiveis.length === 1 || abaMed === 'a' ? '' : 's'}</p>
                       {abaInferior !== 'consultar' && (
                         <button
                           onClick={abrirNovaMedicacao}
@@ -6092,10 +6301,10 @@ export default function Home() {
                         onChange={(e) => setBuscaMedicacao(e.target.value)}
                       />
                     )}
-                    {medicacoes.length === 0 && (
-                      <p className="text-sm text-slate-400 text-center py-2">Nenhuma medicação registrada ainda.</p>
+                    {medsVisiveis.length === 0 && (
+                      <p className="text-sm text-slate-400 text-center py-2">{medicacoes.length === 0 ? 'Nenhuma medicação registrada ainda.' : abaMed === 'a' ? 'Nenhuma medicação em uso.' : 'Nenhuma medicação encerrada.'}</p>
                     )}
-                    {medicacoes
+                    {medsVisiveis
                       .filter((m) => {
                         const termo = buscaMedicacao.trim().toLowerCase();
                         if (!termo) return true;
@@ -6105,7 +6314,7 @@ export default function Home() {
                       .sort((a, b) => Number(!b.data_fim) - Number(!a.data_fim))
                       .map((m) => {
                       const continua = !m.data_fim;
-                      const ativa = continua || (m.data_fim as string) >= new Date().toISOString().slice(0, 10);
+                      const ativa = continua || (m.data_fim as string) >= dataLocalISO(new Date());
                       const condicaoNome = condicoes.find((c) => c.id === m.condicao_relacionada_id)?.nome;
                       const consultaLigada = consultas.find((cs) => cs.id === m.consulta_relacionada_id);
                       const labelClasse = classesMedicamento.find((c) => c.value === m.classe)?.label;
@@ -6291,12 +6500,17 @@ export default function Home() {
               const filtroEsp = especialidadesFiltroTela[telaDetalhe as string] || null;
               const especialidadePadraoTela = telaDetalhe === 'odontologia' ? 'Odontologia' : telaDetalhe === 'nutricionista' ? 'Nutrição' : '';
               const consultasDaTela = filtroEsp ? consultas.filter((c) => filtroEsp.includes(c.especialidade?.nome || '')) : consultas;
+              const agendadasTela = consultasDaTela.filter((c) => c.status === 'agendada').sort((x, y) => new Date(x.data_hora).getTime() - new Date(y.data_hora).getTime());
+              const realizadasTela = consultasDaTela.filter((c) => c.status !== 'agendada').sort((x, y) => new Date(y.data_hora).getTime() - new Date(x.data_hora).getTime());
+              const abaCons = abaAtual(telaDetalhe as string, agendadasTela.length);
+              const consultasVisiveis = abaCons === 'a' ? agendadasTela : realizadasTela;
               const nomeVazio = telaDetalhe === 'odontologia' ? 'Nenhuma consulta de odontologia registrada ainda.' : telaDetalhe === 'nutricionista' ? 'Nenhuma consulta com nutricionista registrada ainda.' : 'Nenhuma consulta registrada ainda.';
               return (
               <div className="space-y-3">
                 {!mostrarFormConsulta ? (
                   <>
-                    {telaDetalhe === 'consultas' && (() => {
+                    {renderAbasStatus(telaDetalhe as string, 'Agendado', 'Realizado', agendadasTela.length, realizadasTela.length)}
+                    {telaDetalhe === 'consultas' && abaCons === 'a' && (() => {
                       const periodicos = lembretesConsulta.filter((l) => l.tipo === 'periodico');
                       const avulsos = lembretesConsulta.filter((l) => l.tipo === 'unico');
                       const pendentesIds = new Set(calcularPendenciasAgendar(lembretesConsulta, consultas.map((c) => ({ esp: c.especialidade?.nome || '', data: c.data_hora, status: c.status }))).map((i) => i.refId));
@@ -6399,7 +6613,7 @@ export default function Home() {
                       );
                     })()}
                     <div className="flex items-center justify-between">
-                      <p className="text-xs text-slate-400">{consultasDaTela.length} registrada{consultasDaTela.length === 1 ? '' : 's'}</p>
+                      <p className="text-xs text-slate-400">{consultasVisiveis.length} {abaCons === 'a' ? 'agendada' : 'realizada'}{consultasVisiveis.length === 1 ? '' : 's'}</p>
                       {abaInferior !== 'consultar' && (
                         <button
                           onClick={() => abrirNovaConsulta(especialidadePadraoTela)}
@@ -6407,7 +6621,7 @@ export default function Home() {
                           className="flex items-center gap-1 text-sm font-semibold text-teal-700"
                         >
                           <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
-                          nova
+                          {abaCons === 'a' ? 'agendar' : 'registrar'}
                         </button>
                       )}
                     </div>
@@ -6419,10 +6633,10 @@ export default function Home() {
                         onChange={(e) => setBuscaConsulta(e.target.value)}
                       />
                     )}
-                    {consultasDaTela.length === 0 && (
-                      <p className="text-sm text-slate-400 text-center py-2">{nomeVazio}</p>
+                    {consultasVisiveis.length === 0 && (
+                      <p className="text-sm text-slate-400 text-center py-2">{consultasDaTela.length === 0 ? nomeVazio : abaCons === 'a' ? 'Nenhuma consulta agendada.' : 'Nenhuma consulta realizada ainda.'}</p>
                     )}
-                    {consultasDaTela
+                    {consultasVisiveis
                       .filter((c) => {
                         const termo = buscaConsulta.trim().toLowerCase();
                         if (!termo) return true;
@@ -6442,16 +6656,17 @@ export default function Home() {
                           ? 'bg-slate-100 text-slate-500'
                           : 'bg-amber-100 text-amber-700';
                       const condicaoLigadaNome = condicoes.find((cd) => cd.id === c.condicao_relacionada_id)?.nome;
+                      const passouSemAtualizar = c.status === 'agendada' && dh.getTime() < Date.now();
                       return (
+                        <div key={c.id} className="space-y-1">
                         <button
-                          key={c.id}
                           onClick={() => abrirEdicaoConsulta(c)}
-                          className="w-full rounded-xl border border-[#E5E1DA] p-3 text-left transition hover:bg-[#FAFAF8]"
+                          className={`w-full rounded-xl border p-3 text-left transition hover:bg-[#FAFAF8] ${passouSemAtualizar ? 'border-rose-200' : 'border-[#E5E1DA]'}`}
                         >
                           <div className="flex items-center justify-between">
                             <p className="font-medium text-slate-800">{c.especialidade?.nome || 'Especialidade'} <Ic n="editar" /></p>
-                            <span className={`text-xs rounded-full px-2 py-0.5 ${statusEstilo}`}>
-                              {c.status}
+                            <span className={`text-xs rounded-full px-2 py-0.5 ${passouSemAtualizar ? 'bg-rose-100 text-rose-700' : statusEstilo}`}>
+                              {passouSemAtualizar ? 'já passou' : c.status}
                             </span>
                           </div>
                           <p className="text-xs text-slate-400">
@@ -6487,6 +6702,15 @@ export default function Home() {
                             </span>
                           )}
                         </button>
+                        {c.status === 'agendada' && (
+                          <button
+                            onClick={() => marcarConsultaRealizada(c)}
+                            className={`w-full rounded-xl py-2 text-sm font-semibold ${passouSemAtualizar ? 'bg-rose-50 text-rose-700' : 'bg-teal-50 text-teal-800'}`}
+                          >
+                            ✓ Marcar como realizada
+                          </button>
+                        )}
+                        </div>
                       );
                     })}
                   </>
@@ -6509,7 +6733,7 @@ export default function Home() {
                         const base = novaDataHoraConsulta ? new Date(novaDataHoraConsulta) : new Date();
                         if (a.meses) base.setMonth(base.getMonth() + a.meses);
                         if (a.dias) base.setDate(base.getDate() + a.dias);
-                        return base.toISOString().slice(0, 10);
+                        return dataLocalISO(base);
                       };
                       return (
                         <div className="space-y-3">
@@ -6844,7 +7068,7 @@ export default function Home() {
                                               <input type="date" className={`${inputClasse} mt-2`} value={m.duracaoData} onChange={(e) => atualizaMed(i, { duracaoData: e.target.value })} />
                                             )}
                                             {(() => {
-                                              const fim = dataFimMedicacao(m, m.inicio || new Date().toISOString().slice(0, 10));
+                                              const fim = dataFimMedicacao(m, m.inicio || dataLocalISO(new Date()));
                                               return (
                                                 <p className="mt-1 text-xs text-teal-800">
                                                   {m.duracao === 'continuo' ? 'Uso contínuo: sem data de término.' : fim ? `Termina em ${formatarData(fim)}.` : 'Informe a duração para calcular o término.'}
@@ -7244,45 +7468,73 @@ export default function Home() {
               <div className="space-y-3">
                 {!mostrarFormExame && (
                   <>
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs text-slate-400">{exames.length} registrado{exames.length === 1 ? '' : 's'}</p>
-                      {abaInferior !== 'consultar' && (
-                        <button
-                          onClick={abrirNovoExame}
-                          aria-label="Novo exame"
-                          className="flex items-center gap-1 text-sm font-semibold text-teal-700"
-                        >
-                          <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
-                          novo
-                        </button>
-                      )}
-                    </div>
-                    {exames.length === 0 && (
-                      <p className="text-sm text-slate-400 text-center py-2">Nenhum exame registrado ainda.</p>
-                    )}
-                    {exames.map((e) => (
-                      <div key={e.id} className="space-y-1">
-                        <button
-                          onClick={() => abrirEdicaoExame(e)}
-                          className="w-full rounded-xl border border-[#E5E1DA] p-3 text-left transition hover:bg-[#FAFAF8]"
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <p className="font-medium text-slate-800">{e.nome} <Ic n="editar" /></p>
-                            <span className="text-xs text-slate-400 text-right">{e.status === 'solicitado' ? `⏳ solicitado · fazer até ${formatarData(e.data_realizacao)}` : formatarData(e.data_realizacao)}</span>
+                    {(() => {
+                      const hojeStr = dataLocalISO(new Date());
+                      const aFazer = exames.filter((e) => e.status === 'solicitado').sort((x, y) => x.data_realizacao.localeCompare(y.data_realizacao));
+                      const feitos = exames.filter((e) => e.status !== 'solicitado');
+                      const aba = abaAtual('exames', aFazer.length);
+                      const clipe = (e: Exame) => contagemAnexos[`exame-${e.id}`] ? <span className="text-xs text-slate-400">📎 {contagemAnexos[`exame-${e.id}`]}</span> : null;
+                      return (
+                        <>
+                          {renderAbasStatus('exames', 'Agendado', 'Realizado', aFazer.length, feitos.length)}
+                          <div className="flex items-center justify-between">
+                            <p className="text-xs text-slate-400">{aba === 'a' ? aFazer.length : feitos.length} {aba === 'a' ? 'agendado' : 'realizado'}{(aba === 'a' ? aFazer.length : feitos.length) === 1 ? '' : 's'}</p>
+                            {abaInferior !== 'consultar' && (
+                              <button
+                                onClick={() => abrirNovoExame(aba === 'a')}
+                                aria-label="Novo exame"
+                                className="flex items-center gap-1 text-sm font-semibold text-teal-700"
+                              >
+                                <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+                                {aba === 'a' ? 'agendar' : 'registrar'}
+                              </button>
+                            )}
                           </div>
-                          {e.laboratorio && <p className="text-xs text-slate-400">{e.laboratorio}</p>}
-                          {e.resultado_resumo && <p className="text-xs text-slate-500 mt-1"><Ic n="prancheta" /> {e.resultado_resumo}</p>}
-                        </button>
-                        {e.status === 'solicitado' && (
-                          <button
-                            onClick={() => abrirEdicaoExame(e, true)}
-                            className="w-full rounded-xl bg-teal-50 py-2 text-sm font-semibold text-teal-800"
-                          >
-                            ✓ Marcar como realizado
-                          </button>
-                        )}
-                      </div>
-                    ))}
+                          {(aba === 'a' ? aFazer : feitos).length === 0 && (
+                            <p className="text-sm text-slate-400 text-center py-2">{aba === 'a' ? 'Nenhum exame agendado.' : 'Nenhum exame realizado ainda.'}</p>
+                          )}
+                          {aba === 'a' && aFazer.map((e) => {
+                            const dias = Math.round((new Date(e.data_realizacao + 'T12:00:00').getTime() - new Date(hojeStr + 'T12:00:00').getTime()) / 86400000);
+                            const vencido = dias < 0;
+                            const etiqueta = vencido
+                              ? { texto: `Vencido há ${-dias} dia${-dias > 1 ? 's' : ''}`, cor: 'bg-rose-100 text-rose-700' }
+                              : dias === 0
+                                ? { texto: 'Hoje', cor: 'bg-amber-100 text-amber-700' }
+                                : { texto: `Em ${dias} dia${dias > 1 ? 's' : ''}`, cor: 'bg-teal-50 text-teal-700' };
+                            return (
+                              <div key={e.id} className={`rounded-xl border-y border-r border-l-[3px] border-slate-200 bg-white p-3 ${vencido ? 'border-l-rose-400' : 'border-l-teal-500'}`}>
+                                <button onClick={() => abrirEdicaoExame(e)} className="w-full text-left">
+                                  <div className="flex items-start justify-between gap-2">
+                                    <p className="font-medium text-slate-800">{e.nome} <Ic n="editar" /></p>
+                                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${etiqueta.cor}`}>{etiqueta.texto}</span>
+                                  </div>
+                                  <p className="mt-0.5 text-xs text-slate-500">fazer até {formatarData(e.data_realizacao)} {clipe(e)}</p>
+                                  {e.laboratorio && <p className="text-xs text-slate-400">{e.laboratorio}</p>}
+                                </button>
+                                <button onClick={() => abrirEdicaoExame(e, true)} className="mt-2 w-full rounded-lg bg-teal-50 py-2 text-sm font-semibold text-teal-800">
+                                  ✓ Marcar como realizado
+                                </button>
+                              </div>
+                            );
+                          })}
+                          {aba === 'b' && feitos.map((e) => (
+                            <button
+                              key={e.id}
+                              onClick={() => abrirEdicaoExame(e)}
+                              className="w-full rounded-xl border border-[#E5E1DA] p-3 text-left transition hover:bg-[#FAFAF8]"
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="font-medium text-slate-800">{e.nome} <Ic n="editar" /></p>
+                                <span className="text-xs text-slate-400 text-right">{formatarData(e.data_realizacao)}</span>
+                              </div>
+                              {e.laboratorio && <p className="text-xs text-slate-400">{e.laboratorio}</p>}
+                              {e.resultado_resumo && <p className="text-xs text-slate-500 mt-1"><Ic n="prancheta" /> {e.resultado_resumo}</p>}
+                              {clipe(e) && <p className="mt-1">{clipe(e)}</p>}
+                            </button>
+                          ))}
+                        </>
+                      );
+                    })()}
                   </>
                 )}
 
@@ -7292,6 +7544,13 @@ export default function Home() {
                       ← Voltar
                     </button>
                     <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
+                    {!exameEditandoId && (
+                      <div className="grid grid-cols-2 gap-2">
+                        {([['realizado', 'Já realizei'], ['solicitado', 'Vou fazer (agendar)']] as const).map(([val, rot]) => (
+                          <button key={val} type="button" onClick={() => setExameStatusOriginal(val)} className={`rounded-xl px-3 py-2 text-sm font-medium ${exameStatusOriginal === val ? 'bg-teal-700 text-white' : 'bg-slate-100 text-slate-600'}`}>{rot}</button>
+                        ))}
+                      </div>
+                    )}
                     <input
                       className={inputClasse}
                       placeholder="nome do exame (ex: Hemograma completo)"
@@ -7344,6 +7603,7 @@ export default function Home() {
                         onChange={(e) => setNovoResultadoExame(e.target.value)}
                       />
                     </div>
+                    {renderAnexosSaude('Resultado do exame em PDF ou foto.')}
                     {erroExame && <p className="text-sm text-red-600">{erroExame}</p>}
                     <div className="flex gap-2">
                       <button disabled={carregando} onClick={salvarExame} className={botaoPrimario}>
@@ -7368,24 +7628,38 @@ export default function Home() {
               <div className="space-y-3">
                 {!mostrarFormVacina && (
                   <>
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs text-slate-400">{vacinas.length} registrada{vacinas.length === 1 ? '' : 's'}</p>
-                      {abaInferior !== 'consultar' && (
-                        <button
-                          onClick={abrirNovaVacina}
-                          aria-label="Nova vacina"
-                          className="flex items-center gap-1 text-sm font-semibold text-teal-700"
-                        >
-                          <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
-                          nova
-                        </button>
-                      )}
-                    </div>
-                    {vacinas.length === 0 && (
-                      <p className="text-sm text-slate-400 text-center py-2">Nenhuma vacina registrada ainda.</p>
-                    )}
-                    {vacinas.map((v) => {
-                      const proximaVencida = !!v.proxima_dose_data && v.proxima_dose_data < new Date().toISOString().slice(0, 10);
+                    {(() => {
+                      const agendadasVac = vacinas.filter((v) => v.status === 'indicada').sort((x, y) => x.data_aplicacao.localeCompare(y.data_aplicacao));
+                      const tomadasVac = vacinas.filter((v) => v.status !== 'indicada');
+                      const aba = abaAtual('vacinas', agendadasVac.length);
+                      const qtd = aba === 'a' ? agendadasVac.length : tomadasVac.length;
+                      return (
+                        <>
+                          {renderAbasStatus('vacinas', 'Agendado', 'Realizado', agendadasVac.length, tomadasVac.length)}
+                          <div className="flex items-center justify-between">
+                            <p className="text-xs text-slate-400">{qtd} {aba === 'a' ? 'agendada' : 'realizada'}{qtd === 1 ? '' : 's'}</p>
+                            {abaInferior !== 'consultar' && (
+                              <button
+                                onClick={() => abrirNovaVacina(aba === 'a')}
+                                aria-label="Nova vacina"
+                                className="flex items-center gap-1 text-sm font-semibold text-teal-700"
+                              >
+                                <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+                                {aba === 'a' ? 'agendar' : 'registrar'}
+                              </button>
+                            )}
+                          </div>
+                          {qtd === 0 && (
+                            <p className="text-sm text-slate-400 text-center py-2">{aba === 'a' ? 'Nenhuma vacina agendada.' : 'Nenhuma vacina registrada ainda.'}</p>
+                          )}
+                        </>
+                      );
+                    })()}
+                    {(abaAtual('vacinas', vacinas.filter((x) => x.status === 'indicada').length) === 'a'
+                      ? vacinas.filter((x) => x.status === 'indicada').sort((x, y) => x.data_aplicacao.localeCompare(y.data_aplicacao))
+                      : vacinas.filter((x) => x.status !== 'indicada')
+                    ).map((v) => {
+                      const proximaVencida = !!v.proxima_dose_data && v.proxima_dose_data < dataLocalISO(new Date());
                       return (
                         <div key={v.id} className="space-y-1">
                         <button
@@ -7405,6 +7679,7 @@ export default function Home() {
                             </span>
                           )}
                           {v.observacoes && <p className="text-xs text-slate-500 mt-1"><Ic n="nota" /> {v.observacoes}</p>}
+                          {contagemAnexos[`vacina-${v.id}`] ? <p className="mt-1 text-xs text-slate-400">📎 {contagemAnexos[`vacina-${v.id}`]}</p> : null}
                         </button>
                         {v.status === 'indicada' && (
                           <button
@@ -7426,6 +7701,13 @@ export default function Home() {
                       ← Voltar
                     </button>
                     <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
+                    {!vacinaEditandoId && (
+                      <div className="grid grid-cols-2 gap-2">
+                        {([['realizado', 'Já tomei'], ['indicada', 'Vou tomar (agendar)']] as const).map(([val, rot]) => (
+                          <button key={val} type="button" onClick={() => setVacinaStatusOriginal(val)} className={`rounded-xl px-3 py-2 text-sm font-medium ${vacinaStatusOriginal === val ? 'bg-teal-700 text-white' : 'bg-slate-100 text-slate-600'}`}>{rot}</button>
+                        ))}
+                      </div>
+                    )}
                     <select
                       className={inputClasse}
                       value={novoNomeVacina}
@@ -7502,6 +7784,7 @@ export default function Home() {
                         onChange={(e) => setNovaObsVacina(e.target.value)}
                       />
                     </div>
+                    {renderAnexosSaude('Foto ou PDF da carteirinha de vacinação (o app ainda não lê o conteúdo, só guarda).')}
                     {erroVacina && <p className="text-sm text-red-600">{erroVacina}</p>}
                     <div className="flex gap-2">
                       <button disabled={carregando} onClick={salvarVacina} className={botaoPrimario}>
@@ -8523,8 +8806,9 @@ export default function Home() {
               <div className="space-y-3">
                 {!mostrarFormTerapia && (
                   <>
+                    {renderAbasStatus('terapias', 'Em andamento', 'Encerrada', terapiasEmAndamento.length, terapiasEncerradas.length)}
                     <div className="flex items-center justify-between">
-                      <p className="text-xs text-slate-400">{terapias.length} registrada{terapias.length === 1 ? '' : 's'}</p>
+                      <p className="text-xs text-slate-400">{terapiasVisiveis.length} {abaTer === 'a' ? 'em andamento' : 'encerrada'}{terapiasVisiveis.length === 1 || abaTer === 'a' ? '' : 's'}</p>
                       {abaInferior !== 'consultar' && (
                         <button onClick={abrirNovaTerapia} aria-label="Nova terapia" className="flex items-center gap-1 text-sm font-semibold text-teal-700">
                           <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
@@ -8535,10 +8819,10 @@ export default function Home() {
                     {erroCarregarTerapias && (
                       <p className="rounded-lg bg-red-50 p-2 text-xs text-red-700">Não consegui carregar as terapias: {erroCarregarTerapias}</p>
                     )}
-                    {terapias.length === 0 && !erroCarregarTerapias && (
-                      <p className="text-sm text-slate-400 text-center py-2">Nenhuma terapia registrada ainda.</p>
+                    {terapiasVisiveis.length === 0 && !erroCarregarTerapias && (
+                      <p className="text-sm text-slate-400 text-center py-2">{terapias.length === 0 ? 'Nenhuma terapia registrada ainda.' : abaTer === 'a' ? 'Nenhuma terapia em andamento.' : 'Nenhuma terapia encerrada.'}</p>
                     )}
-                    {terapias.map((t) => (
+                    {terapiasVisiveis.map((t) => (
                       <button
                         key={t.id}
                         onClick={() => abrirEdicaoTerapia(t)}
