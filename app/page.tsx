@@ -238,6 +238,12 @@ export default function Home() {
   const [novoHorario, setNovoHorario] = useState('');
   const [novaDataInicioMed, setNovaDataInicioMed] = useState('');
   const [usoContinuo, setUsoContinuo] = useState(true);
+  const [doseQtd, setDoseQtd] = useState('');
+  const [doseUnid, setDoseUnid] = useState('');
+  const [primeiraDoseMed, setPrimeiraDoseMed] = useState('08:00');
+  const [duracaoMed, setDuracaoMed] = useState('7');
+  const [detalhesMed, setDetalhesMed] = useState(false);
+  const [classeOutraMed, setClasseOutraMed] = useState(false);
   const [novaDataFimMed, setNovaDataFimMed] = useState('');
   const [novaCondicaoRelacionada, setNovaCondicaoRelacionada] = useState('');
   const [novaConsultaRelacionadaMed, setNovaConsultaRelacionadaMed] = useState('');
@@ -287,6 +293,29 @@ export default function Home() {
   const [previaRecebida, setPreviaRecebida] = useState<{ membro_nome: string; dono_nome: string; nivel: string; dias_acesso: number | null } | null>(null);
   const [aceiteRecebido, setAceiteRecebido] = useState(false);
   const [compartSucesso, setCompartSucesso] = useState('');
+  // Parentes de sangue já falecidos: só o histórico de doenças (sem prontuário completo).
+  type ParenteFalecido = { id: string; nome: string; parentesco: string | null; sexo_biologico: string; condicao: { id: string; nome: string; observacao: string | null; tipo: string }[] };
+  const [parentes, setParentes] = useState<ParenteFalecido[]>([]);
+  const [mostrarFormParente, setMostrarFormParente] = useState(false);
+  const [parenteTipo, setParenteTipo] = useState('');
+  const [parenteNome, setParenteNome] = useState('');
+  const [parenteSexo, setParenteSexo] = useState('');
+  const [parenteAnoNasc, setParenteAnoNasc] = useState('');
+  const [parenteAnoFal, setParenteAnoFal] = useState('');
+  const [parenteErro, setParenteErro] = useState('');
+  const [parenteDoencaPara, setParenteDoencaPara] = useState<string | null>(null);
+  const [parenteDoenca, setParenteDoenca] = useState('');
+  const [parenteDoencaOutra, setParenteDoencaOutra] = useState('');
+  const [parenteDoencaObs, setParenteDoencaObs] = useState('');
+  const [parenteRemovendo, setParenteRemovendo] = useState<string | null>(null);
+  // 'completo' = resumo com as seções marcadas; 'historico' = só doenças pré-existentes e genéticas.
+  const [modoResumo, setModoResumo] = useState<'completo' | 'historico'>('completo');
+  // Folha de baixo para trocar de membro (tela inicial do perfil).
+  const [mostrarTrocaMembro, setMostrarTrocaMembro] = useState(false);
+  const [modoExcluirMembro, setModoExcluirMembro] = useState(false);
+  const [membroParaExcluir, setMembroParaExcluir] = useState<string | null>(null);
+  const [membroAntesDeAdicionar, setMembroAntesDeAdicionar] = useState<Membro | null>(null);
+  const [membrosCarregados, setMembrosCarregados] = useState(false);
   const [abaStatusSecao, setAbaStatusSecao] = useState<Record<string, 'a' | 'b'>>({});
   // Anexos (PDF/foto) de exames e vacinas: do item aberto no formulário e contagem por item na lista.
   type AnexoSaude = { id: string; caminho: string; nome: string | null; url: string | null };
@@ -551,6 +580,17 @@ export default function Home() {
   const [historicoGeral, setHistoricoGeral] = useState<string[] | null>(null);
   const [filtroEspecialidadeRisco, setFiltroEspecialidadeRisco] = useState('');
 
+  // Sem lista de membros: se ninguém está selecionado (e não estamos cadastrando alguém),
+  // abre o perfil do titular (ou do primeiro membro).
+  useEffect(() => {
+    if (passo !== 'painel' || membroSelecionado || mostrarFormMembro || membros.length === 0) return;
+    setMembroSelecionado(membros.find((m) => m.parentesco === 'eu_mesmo') || membros[0]);
+  }, [passo, membroSelecionado, membros, mostrarFormMembro]);
+
+  useEffect(() => {
+    if (telaDetalhe === 'parentes') { carregarParentes(); setParenteErro(''); setMostrarFormParente(false); setParenteDoencaPara(null); }
+  }, [telaDetalhe]);
+
   useEffect(() => {
     if (passo !== 'painel') return;
     (async () => {
@@ -702,6 +742,7 @@ export default function Home() {
       .is('data_falecimento', null)
       .order('nome');
     if (!error && data) setMembros(data);
+    setMembrosCarregados(true);
   }
 
   async function carregarCondicoes(membroId: string) {
@@ -1759,19 +1800,223 @@ export default function Home() {
     await carregarCondicoes(membroSelecionado.id);
   }
 
+  function renderFormMedicacao() {
+    const freqSel = frequenciasMedicacao.find((x) => x.label === novaFrequencia);
+    const horariosCalc = freqSel && freqSel.intervaloH ? calcularHorariosMedicacao(primeiraDoseMed, freqSel.intervaloH) : [];
+    const freqLivre = !!novaFrequencia && !freqSel;
+    const duracoes = [
+      { id: '5', label: '5 dias' }, { id: '7', label: '7 dias' }, { id: '10', label: '10 dias' }, { id: '14', label: '14 dias' },
+      { id: 'cont', label: 'Uso contínuo' }, { id: 'data', label: 'Escolher data' },
+    ];
+    const fimCalc = /^\d+$/.test(duracaoMed) && novaDataInicioMed ? somarDias(novaDataInicioMed, parseInt(duracaoMed, 10) - 1) : '';
+    const resumoPeriodo =
+      duracaoMed === 'cont' ? 'Uso contínuo, sem data para terminar. Fica em "Em uso" até você encerrar.'
+      : duracaoMed === 'data' ? 'Escolha acima até quando o remédio deve ser tomado.'
+      : fimCalc ? `Última dose em ${formatarData(fimCalc)}. Depois disso o remédio vai para o histórico.` : '';
+    const unidades = doseUnid && !unidadesDose.includes(doseUnid) ? [...unidadesDose, doseUnid] : unidadesDose;
+    const mostrarSelectClasse = classeOutraMed || (!!novaClasseMedicacao && !classesRapidasMed.some((c) => c.value === novaClasseMedicacao));
+
+    return (
+      <div className="space-y-4">
+        <section className={secaoClasse}>
+          <h3 className={tituloSecao}>O remédio</h3>
+          <div className="flex flex-col gap-1.5">
+            <label className={rotuloCampo}>Nome <span className="text-[#B4441F]">*</span></label>
+            <input className={inputClasse} placeholder="Ex.: Amoxicilina 250 mg/5 ml" value={novoNomeMedicacao} onChange={(e) => setNovoNomeMedicacao(e.target.value)} />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label className={rotuloCampo}>Dose por vez</label>
+            <div className="grid grid-cols-2 gap-3">
+              <input className={inputClasse} inputMode="decimal" placeholder="Ex.: 5" value={doseQtd} onChange={(e) => setDoseQtd(e.target.value)} />
+              <div className="relative">
+                <select aria-label="Unidade da dose" className={selectClasse} value={doseUnid} onChange={(e) => setDoseUnid(e.target.value)}>
+                  <option value="">unidade</option>
+                  {unidades.map((u) => <option key={u} value={u}>{u}</option>)}
+                </select>
+                {setaSelect}
+              </div>
+            </div>
+          </div>
+          <div className="flex flex-col gap-2.5">
+            <span className={rotuloCampo}>Tipo</span>
+            <div className="flex flex-wrap gap-2">
+              {classesRapidasMed.map((c) => (
+                <button key={c.value} type="button" className={chipDs(novaClasseMedicacao === c.value)} onClick={() => { setNovaClasseMedicacao(novaClasseMedicacao === c.value ? '' : c.value); setClasseOutraMed(false); }}>
+                  {c.label}
+                </button>
+              ))}
+              <button type="button" className={chipDs(mostrarSelectClasse)} onClick={() => { setClasseOutraMed(!mostrarSelectClasse); if (mostrarSelectClasse) setNovaClasseMedicacao(''); }}>
+                Outra classe
+              </button>
+            </div>
+            {mostrarSelectClasse && (
+              <div className="relative">
+                <select className={selectClasse} value={novaClasseMedicacao} onChange={(e) => setNovaClasseMedicacao(e.target.value)}>
+                  <option value="">escolha a classe</option>
+                  {classesMedicamento.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+                </select>
+                {setaSelect}
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className={secaoClasse}>
+          <h3 className={tituloSecao}>Quando tomar</h3>
+          <div className="flex flex-wrap gap-2">
+            {frequenciasMedicacao.map((f) => (
+              <button key={f.id} type="button" className={chipDs(novaFrequencia === f.label)} onClick={() => setNovaFrequencia(f.label)}>{f.label}</button>
+            ))}
+            {freqLivre && <button type="button" className={chipDs(true)}>{novaFrequencia}</button>}
+          </div>
+          {freqSel && freqSel.intervaloH > 0 && (
+            <div className="grid grid-cols-2 items-end gap-3">
+              <div className="flex flex-col gap-1.5">
+                <label className={rotuloCampo}>1ª dose às</label>
+                <input type="time" className={inputClasse} value={primeiraDoseMed} onChange={(e) => setPrimeiraDoseMed(e.target.value)} />
+              </div>
+              <div className="flex flex-col gap-1 pb-1">
+                <span className="text-[13px] text-[#55615B]">Horários do dia</span>
+                <span className="text-base font-bold text-[#1E5B4A]">{horariosCalc.join(' · ')}</span>
+              </div>
+            </div>
+          )}
+          {freqSel && freqSel.intervaloH === 0 && (
+            <p className="text-sm leading-snug text-[#55615B]">Sem horário fixo: o remédio é usado só quando precisar.</p>
+          )}
+          {freqLivre && (
+            <div className="flex flex-col gap-1.5">
+              <label className={rotuloCampo}>Horário</label>
+              <input className={inputClasse} placeholder="ex: 08:00, 20:00" value={novoHorario} onChange={(e) => setNovoHorario(e.target.value)} />
+            </div>
+          )}
+        </section>
+
+        <section className={secaoClasse}>
+          <h3 className={tituloSecao}>Por quanto tempo</h3>
+          <div className="flex flex-col gap-1.5">
+            <label className={rotuloCampo}>Começa em</label>
+            <input type="date" className={inputClasse} value={novaDataInicioMed} onChange={(e) => setNovaDataInicioMed(e.target.value)} />
+          </div>
+          <div className="flex flex-col gap-2.5">
+            <span className={rotuloCampo}>Duração</span>
+            <div className="flex flex-wrap gap-2">
+              {duracoes.map((d) => (
+                <button key={d.id} type="button" className={chipDs(duracaoMed === d.id)} onClick={() => setDuracaoMed(d.id)}>{d.label}</button>
+              ))}
+            </div>
+          </div>
+          {duracaoMed === 'data' && (
+            <div className="flex flex-col gap-1.5">
+              <label className={rotuloCampo}>Termina em</label>
+              <input type="date" className={inputClasse} value={novaDataFimMed} onChange={(e) => setNovaDataFimMed(e.target.value)} />
+            </div>
+          )}
+          {resumoPeriodo && (
+            <div className="flex items-center gap-2.5 rounded-xl bg-[#EEF4F1] px-3.5 py-3 text-sm leading-snug text-[#26332E]">
+              <svg className="shrink-0 text-[#1E5B4A]" width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M16 3v4M8 3v4M3 10h18" /></svg>
+              <span>{resumoPeriodo}</span>
+            </div>
+          )}
+        </section>
+
+        <section className="flex flex-col rounded-2xl border border-[#E1E6E3] bg-white">
+          <button type="button" aria-expanded={detalhesMed} onClick={() => setDetalhesMed(!detalhesMed)} className="flex min-h-[60px] items-center justify-between gap-3 px-[18px] text-left">
+            <span className="flex flex-col gap-0.5">
+              <span className={tituloSecao}>Origem e observações</span>
+              <span className="text-[13px] text-[#55615B]">Consulta, problema de saúde, anotações</span>
+            </span>
+            <svg className={`shrink-0 text-[#55615B] transition-transform ${detalhesMed ? 'rotate-180' : ''}`} width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6" /></svg>
+          </button>
+          {detalhesMed && (
+            <div className="flex flex-col gap-4 px-[18px] pb-[18px]">
+              <div className="flex flex-col gap-1.5">
+                <label className={rotuloCampo}>Relacionar a um problema de saúde</label>
+                <div className="relative">
+                  <select className={selectClasse} value={novaCondicaoRelacionada} onChange={(e) => { setNovaCondicaoRelacionada(e.target.value); setNovaConsultaRelacionadaMed(''); }}>
+                    <option value="">Nenhum</option>
+                    {condicoes.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                  </select>
+                  {setaSelect}
+                </div>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className={rotuloCampo}>Receitado em qual consulta?</label>
+                <div className="relative">
+                  <select className={selectClasse} value={novaConsultaRelacionadaMed} onChange={(e) => setNovaConsultaRelacionadaMed(e.target.value)}>
+                    <option value="">Nenhuma / automedicação</option>
+                    {consultas
+                      .filter((cs) => !novaCondicaoRelacionada || cs.condicao_relacionada_id === novaCondicaoRelacionada)
+                      .map((cs) => (
+                        <option key={cs.id} value={cs.id}>
+                          {(cs.especialidade?.nome || 'Consulta')} · {new Date(cs.data_hora).toLocaleDateString('pt-BR')}
+                          {cs.profissional_saude?.nome ? ` · ${cs.profissional_saude.nome}` : ''}
+                        </option>
+                      ))}
+                  </select>
+                  {setaSelect}
+                </div>
+                {novaCondicaoRelacionada && consultas.filter((cs) => cs.condicao_relacionada_id === novaCondicaoRelacionada).length === 0 && (
+                  <span className="text-[13px] text-[#55615B]">Nenhuma consulta ligada a esse problema ainda — pode deixar em branco.</span>
+                )}
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <label className={rotuloCampo}>Observações</label>
+                  <button
+                    type="button"
+                    onClick={() => alternarReconhecimentoVoz('obsMedicacao', setNovaObservacaoMedicacao)}
+                    className={`flex h-9 items-center gap-1.5 rounded-full border px-3 text-sm font-semibold ${gravandoCampo === 'obsMedicacao' ? 'animate-pulse border-red-200 bg-red-50 text-red-700' : 'border-[#B9CEC5] bg-[#EEF4F1] text-[#1E5B4A]'}`}
+                  >
+                    <Ic n="mic" /> {gravandoCampo === 'obsMedicacao' ? 'Ouvindo...' : 'Ditar'}
+                  </button>
+                </div>
+                <textarea className={inputClasse} rows={3} placeholder="Ex.: tomar depois das refeições, agitar antes de usar" value={novaObservacaoMedicacao} onChange={(e) => setNovaObservacaoMedicacao(e.target.value)} />
+              </div>
+            </div>
+          )}
+        </section>
+
+        <p className="text-[13px] text-[#55615B]"><span className="text-[#B4441F]">*</span> Campo obrigatório</p>
+        {erroMedicacao && <p className="text-sm text-red-600">{erroMedicacao}</p>}
+        {medicacaoEditandoId && (
+          <button type="button" disabled={carregando} onClick={excluirMedicacao} className="w-full rounded-[14px] border border-red-200 bg-white py-3 text-sm font-semibold text-red-600">
+            Excluir esta medicação
+          </button>
+        )}
+        {renderBarraAcoes('Salvar medicamento', salvarMedicacao, () => setMostrarFormMedicacao(false), carregando)}
+      </div>
+    );
+  }
+
+  const classesRapidasMed: { value: string; label: string }[] = [
+    { value: 'antibiotico', label: 'Antibiótico' },
+    { value: 'analgesico', label: 'Febre e dor' },
+    { value: 'anti_inflamatorio', label: 'Anti-inflamatório' },
+    { value: 'antialergico', label: 'Alergia' },
+    { value: 'broncodilatador', label: 'Respiratório' },
+  ];
+  const unidadesDose = ['ml', 'gotas', 'comprimido', 'cápsula', 'mg', 'aplicação', 'inalação'];
+
   function abrirNovaMedicacao() {
     setMedicacaoEditandoId(null);
     setNovoNomeMedicacao('');
     setNovaDosagem('');
     setNovaFrequencia('');
     setNovoHorario('');
-    setNovaDataInicioMed('');
-    setUsoContinuo(true);
+    setNovaDataInicioMed(dataLocalISO(new Date()));
+    setUsoContinuo(false);
     setNovaDataFimMed('');
     setNovaCondicaoRelacionada('');
     setNovaConsultaRelacionadaMed('');
     setNovaClasseMedicacao('');
     setNovaObservacaoMedicacao('');
+    setDoseQtd('');
+    setDoseUnid('');
+    setPrimeiraDoseMed('08:00');
+    setDuracaoMed('7');
+    setDetalhesMed(false);
+    setClasseOutraMed(false);
     setErroMedicacao('');
     setMostrarFormMedicacao(true);
   }
@@ -1789,29 +2034,50 @@ export default function Home() {
     setNovaConsultaRelacionadaMed(m.consulta_relacionada_id || '');
     setNovaClasseMedicacao(m.classe || '');
     setNovaObservacaoMedicacao(m.observacao || '');
+    const dm = (m.dosagem || '').match(/^\s*([\d.,]+)\s*(.*)$/);
+    setDoseQtd(dm ? dm[1] : (m.dosagem || ''));
+    setDoseUnid(dm ? dm[2].trim() : '');
+    const h1 = (m.horario || '').match(/^(\d{2}:\d{2})/);
+    setPrimeiraDoseMed(h1 ? h1[1] : '08:00');
+    if (!m.data_fim) {
+      setDuracaoMed('cont');
+    } else {
+      const dias = Math.round((new Date(m.data_fim + 'T12:00:00').getTime() - new Date(m.data_inicio + 'T12:00:00').getTime()) / 86400000) + 1;
+      setDuracaoMed([5, 7, 10, 14].includes(dias) ? String(dias) : 'data');
+    }
+    setDetalhesMed(!!(m.consulta_relacionada_id || m.condicao_relacionada_id || m.observacao));
+    setClasseOutraMed(!!m.classe && !classesRapidasMed.some((c) => c.value === m.classe));
     setErroMedicacao('');
     setMostrarFormMedicacao(true);
   }
 
   async function salvarMedicacao() {
     setErroMedicacao('');
-    if (!novoNomeMedicacao || !novaDataInicioMed) {
+    if (!novoNomeMedicacao.trim() || !novaDataInicioMed) {
       setErroMedicacao('Preencha ao menos o nome e a data de início.');
       return;
     }
     if (!membroSelecionado) return;
     setCarregando(true);
 
+    const freqEscolhida = frequenciasMedicacao.find((x) => x.label === novaFrequencia);
+    const horarioFinal = freqEscolhida
+      ? (freqEscolhida.intervaloH ? calcularHorariosMedicacao(primeiraDoseMed, freqEscolhida.intervaloH).join(' · ') : '')
+      : novoHorario;
+    const dosagemFinal = `${doseQtd.trim()} ${doseUnid.trim()}`.trim();
+    // Duração: contínuo = sem data de término; 5/7/10/14 dias = início + (dias - 1); "data" = a escolhida.
+    const dataFimFinal =
+      duracaoMed === 'cont' ? null
+      : duracaoMed === 'data' ? (novaDataFimMed || dataLocalISO(new Date()))
+      : somarDias(novaDataInicioMed, parseInt(duracaoMed, 10) - 1);
+
     const dados = {
-      nome: novoNomeMedicacao,
-      dosagem: novaDosagem || null,
+      nome: novoNomeMedicacao.trim(),
+      dosagem: dosagemFinal || null,
       frequencia: novaFrequencia || null,
-      horario: novoHorario || null,
+      horario: horarioFinal || null,
       data_inicio: novaDataInicioMed,
-      // Se desmarcou "uso contínuo" mas não preencheu uma data de término, usa hoje como
-      // padrão — sem isso, data_fim ficava null (= "uso contínuo" pro resto do app) mesmo
-      // com a caixinha desmarcada.
-      data_fim: usoContinuo ? null : (novaDataFimMed || dataLocalISO(new Date())),
+      data_fim: dataFimFinal,
       condicao_relacionada_id: novaCondicaoRelacionada || null,
       consulta_relacionada_id: novaConsultaRelacionadaMed || null,
       classe: novaClasseMedicacao || null,
@@ -2384,11 +2650,12 @@ export default function Home() {
     setCarregando(false);
   }
 
-  async function excluirMembro() {
-    if (!membroSelecionado) return;
+  async function excluirMembro(alvo?: Membro) {
+    const alvoMembro = alvo ?? membroSelecionado;
+    if (!alvoMembro) return;
     setCarregando(true);
     setErro('');
-    const membroId = membroSelecionado.id;
+    const membroId = alvoMembro.id;
     // Apaga registros relacionados primeiro, caso o banco não tenha ON DELETE CASCADE configurado.
     await supabase.from('condicao').delete().eq('membro_id', membroId);
     await supabase.from('medicacao').delete().eq('membro_id', membroId);
@@ -2411,7 +2678,8 @@ export default function Home() {
       return;
     }
     setConfirmandoExclusaoMembro(false);
-    setMembroSelecionado(null);
+    setMembroParaExcluir(null);
+    if (!membroSelecionado || membroSelecionado.id === membroId) setMembroSelecionado(null);
     await carregarMembros();
   }
 
@@ -3448,11 +3716,42 @@ export default function Home() {
   }
 
   const inputClasse =
-    'w-full rounded-xl border border-slate-200 px-4 py-3 text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent';
+    'w-full min-h-[48px] rounded-xl border border-[#CDD5D1] bg-white px-3.5 py-[11px] text-base text-[#1A2421] placeholder:text-[#7A857F] focus:outline-none focus:ring-2 focus:ring-[#1E5B4A] focus:border-transparent';
   const botaoPrimario =
-    'w-full rounded-xl bg-teal-600 py-3 font-medium text-white transition hover:bg-teal-700 disabled:opacity-50';
+    'w-full min-h-[50px] rounded-[14px] bg-[#1E5B4A] font-semibold text-white transition hover:bg-[#184a3c] disabled:opacity-50';
   const botaoSecundario =
-    'w-full rounded-xl border border-slate-200 py-3 font-medium text-slate-600 transition hover:bg-[#FAFAF8]';
+    'w-full min-h-[50px] rounded-[14px] border border-[#CDD5D1] bg-white font-semibold text-[#26332E] transition hover:bg-[#F4F6F4]';
+
+  // ---- Padrão visual das telas (desenho da Roberta) ----
+  const secaoClasse = 'flex flex-col gap-4 rounded-2xl border border-[#E1E6E3] bg-white p-[18px]';
+  const tituloSecao = 'text-[13px] font-bold uppercase tracking-[0.06em] text-[#1E5B4A]';
+  const rotuloCampo = 'text-sm font-semibold text-[#26332E]';
+  const chipDs = (ativo: boolean) =>
+    `flex h-10 items-center gap-1.5 rounded-full border px-3.5 text-sm transition ${
+      ativo ? 'border-[#1E5B4A] bg-[#1E5B4A] font-semibold text-white' : 'border-[#CDD5D1] bg-white font-medium text-[#26332E]'
+    }`;
+  const setaSelect = (
+    <svg className="pointer-events-none absolute right-3.5 top-3.5 text-[#55615B]" width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6" /></svg>
+  );
+  const selectClasse = `${inputClasse} appearance-none pr-10`;
+
+  // Barra fixa embaixo com Cancelar / Salvar (fica por cima da navegação inferior)
+  function renderBarraAcoes(rotuloSalvar: string, aoSalvar: () => void, aoCancelar: () => void, ocupado: boolean) {
+    return (
+      <>
+        <div className="fixed inset-x-0 bottom-0 z-50 border-t border-[#E1E6E3] bg-white">
+          <div className="mx-auto flex w-full max-w-2xl gap-3 px-4 py-3">
+            <button type="button" onClick={aoCancelar} className="h-[50px] flex-1 rounded-[14px] border border-[#CDD5D1] bg-white text-base font-semibold text-[#26332E]">
+              Cancelar
+            </button>
+            <button type="button" disabled={ocupado} onClick={aoSalvar} className="h-[50px] flex-[2] rounded-[14px] bg-[#1E5B4A] text-base font-semibold text-white disabled:opacity-50">
+              {ocupado ? 'Salvando...' : rotuloSalvar}
+            </button>
+          </div>
+        </div>
+      </>
+    );
+  }
 
   // Pendências do membro selecionado, mostradas na tela inicial do perfil (quando
   // nenhum ícone de categoria foi tocado ainda): próxima consulta agendada, próxima
@@ -3508,6 +3807,87 @@ export default function Home() {
     );
     return <div className="grid grid-cols-2 gap-2">{botao('a', rotuloA, contA)}{botao('b', rotuloB, contB)}</div>;
   }
+  // ---- Parentes falecidos (histórico de doenças) ----
+  const rotuloParente: Record<string, string> = { pai: 'Pai', mae: 'Mãe', avo: 'Avô/Avó', irmao: 'Irmão/Irmã', outro_sangue: 'Outro parente de sangue' };
+  async function carregarParentes() {
+    const { data: u } = await supabase.auth.getUser();
+    const { data: eu } = await supabase.from('usuario').select('familia_id').eq('id', u.user?.id).single();
+    if (!eu?.familia_id) return;
+    const { data } = await supabase
+      .from('membro')
+      .select('id, nome, parentesco, sexo_biologico, condicao(id, nome, observacao, tipo)')
+      .eq('familia_id', eu.familia_id)
+      .not('data_falecimento', 'is', null)
+      .order('criado_em');
+    const lista = ((data || []) as unknown as ParenteFalecido[])
+      .filter((m) => m.parentesco && parentescosDeSangue.includes(m.parentesco) && m.parentesco !== 'eu_mesmo')
+      .map((m) => ({ ...m, condicao: (m.condicao || []).filter((c) => c.tipo === 'doenca') }));
+    setParentes(lista);
+  }
+  function reiniciarFormParente() {
+    setParenteTipo(''); setParenteNome(''); setParenteSexo(''); setParenteAnoNasc(''); setParenteAnoFal(''); setParenteErro('');
+  }
+  async function salvarParente() {
+    setParenteErro('');
+    if (!parenteTipo) { setParenteErro('Escolha quem era (pai, mãe, avó...).'); return; }
+    const sexo = parenteTipo === 'pai' ? 'masculino' : parenteTipo === 'mae' ? 'feminino' : parenteSexo;
+    if (!sexo) { setParenteErro('Informe o sexo biológico.'); return; }
+    setCarregando(true);
+    const { data: u } = await supabase.auth.getUser();
+    const { data: eu } = await supabase.from('usuario').select('familia_id').eq('id', u.user?.id).single();
+    const padraoNome = parenteTipo === 'pai' ? 'Pai' : parenteTipo === 'mae' ? 'Mãe' : parenteTipo === 'avo' ? (sexo === 'feminino' ? 'Avó' : 'Avô') : parenteTipo === 'irmao' ? (sexo === 'feminino' ? 'Irmã' : 'Irmão') : 'Parente';
+    const novoId = crypto.randomUUID();
+    const { error } = await supabase.from('membro').insert({
+      id: novoId,
+      familia_id: eu?.familia_id,
+      criado_por: u.user?.id,
+      nome: parenteNome.trim() || padraoNome,
+      data_nascimento: parenteAnoNasc ? `${parenteAnoNasc}-01-01` : '1900-01-01',
+      sexo_biologico: sexo,
+      parentesco: parenteTipo,
+      data_falecimento: parenteAnoFal ? `${parenteAnoFal}-01-01` : dataLocalISO(new Date()),
+      observacoes_gerais: 'Registro de histórico familiar (datas aproximadas ou não informadas).',
+    });
+    setCarregando(false);
+    if (error) { setParenteErro(error.message); return; }
+    reiniciarFormParente();
+    setMostrarFormParente(false);
+    await carregarParentes();
+    setParenteDoencaPara(novoId);
+    if (membroSelecionado?.parentesco) carregarRiscosGeneticos(membroSelecionado);
+  }
+  async function adicionarDoencaParente() {
+    setParenteErro('');
+    const nome = parenteDoenca === 'Outra doença (especificar)' ? parenteDoencaOutra.trim() : parenteDoenca;
+    if (!parenteDoencaPara || !nome) { setParenteErro('Escolha a doença.'); return; }
+    setCarregando(true);
+    const { error } = await supabase.from('condicao').insert({
+      membro_id: parenteDoencaPara,
+      tipo: 'doenca',
+      nome,
+      status: 'cronica',
+      relevante_geneticamente: true,
+      observacao: parenteDoencaObs.trim() || null,
+    });
+    setCarregando(false);
+    if (error) { setParenteErro(error.message); return; }
+    setParenteDoenca(''); setParenteDoencaOutra(''); setParenteDoencaObs('');
+    await carregarParentes();
+    if (membroSelecionado?.parentesco) carregarRiscosGeneticos(membroSelecionado);
+  }
+  async function removerDoencaParente(id: string) {
+    await supabase.from('condicao').delete().eq('id', id);
+    await carregarParentes();
+    if (membroSelecionado?.parentesco) carregarRiscosGeneticos(membroSelecionado);
+  }
+  async function removerParente(id: string) {
+    const { error } = await supabase.from('membro').delete().eq('id', id);
+    setParenteRemovendo(null);
+    if (error) { setParenteErro(error.message); return; }
+    await carregarParentes();
+    if (membroSelecionado?.parentesco) carregarRiscosGeneticos(membroSelecionado);
+  }
+
   // ---- Compartilhamento entre contas ----
   async function carregarCompartComigo() {
     const { data, error } = await supabase.rpc('listar_compartilhados_comigo');
@@ -4362,6 +4742,7 @@ export default function Home() {
       { id: 'puberdade' as Aba, label: 'Puberdade e Sexualidade', descricao: 'Menarca/espermarca, ciclo menstrual, vida sexual e métodos contraceptivos.', mostrar: idadeAnos >= 9 || !!puberdadeSexualidade },
       { id: 'saudemental' as Aba, label: 'Saúde Mental', descricao: 'Humor, ansiedade e outros pontos de atenção emocional.', mostrar: true },
       { id: 'habitosvida' as Aba, label: 'Hábitos de Vida', descricao: 'Alimentação do dia a dia, atividade física, sono e uso de telas.', mostrar: true },
+      { id: 'parentes' as Aba, label: 'Parentes falecidos', descricao: 'Pai, mãe, avós ou irmãos que já faleceram: registre só as doenças que tiveram.', mostrar: !(membroSelecionado && idsCompartilhadosComigo.has(membroSelecionado.id)) },
     ];
     return itens.filter((i) => i.mostrar);
   }
@@ -4415,6 +4796,8 @@ export default function Home() {
         return <svg {...props}><path d="M3 12a9 9 0 0 1 15-6.7L21 8" /><path d="M21 3v5h-5" /><path d="M21 12a9 9 0 0 1-15 6.7L3 16" /><path d="M3 21v-5h5" /></svg>;
       case 'crescimento':
         return <svg {...props}><polyline points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline points="17 6 23 6 23 12" /></svg>;
+      case 'parentes':
+        return <svg {...props}><circle cx="9" cy="7" r="4" /><path d="M2 21a7 7 0 0 1 14 0" /><path d="M17 11h5" /></svg>;
       case 'riscos':
         return <svg {...props}><line x1="6" y1="3" x2="6" y2="15" /><circle cx="18" cy="6" r="3" /><circle cx="6" cy="18" r="3" /><path d="M18 9a9 9 0 0 1-9 9" /></svg>;
       case 'feedeventos':
@@ -4437,17 +4820,52 @@ export default function Home() {
       <main className="min-h-screen bg-white p-6 max-w-2xl mx-auto">
         <div className="mb-6 flex items-center justify-between print:hidden">
           <button onClick={() => setMostrarResumoImpressao(false)} className="text-sm text-teal-700">← Voltar</button>
-          <button onClick={() => window.print()} className="rounded-xl bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700">
+          <button onClick={() => window.print()} className="rounded-xl bg-[#1E5B4A] px-4 py-2 text-sm font-medium text-white hover:bg-[#184a3c]">
             <Ic n="impressora" /> Imprimir / Salvar PDF
           </button>
         </div>
 
-        <h1 className="text-xl font-semibold text-slate-800">Resumo de saúde — {membroSelecionado.nome}</h1>
+        <h1 className="text-xl font-semibold text-slate-800">{modoResumo === 'historico' ? 'Histórico de doenças' : 'Resumo de saúde'} — {membroSelecionado.nome}</h1>
         <p className="text-xs text-slate-400 mb-6">
           {calcularIdade(membroSelecionado.data_nascimento)} anos · gerado em {new Date().toLocaleDateString('pt-BR')}
         </p>
 
-        {secoesCompartilhar.nascimento && (
+        {modoResumo === 'historico' && (() => {
+          const doencasPreExistentes = condicoes.filter((c) => c.tipo === 'doenca' && c.status !== 'resolvida');
+          const doencasGeneticas = condicoes.filter((c) => c.tipo === 'doenca' && c.relevante_geneticamente);
+          const parentesComDoenca = membroSelecionado.parentesco === 'eu_mesmo' ? parentes.filter((pt) => pt.condicao.length > 0) : [];
+          const linha = (c: Condicao) => (
+            <p key={c.id} className="text-sm text-slate-700 mb-1">
+              {c.nome} — {statusCondicaoLabels[c.status] || c.status}{c.data_diagnostico_ou_procedimento && ` · desde ${formatarData(c.data_diagnostico_ou_procedimento)}`}
+              {c.observacao && ` · ${c.observacao}`}
+            </p>
+          );
+          return (
+            <>
+              <section className="mb-5">
+                <h2 className="text-sm font-semibold text-slate-800 border-b border-slate-200 pb-1 mb-2">Doenças pré-existentes (ativas ou crônicas)</h2>
+                {doencasPreExistentes.length === 0 ? <p className="text-sm text-slate-400">Nenhuma registrada.</p> : doencasPreExistentes.map(linha)}
+              </section>
+              <section className="mb-5">
+                <h2 className="text-sm font-semibold text-slate-800 border-b border-slate-200 pb-1 mb-2">Doenças com componente genético/hereditário</h2>
+                {doencasGeneticas.length === 0 ? <p className="text-sm text-slate-400">Nenhuma registrada.</p> : doencasGeneticas.map(linha)}
+              </section>
+              {membroSelecionado.parentesco === 'eu_mesmo' && (
+                <section className="mb-5">
+                  <h2 className="text-sm font-semibold text-slate-800 border-b border-slate-200 pb-1 mb-2">Doenças em parentes falecidos</h2>
+                  {parentesComDoenca.length === 0 ? <p className="text-sm text-slate-400">Nenhuma registrada.</p> : parentesComDoenca.map((pt) => (
+                    <p key={pt.id} className="text-sm text-slate-700 mb-1">
+                      <strong>{pt.nome}</strong> ({rotuloParente[pt.parentesco || ''] || 'parente'}): {pt.condicao.map((c) => c.nome + (c.observacao ? ` (${c.observacao})` : '')).join('; ')}
+                    </p>
+                  ))}
+                </section>
+              )}
+              <p className="mt-6 text-xs text-slate-400">Informações registradas pela própria família no ProntuApp. Não substituem avaliação médica.</p>
+            </>
+          );
+        })()}
+
+        {modoResumo === 'completo' && secoesCompartilhar.nascimento && (
           <section className="mb-5">
             <h2 className="text-sm font-semibold text-slate-800 border-b border-slate-200 pb-1 mb-2">Dados pessoais</h2>
             <p className="text-sm text-slate-700">
@@ -4459,7 +4877,7 @@ export default function Home() {
           </section>
         )}
 
-        {secoesCompartilhar.condicoes && (
+        {modoResumo === 'completo' && secoesCompartilhar.condicoes && (
           <section className="mb-5">
             <h2 className="text-sm font-semibold text-slate-800 border-b border-slate-200 pb-1 mb-2">Eventos de saúde</h2>
             {eventosSaude.length === 0 ? <p className="text-sm text-slate-400">Nenhum registrado.</p> : eventosSaude.map((c) => (
@@ -4471,7 +4889,7 @@ export default function Home() {
           </section>
         )}
 
-        {secoesCompartilhar.cirurgias && (
+        {modoResumo === 'completo' && secoesCompartilhar.cirurgias && (
           <section className="mb-5">
             <h2 className="text-sm font-semibold text-slate-800 border-b border-slate-200 pb-1 mb-2">Cirurgias/Internações</h2>
             {cirurgiasInternacoes.length === 0 ? <p className="text-sm text-slate-400">Nenhuma registrada.</p> : cirurgiasInternacoes.map((c) => (
@@ -4483,7 +4901,7 @@ export default function Home() {
           </section>
         )}
 
-        {secoesCompartilhar.medicacoes && (
+        {modoResumo === 'completo' && secoesCompartilhar.medicacoes && (
           <section className="mb-5">
             <h2 className="text-sm font-semibold text-slate-800 border-b border-slate-200 pb-1 mb-2">Medicações</h2>
             {medicacoes.length === 0 ? <p className="text-sm text-slate-400">Nenhuma registrada.</p> : medicacoes.map((m) => (
@@ -4495,7 +4913,7 @@ export default function Home() {
           </section>
         )}
 
-        {secoesCompartilhar.consultas && (
+        {modoResumo === 'completo' && secoesCompartilhar.consultas && (
           <section className="mb-5">
             <h2 className="text-sm font-semibold text-slate-800 border-b border-slate-200 pb-1 mb-2">Consultas</h2>
             {consultasGerais.length === 0 ? <p className="text-sm text-slate-400">Nenhuma registrada.</p> : consultasGerais.map((c) => (
@@ -4507,7 +4925,7 @@ export default function Home() {
           </section>
         )}
 
-        {secoesCompartilhar.odontologia && (
+        {modoResumo === 'completo' && secoesCompartilhar.odontologia && (
           <section className="mb-5">
             <h2 className="text-sm font-semibold text-slate-800 border-b border-slate-200 pb-1 mb-2">Odontologia</h2>
             {consultasOdonto.length === 0 ? <p className="text-sm text-slate-400">Nenhuma registrada.</p> : consultasOdonto.map((c) => (
@@ -4518,7 +4936,7 @@ export default function Home() {
           </section>
         )}
 
-        {secoesCompartilhar.exames && (
+        {modoResumo === 'completo' && secoesCompartilhar.exames && (
           <section className="mb-5">
             <h2 className="text-sm font-semibold text-slate-800 border-b border-slate-200 pb-1 mb-2">Exames</h2>
             {exames.length === 0 ? <p className="text-sm text-slate-400">Nenhum registrado.</p> : exames.map((e) => (
@@ -4529,7 +4947,7 @@ export default function Home() {
           </section>
         )}
 
-        {secoesCompartilhar.vacinas && (
+        {modoResumo === 'completo' && secoesCompartilhar.vacinas && (
           <section className="mb-5">
             <h2 className="text-sm font-semibold text-slate-800 border-b border-slate-200 pb-1 mb-2">Vacinas</h2>
             {vacinas.length === 0 ? <p className="text-sm text-slate-400">Nenhuma registrada.</p> : vacinas.map((v) => (
@@ -4540,7 +4958,7 @@ export default function Home() {
           </section>
         )}
 
-        {secoesCompartilhar.crescimento && (
+        {modoResumo === 'completo' && secoesCompartilhar.crescimento && (
           <section className="mb-5">
             <h2 className="text-sm font-semibold text-slate-800 border-b border-slate-200 pb-1 mb-2">Peso e crescimento</h2>
             {crescimento.length === 0 ? <p className="text-sm text-slate-400">Nenhuma medição registrada.</p> : crescimento.map((m) => (
@@ -4551,7 +4969,7 @@ export default function Home() {
           </section>
         )}
 
-        {secoesCompartilhar.anamnese && (
+        {modoResumo === 'completo' && secoesCompartilhar.anamnese && (
           <section className="mb-5">
             <h2 className="text-sm font-semibold text-slate-800 border-b border-slate-200 pb-1 mb-2">Anamnese</h2>
             {nascimento && (nascimento.pre_natal_adequado || nascimento.intercorrencias_gestacionais) && (
@@ -4592,6 +5010,30 @@ export default function Home() {
   }
 
   const larguraContainer = membroSelecionado ? 'max-w-2xl' : 'max-w-sm';
+  // Formulário aberto em cada tela: [está aberto, fechar, título novo, título editar]
+  const formDaTela: Record<string, [boolean, () => void, string, string]> = {
+    condicoes: [mostrarFormCondicao, () => setMostrarFormCondicao(false), 'Novo evento de saúde', 'Editar evento de saúde'],
+    cirurgias: [mostrarFormCondicao, () => setMostrarFormCondicao(false), 'Nova cirurgia', 'Editar cirurgia'],
+    medicos: [mostrarFormMedico, () => setMostrarFormMedico(false), 'Novo profissional', 'Editar profissional'],
+    exames: [mostrarFormExame, () => setMostrarFormExame(false), 'Novo exame', 'Editar exame'],
+    vacinas: [mostrarFormVacina, () => setMostrarFormVacina(false), 'Nova vacina', 'Editar vacina'],
+    crescimento: [mostrarFormCrescimento, () => setMostrarFormCrescimento(false), 'Nova medição', 'Editar medição'],
+    terapias: [mostrarFormTerapia, () => setMostrarFormTerapia(false), 'Nova terapia', 'Editar terapia'],
+    esportes: [mostrarFormAtividadeFisica, () => setMostrarFormAtividadeFisica(false), 'Nova atividade', 'Editar atividade'],
+    parentes: [mostrarFormParente, () => setMostrarFormParente(false), 'Novo parente', 'Parente'],
+    nascimento: [mostrarFormNascimento, () => setMostrarFormNascimento(false), '', ''],
+    gestacao: [mostrarFormNascimento, () => setMostrarFormNascimento(false), '', ''],
+    desenvolvimento: [mostrarFormDesenvolvimento, () => setMostrarFormDesenvolvimento(false), '', ''],
+    alimentacaoinfantil: [mostrarFormAlimentacaoInfantil, () => setMostrarFormAlimentacaoInfantil(false), '', ''],
+    puberdade: [mostrarFormPuberdade, () => setMostrarFormPuberdade(false), '', ''],
+    saudemental: [mostrarFormSaudeMental, () => setMostrarFormSaudeMental(false), '', ''],
+    habitosvida: [mostrarFormHabitosVida, () => setMostrarFormHabitosVida(false), '', ''],
+  };
+  const idEditandoDaTela: Record<string, string | null | undefined> = {
+    condicoes: condicaoEditandoId, cirurgias: condicaoEditandoId, medicos: medicoEditandoId, exames: exameEditandoId,
+    vacinas: vacinaEditandoId, crescimento: crescimentoEditandoId, terapias: terapiaEditandoId,
+  };
+  const emTelaDetalhe = passo === 'painel' && !!membroSelecionado && telaDetalhe !== null;
 
   // Troca de aba do menu inferior sempre volta pra tela "raiz" daquela aba (fecha
   // qualquer categoria/formulário que estivesse aberto na aba anterior), pra nunca
@@ -4661,8 +5103,8 @@ export default function Home() {
   ];
 
   return (
-    <main className="min-h-screen bg-[#FAFAF8] flex items-center justify-center p-4">
-      <div className={`w-full ${larguraContainer} rounded-2xl bg-white p-8 shadow-sm border border-[#E5E1DA] transition-all ${passo === 'painel' ? 'pb-24' : ''}`}>
+    <main className={`min-h-screen flex justify-center ${emTelaDetalhe ? 'bg-[#F4F6F4] items-start p-0' : 'bg-[#FAFAF8] items-center p-4'}`}>
+      <div className={`w-full ${larguraContainer} transition-all ${emTelaDetalhe ? 'px-4 pt-3 pb-24' : `rounded-2xl bg-white p-8 shadow-sm border border-[#E5E1DA] ${passo === 'painel' ? 'pb-24' : ''}`}`}>
         {!membroSelecionado && (
           <div className="mb-8 text-center">
             <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl border-2 border-green-600 bg-green-50 text-green-700">
@@ -4745,47 +5187,24 @@ export default function Home() {
         )}
 
         {passo === 'painel' && abaInferior === 'home' && !membroSelecionado && (
-          <div className="space-y-4">
-            <div className="space-y-2">
-              {membros.length === 0 && (
-                <p className="text-sm text-slate-400 text-center py-2">Nenhum membro cadastrado ainda.</p>
-              )}
-              {membros.map((m) => (
+          mostrarFormMembro || (membrosCarregados && membros.length === 0) ? (
+            <div className="space-y-4">
+              {membros.length > 0 && (
                 <button
-                  key={m.id}
-                  onClick={() => { setMembroSelecionado(m); setTelaDetalhe(null); setAbaInferior('home'); }}
-                  className="flex w-full items-center gap-3 rounded-xl border border-[#E5E1DA] p-3 text-left transition hover:bg-[#FAFAF8]"
+                  onClick={() => { setMostrarFormMembro(false); setErroMembro(''); if (membroAntesDeAdicionar) setMembroSelecionado(membroAntesDeAdicionar); }}
+                  className="text-sm text-teal-700"
                 >
-                  {m.foto_url ? (
-                    <img
-                      src={m.foto_url}
-                      alt={m.nome}
-                      className="h-10 w-10 shrink-0 rounded-full object-cover"
-                    />
-                  ) : (
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-teal-100 text-teal-700 font-semibold">
-                      {m.nome.charAt(0).toUpperCase()}
-                    </div>
-                  )}
-                  <div>
-                    <p className="font-medium text-slate-800">{m.nome}</p>
-                    <p className="text-xs text-slate-400">{calcularIdade(m.data_nascimento)} anos</p>
-                    {idsCompartilhadosComigo.has(m.id) && (
-                      <span className="mt-0.5 inline-block rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-semibold text-violet-700">
-                        compartilhado por {compartComigo.find((c) => c.membro_id === m.id)?.dono_nome}
-                      </span>
-                    )}
-                  </div>
+                  ← Voltar
                 </button>
-              ))}
-            </div>
-
-            {meuPapel === 'cuidador' ? null : !mostrarFormMembro ? (
-              <button onClick={() => setMostrarFormMembro(true)} className={botaoPrimario}>
-                + Adicionar membro
-              </button>
-            ) : (
-              <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
+              )}
+              <div>
+                <h2 className="text-lg font-semibold text-slate-800">{membros.length === 0 ? 'Cadastre o primeiro membro' : 'Novo membro'}</h2>
+                <p className="text-xs text-slate-400">Preencha os dados básicos. Depois você completa o histórico de saúde passo a passo.</p>
+              </div>
+              {meuPapel === 'cuidador' ? (
+                <p className="text-sm text-slate-400">Seu acesso não permite cadastrar membros. Peça ao administrador da conta.</p>
+              ) : (
+                <div className="space-y-4 rounded-2xl bg-white border border-[#E1E6E3] p-[18px]">
                 <input className={inputClasse} placeholder="nome" value={novoNome} onChange={(e) => setNovoNome(e.target.value)} />
                 <input className={inputClasse} type="date" value={novaData} onChange={(e) => setNovaData(e.target.value)} />
                 <select className={inputClasse} value={novoSexo} onChange={(e) => setNovoSexo(e.target.value)}>
@@ -4828,13 +5247,18 @@ export default function Home() {
                   <button disabled={carregando} onClick={adicionarMembro} className={botaoPrimario}>
                     {carregando ? 'Salvando...' : 'Salvar'}
                   </button>
-                  <button onClick={() => setMostrarFormMembro(false)} className={botaoSecundario}>
-                    Cancelar
-                  </button>
+                  {membros.length > 0 && (
+                    <button onClick={() => { setMostrarFormMembro(false); setErroMembro(''); if (membroAntesDeAdicionar) setMembroSelecionado(membroAntesDeAdicionar); }} className={botaoSecundario}>
+                      Cancelar
+                    </button>
+                  )}
                 </div>
               </div>
-            )}
-          </div>
+              )}
+            </div>
+          ) : (
+            <p className="py-6 text-center text-sm text-slate-400">Carregando...</p>
+          )
         )}
 
         {passo === 'painel' && abaInferior === 'home' && membroSelecionado && telaDetalhe === null && (
@@ -4935,25 +5359,110 @@ export default function Home() {
             )}
 
             <button
-              onClick={() => setMembroSelecionado(null)}
-              className="mb-6 flex w-full items-center gap-3 rounded-xl p-2 text-left transition hover:bg-[#FAFAF8]"
+              onClick={() => setMostrarTrocaMembro(true)}
+              aria-label={`Trocar de membro da família. Membro atual: ${membroSelecionado.nome}`}
+              aria-haspopup="dialog"
+              className="mb-5 flex w-full items-center gap-3 rounded-full border border-teal-200 bg-teal-50 py-1.5 pl-1.5 pr-2 text-left transition hover:bg-teal-100/60"
             >
               {membroSelecionado.foto_url ? (
                 <img
                   src={membroSelecionado.foto_url}
                   alt={membroSelecionado.nome}
-                  className="h-12 w-12 shrink-0 rounded-full object-cover"
+                  className="h-11 w-11 shrink-0 rounded-full object-cover"
                 />
               ) : (
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-teal-100 text-teal-700 font-semibold text-lg">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-teal-100 text-lg font-bold text-teal-800">
                   {membroSelecionado.nome.charAt(0).toUpperCase()}
                 </div>
               )}
-              <div>
-                <h2 className="text-lg font-semibold text-slate-800">{membroSelecionado.nome}</h2>
-                <p className="text-xs text-slate-400">{calcularIdade(membroSelecionado.data_nascimento)} anos · toque para trocar de membro</p>
+              <div className="min-w-0 flex-1">
+                <h2 className="truncate text-base font-bold text-slate-800">{membroSelecionado.nome}</h2>
+                <p className="text-xs text-slate-500">{calcularIdade(membroSelecionado.data_nascimento)} anos</p>
               </div>
+              <span className="flex shrink-0 items-center gap-1.5 rounded-full bg-teal-700 px-3 py-2 text-xs font-semibold leading-none text-white">
+                <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round"><path d="M7 4L3 8l4 4" /><path d="M3 8h14" /><path d="M17 20l4-4-4-4" /><path d="M21 16H7" /></svg>
+                Trocar de membro
+              </span>
             </button>
+
+            {mostrarTrocaMembro && (
+              <div className="fixed inset-0 z-50 flex flex-col justify-end">
+                <button aria-label="Fechar" onClick={() => { setMostrarTrocaMembro(false); setModoExcluirMembro(false); setMembroParaExcluir(null); }} className="absolute inset-0 bg-slate-900/45" />
+                <div role="dialog" aria-label="Trocar de membro" className="relative mx-auto flex max-h-[85vh] w-full max-w-2xl flex-col gap-1.5 overflow-y-auto rounded-t-3xl bg-white px-4 pb-6 pt-2.5 shadow-xl">
+                  <span className="mb-2 h-1 w-10 self-center rounded-full bg-slate-300" />
+                  <h2 className="mb-1.5 px-1 text-lg font-bold text-slate-800">Ver o prontuário de</h2>
+                  {membros.map((m) => {
+                    const ativo = m.id === membroSelecionado.id;
+                    if (modoExcluirMembro) {
+                      const compartilhado = idsCompartilhadosComigo.has(m.id);
+                      return (
+                        <div key={m.id} className="rounded-2xl bg-slate-50 px-3 py-2">
+                          <div className="flex min-h-[48px] items-center gap-3">
+                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-teal-100 font-bold text-teal-800">{m.nome.charAt(0).toUpperCase()}</div>
+                            <p className="min-w-0 flex-1 truncate font-semibold text-slate-800">{m.nome}</p>
+                            {compartilhado ? (
+                              <span className="shrink-0 text-xs text-slate-400">compartilhado</span>
+                            ) : (
+                              <button onClick={() => { setErro(''); setMembroParaExcluir(membroParaExcluir === m.id ? null : m.id); }} className="shrink-0 rounded-full border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600">Excluir</button>
+                            )}
+                          </div>
+                          {membroParaExcluir === m.id && (
+                            <div className="mt-2 space-y-2 rounded-xl border border-red-100 bg-red-50 p-3">
+                              <p className="text-sm text-red-700">Isso apaga {m.nome} e todo o histórico (condições, medicações, consultas, exames, vacinas) permanentemente. Tem certeza?</p>
+                              {erro && <p className="text-sm text-red-600">{erro}</p>}
+                              <div className="flex gap-2">
+                                <button disabled={carregando} onClick={() => excluirMembro(m)} className="flex-1 rounded-xl bg-red-600 py-2 text-sm font-medium text-white disabled:opacity-50">{carregando ? 'Excluindo...' : 'Sim, excluir'}</button>
+                                <button onClick={() => setMembroParaExcluir(null)} className="flex-1 rounded-xl border border-slate-200 py-2 text-sm font-medium text-slate-600">Cancelar</button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    }
+                    return (
+                      <button
+                        key={m.id}
+                        onClick={() => { setMembroSelecionado(m); setTelaDetalhe(null); setAbaInferior('home'); setMostrarTrocaMembro(false); }}
+                        className={`flex min-h-[60px] items-center gap-3 rounded-2xl px-3 py-2 text-left transition ${ativo ? 'bg-teal-50' : 'hover:bg-slate-50'}`}
+                      >
+                        {m.foto_url ? (
+                          <img src={m.foto_url} alt={m.nome} className="h-10 w-10 shrink-0 rounded-full object-cover" />
+                        ) : (
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-teal-100 font-bold text-teal-800">{m.nome.charAt(0).toUpperCase()}</div>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate font-semibold text-slate-800">{m.nome}</p>
+                          <p className="text-xs text-slate-500">
+                            {calcularIdade(m.data_nascimento)} anos
+                            {idsCompartilhadosComigo.has(m.id) && <span className="ml-2 rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-semibold text-violet-700">compartilhado por {compartComigo.find((c) => c.membro_id === m.id)?.dono_nome}</span>}
+                          </p>
+                        </div>
+                        {ativo && (
+                          <svg className="shrink-0 text-teal-700" width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5 9-10" /></svg>
+                        )}
+                      </button>
+                    );
+                  })}
+                  {meuPapel !== 'cuidador' && (
+                    <button
+                      onClick={() => { setMostrarTrocaMembro(false); setModoExcluirMembro(false); setMembroParaExcluir(null); setMembroAntesDeAdicionar(membroSelecionado); setErroMembro(''); setMembroSelecionado(null); setMostrarFormMembro(true); }}
+                      className="mt-1 flex min-h-[56px] items-center gap-3 rounded-2xl border border-dashed border-teal-700/40 px-3 text-sm font-semibold text-teal-800"
+                    >
+                      <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
+                      Adicionar membro
+                    </button>
+                  )}
+                  {meuPapel === 'admin' && membros.length > 0 && (
+                    <button
+                      onClick={() => { setModoExcluirMembro((v) => !v); setMembroParaExcluir(null); setErro(''); }}
+                      className="mt-1 py-2 text-sm font-medium text-slate-500"
+                    >
+                      {modoExcluirMembro ? 'Concluir' : 'Excluir um membro'}
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
 
             <div className="rounded-2xl bg-slate-100 p-3">
               <h3 className="mb-2.5 text-sm font-semibold text-slate-700">Pendências de {membroSelecionado.nome}</h3>
@@ -5003,7 +5512,7 @@ export default function Home() {
                     key={i}
                     onClick={() => { setDicaVisivel(false); setTimeout(() => { setDicaIndex(i); setDicaVisivel(true); }, 150); }}
                     aria-label={`dica ${i + 1}`}
-                    className={`h-1.5 rounded-full transition-all ${i === (dicaIndex % dicasParaMembro.length) ? 'w-4 bg-teal-600' : 'w-1.5 bg-teal-200'}`}
+                    className={`h-1.5 rounded-full transition-all ${i === (dicaIndex % dicasParaMembro.length) ? 'w-4 bg-[#1E5B4A]' : 'w-1.5 bg-teal-200'}`}
                   />
                 ))}
               </div>
@@ -5022,7 +5531,7 @@ export default function Home() {
                   </p>
                   {erro && <p className="text-sm text-red-600">{erro}</p>}
                   <div className="flex gap-2">
-                    <button disabled={carregando} onClick={excluirMembro} className="flex-1 rounded-xl bg-red-600 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50">
+                    <button disabled={carregando} onClick={() => excluirMembro()} className="flex-1 rounded-xl bg-red-600 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50">
                       {carregando ? 'Excluindo...' : 'Sim, excluir'}
                     </button>
                     <button onClick={() => setConfirmandoExclusaoMembro(false)} className="flex-1 rounded-xl border border-slate-200 py-2 text-sm font-medium text-slate-600 hover:bg-[#FAFAF8]">
@@ -5040,12 +5549,12 @@ export default function Home() {
           <div className="space-y-6">
             <h2 className="text-lg font-semibold text-slate-800">Configuração</h2>
 
-            <div className="space-y-2 rounded-xl border border-[#E5E1DA] p-4">
+            <div className="space-y-2 rounded-xl bg-white border border-[#E5E1DA] p-4">
               <p className="text-xs text-slate-400">Conta</p>
               <p className="text-sm font-medium text-slate-800">{contaEmail || '—'}</p>
             </div>
 
-            <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
+            <div className="space-y-4 rounded-2xl bg-white border border-[#E1E6E3] p-[18px]">
               <p className="text-sm font-medium text-slate-800">Trocar senha</p>
               <input
                 className={inputClasse}
@@ -5068,7 +5577,7 @@ export default function Home() {
               </button>
             </div>
 
-            <div className="space-y-4 rounded-xl border border-[#E5E1DA] p-4">
+            <div className="space-y-4 rounded-xl bg-white border border-[#E5E1DA] p-4">
               <div>
                 <p className="text-sm font-medium text-slate-800">Compartilhar entre contas</p>
                 <p className="text-xs text-slate-500">Para quem tem conta própria no app, como pais e filhos adultos: dá acesso a um perfil sem misturar as famílias.</p>
@@ -5190,7 +5699,7 @@ export default function Home() {
             </div>
 
             {meuPapel !== null && meuPapel !== 'admin' && (
-              <div className="space-y-1 rounded-xl border border-[#E5E1DA] p-4">
+              <div className="space-y-1 rounded-xl bg-white border border-[#E5E1DA] p-4">
                 <p className="text-sm font-medium text-slate-800">
                   Seu acesso: {meuPapel === 'cuidador' ? 'Cuidador(a)' : 'Familiar'}
                 </p>
@@ -5209,7 +5718,7 @@ export default function Home() {
               }
               const listaPessoas = Array.from(pessoas.entries()).filter(([id]) => id !== meuUsuarioId);
               return (
-                <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
+                <div className="space-y-4 rounded-2xl bg-white border border-[#E1E6E3] p-[18px]">
                   <div>
                     <p className="text-sm font-medium text-slate-800">Acessos e convites</p>
                     <p className="text-xs text-slate-500">
@@ -5310,7 +5819,7 @@ export default function Home() {
                   {!mostrarFormConvite ? (
                     <button onClick={abrirFormConvite} className={botaoPrimario}>+ Convidar alguém</button>
                   ) : (
-                    <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-3">
+                    <div className="space-y-3 rounded-xl bg-white border border-[#E5E1DA] p-3">
                       <input className={inputClasse} placeholder="nome ou apelido (ex: Babá Maria)" value={conviteApelido} onChange={(e) => setConviteApelido(e.target.value)} />
                       <select className={inputClasse} value={convitePapel} onChange={(e) => setConvitePapel(e.target.value as PapelUsuario)}>
                         <option value="familiar">Familiar (entra na família)</option>
@@ -5371,7 +5880,7 @@ export default function Home() {
           <div className="space-y-4">
             <h2 className="text-lg font-semibold text-slate-800">Compartilhar</h2>
             {!membroSelecionado ? (
-              <div className="rounded-xl border border-[#E5E1DA] p-4 text-center space-y-2">
+              <div className="rounded-xl bg-white border border-[#E5E1DA] p-4 text-center space-y-2">
                 <p className="text-sm text-slate-500">Selecione um membro da família primeiro pra gerar o resumo dele.</p>
                 <button onClick={() => irParaAbaInferior('home')} className="text-sm font-semibold text-teal-700">
                   Escolher membro
@@ -5382,7 +5891,7 @@ export default function Home() {
                 <p className="text-sm text-slate-500">
                   Gere um resumo em PDF do prontuário de <strong>{membroSelecionado.nome}</strong>, pra enviar pra um médico ou guardar.
                 </p>
-                <div className="space-y-2 rounded-xl border border-[#E5E1DA] p-4">
+                <div className="space-y-2 rounded-xl bg-white border border-[#E5E1DA] p-4">
                   <p className="text-xs text-slate-400 mb-1">O que incluir no resumo</p>
                   {secoesDisponiveis.map((s) => (
                     <label key={s.id} className="flex items-start gap-2 text-sm text-slate-600 py-0.5">
@@ -5396,9 +5905,16 @@ export default function Home() {
                     </label>
                   ))}
                 </div>
-                <button onClick={() => setMostrarResumoImpressao(true)} className={botaoPrimario}>
+                <button onClick={() => { setModoResumo('completo'); setMostrarResumoImpressao(true); }} className={botaoPrimario}>
                   Gerar resumo
                 </button>
+                <div className="space-y-2 rounded-xl border border-teal-200 bg-teal-50 p-4">
+                  <p className="text-sm font-semibold text-teal-900">Só o histórico de doenças</p>
+                  <p className="text-xs text-teal-800">PDF curto com apenas as doenças pré-existentes e as de componente genético (e as dos parentes falecidos já registrados). Bom para entregar aos filhos ou a um médico.</p>
+                  <button onClick={async () => { await carregarParentes(); setModoResumo('historico'); setMostrarResumoImpressao(true); }} className={botaoSecundario}>
+                    Gerar PDF do histórico de doenças
+                  </button>
+                </div>
               </>
             )}
           </div>
@@ -5406,7 +5922,7 @@ export default function Home() {
         })()}
 
         {passo === 'painel' && (abaInferior === 'incluir' || abaInferior === 'consultar') && !membroSelecionado && (
-          <div className="rounded-xl border border-[#E5E1DA] p-4 text-center space-y-2">
+          <div className="rounded-xl bg-white border border-[#E5E1DA] p-4 text-center space-y-2">
             <p className="text-sm text-slate-500">Selecione um membro da família primeiro.</p>
             <button onClick={() => setAbaInferior('home')} className="text-sm font-semibold text-teal-700">
               Escolher membro
@@ -5466,7 +5982,7 @@ export default function Home() {
                 </div>
                 <div className="h-1.5 w-full rounded-full bg-teal-100">
                   <div
-                    className="h-1.5 rounded-full bg-teal-600 transition-all"
+                    className="h-1.5 rounded-full bg-[#1E5B4A] transition-all"
                     style={{ width: `${((onboardingPasso + 1) / passosOnboarding.length) * 100}%` }}
                   />
                 </div>
@@ -5485,7 +6001,7 @@ export default function Home() {
                   <button onClick={() => moverPassoOnboarding(1)} className="text-xs text-teal-700/70 hover:text-teal-700 ml-auto">
                     pular
                   </button>
-                  <button onClick={() => moverPassoOnboarding(1)} className="rounded-xl bg-teal-600 px-4 py-1.5 text-xs font-medium text-white hover:bg-teal-700">
+                  <button onClick={() => moverPassoOnboarding(1)} className="rounded-xl bg-[#1E5B4A] px-4 py-1.5 text-xs font-medium text-white hover:bg-[#184a3c]">
                     {onboardingPasso === passosOnboarding.length - 1 ? 'concluir' : 'próximo →'}
                   </button>
                 </div>
@@ -5494,8 +6010,22 @@ export default function Home() {
 
             {telaDetalhe !== 'eventoresumo' && (
               <>
+                <div className="mb-3 flex items-center gap-1 -ml-2">
                 <button
+                  aria-label="Voltar"
                   onClick={() => {
+                    if (telaDetalhe && formDaTela[telaDetalhe]?.[0]) {
+                      formDaTela[telaDetalhe][1]();
+                      return;
+                    }
+                    if (telaDetalhe === 'medicacoes' && mostrarFormMedicacao) {
+                      setMostrarFormMedicacao(false);
+                      return;
+                    }
+                    if ((telaDetalhe === 'consultas' || telaDetalhe === 'odontologia' || telaDetalhe === 'nutricionista') && mostrarFormConsulta) {
+                      setMostrarFormConsulta(false);
+                      return;
+                    }
                     if (onboardingAtivo) {
                       setOnboardingAtivo(false);
                       setOnboardingPasso(0);
@@ -5508,23 +6038,20 @@ export default function Home() {
                       setTelaDetalhe(null);
                     }
                   }}
-                  className="mb-4 text-sm text-teal-700"
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-[#1E5B4A]"
                 >
-                  ← Voltar
+                  <svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
                 </button>
 
-                <div className="mb-4 flex items-center gap-2 text-teal-700">
-                  {telaDetalhe === 'onboardingvoz' ? (
-                    <svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-                      <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                      <line x1="12" y1="19" x2="12" y2="23" />
-                    </svg>
-                  ) : (
-                    iconeSecao(telaDetalhe as Aba)
-                  )}
-                  <h2 className="text-lg font-semibold text-slate-800">
-                    {telaDetalhe === 'onboardingvoz'
+                <div className="flex min-w-0 flex-col gap-0.5">
+                  <h2 className="text-[22px] font-bold leading-tight tracking-[-0.01em] text-[#1A2421]">
+                    {telaDetalhe && formDaTela[telaDetalhe]?.[0] && formDaTela[telaDetalhe][2]
+                      ? (idEditandoDaTela[telaDetalhe] ? formDaTela[telaDetalhe][3] : formDaTela[telaDetalhe][2])
+                      : telaDetalhe === 'medicacoes' && mostrarFormMedicacao
+                      ? (medicacaoEditandoId ? 'Editar medicamento' : 'Novo medicamento')
+                      : (telaDetalhe === 'consultas' || telaDetalhe === 'odontologia' || telaDetalhe === 'nutricionista') && mostrarFormConsulta
+                      ? (consultaEditandoId ? 'Editar consulta' : 'Nova consulta')
+                      : telaDetalhe === 'onboardingvoz'
                       ? 'Contar sobre a saúde'
                       : telaDetalhe === 'nutricionista'
                       ? 'Nutricionista'
@@ -5532,6 +6059,8 @@ export default function Home() {
                       ? 'Exercícios/Esportes'
                       : telaDetalhe === 'terapias'
                       ? 'Terapias'
+                      : telaDetalhe === 'parentes'
+                      ? 'Parentes falecidos'
                       : telaDetalhe === 'menupessoal'
                       ? 'Mais informações'
                       : telaDetalhe === 'nascimento'
@@ -5552,6 +6081,8 @@ export default function Home() {
                       ? 'Linha do tempo'
                       : secoes.find((s) => s.id === telaDetalhe)?.label}
                   </h2>
+                  <span className="text-sm text-[#55615B]">Paciente: {membroSelecionado.nome}</span>
+                </div>
                 </div>
               </>
             )}
@@ -5566,7 +6097,7 @@ export default function Home() {
                 <p className="text-sm text-slate-500">
                   Conte rapidamente sobre a saúde de <strong>{membroSelecionado.nome}</strong>: doenças, alergias, cirurgias, remédios que usa. Fale tudo de uma vez, separando por vírgula ou “e”.
                 </p>
-                <div className="rounded-xl border border-[#E5E1DA] p-4 space-y-3">
+                <div className="rounded-xl bg-white border border-[#E5E1DA] p-4 space-y-3">
                   <div className="flex items-center justify-between mb-1">
                     <label className="text-xs text-slate-400">o que você quiser contar</label>
                     <button
@@ -5686,7 +6217,7 @@ export default function Home() {
                 )}
 
                 {nrTipo === 'evento' && (
-                  <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
+                  <div className="space-y-4 rounded-2xl bg-white border border-[#E1E6E3] p-[18px]">
                     <input
                       className={inputClasse}
                       placeholder="Buscar evento de saúde já cadastrado" style={estiloBusca}
@@ -5793,7 +6324,7 @@ export default function Home() {
                 )}
 
                 {nrTipo === 'cirurgia' && (
-                  <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
+                  <div className="space-y-4 rounded-2xl bg-white border border-[#E1E6E3] p-[18px]">
                     <input
                       className={inputClasse}
                       placeholder="Buscar cirurgia/internação já cadastrada" style={estiloBusca}
@@ -5891,7 +6422,7 @@ export default function Home() {
                 )}
 
                 {nrTipo === 'consulta' && (
-                  <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
+                  <div className="space-y-4 rounded-2xl bg-white border border-[#E1E6E3] p-[18px]">
                     <input
                       className={inputClasse}
                       placeholder="Buscar consulta já cadastrada" style={estiloBusca}
@@ -6005,7 +6536,7 @@ export default function Home() {
                 )}
 
                 {nrTipo === 'medicamento' && (
-                  <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
+                  <div className="space-y-4 rounded-2xl bg-white border border-[#E1E6E3] p-[18px]">
                     <input
                       className={inputClasse}
                       placeholder="Buscar medicamento já cadastrado" style={estiloBusca}
@@ -6032,7 +6563,7 @@ export default function Home() {
                     <input className={inputClasse} placeholder="qual remédio" value={nrMedNome} onChange={(e) => setNrMedNome(e.target.value)} />
                     <input className={inputClasse} placeholder="dosagem (opcional)" value={nrMedDosagem} onChange={(e) => setNrMedDosagem(e.target.value)} />
                     <div>
-                      <label className="text-xs text-slate-400 mb-1 block">data de início</label>
+                      <label className="mb-1.5 block text-sm font-semibold text-[#26332E]">data de início</label>
                       <input className={inputClasse} type="date" value={nrMedData} onChange={(e) => setNrMedData(e.target.value)} />
                     </div>
                     <label className="flex items-center gap-2 text-sm text-slate-600">
@@ -6041,7 +6572,7 @@ export default function Home() {
                     </label>
                     {!nrMedUsoContinuo && (
                       <div>
-                        <label className="text-xs text-slate-400 mb-1 block">data de término</label>
+                        <label className="mb-1.5 block text-sm font-semibold text-[#26332E]">data de término</label>
                         <input className={inputClasse} type="date" value={nrMedDataFim} onChange={(e) => setNrMedDataFim(e.target.value)} />
                       </div>
                     )}
@@ -6187,10 +6718,7 @@ export default function Home() {
 
                 {mostrarFormCondicao && (
                   <>
-                    <button onClick={() => setMostrarFormCondicao(false)} className="text-sm text-teal-700">
-                      ← Voltar
-                    </button>
-                    <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
+                    <div className="space-y-4 rounded-2xl bg-white border border-[#E1E6E3] p-[18px]">
                     <select
                       className={inputClasse}
                       value={novoTipoCondicao}
@@ -6304,16 +6832,9 @@ export default function Home() {
                       />
                     </div>
                     {erroCondicao && <p className="text-sm text-red-600">{erroCondicao}</p>}
-                    <div className="flex gap-2">
-                      <button disabled={carregando} onClick={salvarCondicao} className={botaoPrimario}>
-                        {carregando ? 'Salvando...' : 'Salvar'}
-                      </button>
-                      <button onClick={() => setMostrarFormCondicao(false)} className={botaoSecundario}>
-                        Cancelar
-                      </button>
-                    </div>
+                    {renderBarraAcoes('Salvar', salvarCondicao, () => setMostrarFormCondicao(false), carregando)}
                     {condicaoEditandoId && (
-                      <button disabled={carregando} onClick={excluirCondicao} className="w-full text-sm text-red-600 pt-1">
+                      <button disabled={carregando} onClick={excluirCondicao} className="w-full rounded-[14px] border border-red-200 bg-white py-3 text-sm font-semibold text-red-600">
                         Excluir esta condição
                       </button>
                     )}
@@ -6549,7 +7070,7 @@ export default function Home() {
                           <div className="flex items-center justify-between">
                             <p className="font-medium text-slate-800">{m.nome} <Ic n="editar" /></p>
                             {continua ? (
-                              <span className="flex items-center gap-1 text-xs font-medium rounded-full px-2 py-0.5 bg-teal-600 text-white">
+                              <span className="flex items-center gap-1 text-xs font-medium rounded-full px-2 py-0.5 bg-[#1E5B4A] text-white">
                                 <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round"><circle cx="12" cy="12" r="10" /></svg>
                                 uso contínuo
                               </span>
@@ -6582,133 +7103,7 @@ export default function Home() {
                   </>
                 ) : (
                   <>
-                    <button onClick={() => setMostrarFormMedicacao(false)} className="text-sm text-teal-700">
-                      ← Voltar
-                    </button>
-                    <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
-                    <input
-                      className={inputClasse}
-                      placeholder="nome do remédio"
-                      value={novoNomeMedicacao}
-                      onChange={(e) => setNovoNomeMedicacao(e.target.value)}
-                    />
-                    <input
-                      className={inputClasse}
-                      placeholder="dosagem (ex: 500mg)"
-                      value={novaDosagem}
-                      onChange={(e) => setNovaDosagem(e.target.value)}
-                    />
-                    <input
-                      className={inputClasse}
-                      placeholder="frequência (ex: 1x ao dia, a cada 8h)"
-                      value={novaFrequencia}
-                      onChange={(e) => setNovaFrequencia(e.target.value)}
-                    />
-                    <input
-                      className={inputClasse}
-                      placeholder="horário (ex: 08:00, 20:00)"
-                      value={novoHorario}
-                      onChange={(e) => setNovoHorario(e.target.value)}
-                    />
-                    <div>
-                      <label className="text-xs text-slate-400 mb-1 block">data de início</label>
-                      <input
-                        className={inputClasse}
-                        type="date"
-                        value={novaDataInicioMed}
-                        onChange={(e) => setNovaDataInicioMed(e.target.value)}
-                      />
-                    </div>
-                    <label className="flex items-center gap-2 text-sm text-slate-600">
-                      <input type="checkbox" checked={usoContinuo} onChange={(e) => setUsoContinuo(e.target.checked)} />
-                      Uso contínuo (sem data de término)
-                    </label>
-                    {!usoContinuo && (
-                      <div>
-                        <label className="text-xs text-slate-400 mb-1 block">data de término (se deixar em branco, usa a data de hoje)</label>
-                        <input
-                          className={inputClasse}
-                          type="date"
-                          value={novaDataFimMed}
-                          onChange={(e) => setNovaDataFimMed(e.target.value)}
-                        />
-                      </div>
-                    )}
-                    <select
-                      className={inputClasse}
-                      value={novaCondicaoRelacionada}
-                      onChange={(e) => {
-                        setNovaCondicaoRelacionada(e.target.value);
-                        setNovaConsultaRelacionadaMed('');
-                      }}
-                    >
-                      <option value="">não relacionado a nenhum evento de saúde específico</option>
-                      {condicoes.map((c) => (
-                        <option key={c.id} value={c.id}>{c.nome}</option>
-                      ))}
-                    </select>
-                    <select
-                      className={inputClasse}
-                      value={novaConsultaRelacionadaMed}
-                      onChange={(e) => setNovaConsultaRelacionadaMed(e.target.value)}
-                    >
-                      <option value="">não veio de nenhuma consulta específica</option>
-                      {consultas
-                        .filter((cs) => !novaCondicaoRelacionada || cs.condicao_relacionada_id === novaCondicaoRelacionada)
-                        .map((cs) => (
-                          <option key={cs.id} value={cs.id}>
-                            {(cs.especialidade?.nome || 'Consulta')} · {new Date(cs.data_hora).toLocaleDateString('pt-BR')}
-                            {cs.profissional_saude?.nome ? ` · ${cs.profissional_saude.nome}` : ''}
-                          </option>
-                        ))}
-                    </select>
-                    {novaCondicaoRelacionada && consultas.filter((cs) => cs.condicao_relacionada_id === novaCondicaoRelacionada).length === 0 && (
-                      <p className="text-xs text-slate-400 -mt-1">Nenhuma consulta ligada a esse evento ainda — pode deixar em branco.</p>
-                    )}
-                    <select
-                      className={inputClasse}
-                      value={novaClasseMedicacao}
-                      onChange={(e) => setNovaClasseMedicacao(e.target.value)}
-                    >
-                      <option value="">classe do remédio (opcional)</option>
-                      {classesMedicamento.map((c) => (
-                        <option key={c.value} value={c.value}>{c.label}</option>
-                      ))}
-                    </select>
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="text-xs text-slate-400">observação (ex: motivo de uso)</label>
-                        <button
-                          type="button"
-                          onClick={() => alternarReconhecimentoVoz('obsMedicacao', setNovaObservacaoMedicacao)}
-                          className={`shrink-0 rounded-full px-2 py-1 text-xs ${gravandoCampo === 'obsMedicacao' ? 'bg-red-100 text-red-700 animate-pulse' : 'bg-slate-100 text-slate-600'}`}
-                        >
-                          <Ic n="mic" /> {gravandoCampo === 'obsMedicacao' ? 'Ouvindo...' : 'Falar'}
-                        </button>
-                      </div>
-                      <textarea
-                        className={inputClasse}
-                        placeholder="observação (ex: motivo de uso)"
-                        rows={2}
-                        value={novaObservacaoMedicacao}
-                        onChange={(e) => setNovaObservacaoMedicacao(e.target.value)}
-                      />
-                    </div>
-                    {erroMedicacao && <p className="text-sm text-red-600">{erroMedicacao}</p>}
-                    <div className="flex gap-2">
-                      <button disabled={carregando} onClick={salvarMedicacao} className={botaoPrimario}>
-                        {carregando ? 'Salvando...' : 'Salvar'}
-                      </button>
-                      <button onClick={() => setMostrarFormMedicacao(false)} className={botaoSecundario}>
-                        Cancelar
-                      </button>
-                    </div>
-                    {medicacaoEditandoId && (
-                      <button disabled={carregando} onClick={excluirMedicacao} className="w-full text-sm text-red-600 pt-1">
-                        Excluir esta medicação
-                      </button>
-                    )}
-                    </div>
+                    {renderFormMedicacao()}
                   </>
                 )}
               </div>
@@ -6798,7 +7193,7 @@ export default function Home() {
                               </select>
                               {formRotina === 'periodico' ? (
                                 <div>
-                                  <label className="text-xs text-slate-500 mb-1 block">Ir a cada</label>
+                                  <label className="mb-1.5 block text-sm font-semibold text-[#26332E]">Ir a cada</label>
                                   <div className="flex flex-wrap gap-2">
                                     {intervalosRotina.map((i) => (
                                       <button key={i.meses} type="button" onClick={() => setRotinaMeses(i.meses)} className={`rounded-full border px-3 py-2 text-sm ${rotinaMeses === i.meses ? 'bg-teal-700 border-teal-700 text-white font-semibold' : 'border-slate-300 text-slate-700'}`}>{i.label}</button>
@@ -6813,7 +7208,7 @@ export default function Home() {
                                 </div>
                               ) : (
                                 <div>
-                                  <label className="text-xs text-slate-500 mb-1 block">Agendar até (vazio = em 30 dias)</label>
+                                  <label className="mb-1.5 block text-sm font-semibold text-[#26332E]">Agendar até (vazio = em 30 dias)</label>
                                   <input type="date" className={inputClasse} value={rotinaData} onChange={(e) => setRotinaData(e.target.value)} />
                                   <label className="text-xs text-slate-500 mt-3 mb-1 block">Avisar na Home</label>
                                   <div className="flex flex-wrap gap-2">
@@ -6938,14 +7333,11 @@ export default function Home() {
                   </>
                 ) : (
                   <>
-                    <button onClick={() => setMostrarFormConsulta(false)} className="text-sm text-teal-700">
-                      ← Voltar
-                    </button>
                     {(() => {
                       const ehFutura = !!novaDataHoraConsulta && new Date(novaDataHoraConsulta) > new Date();
                       const ehPassada = !!novaDataHoraConsulta && !ehFutura;
-                      const cartao = 'space-y-3 rounded-2xl bg-white border border-[#E5E1DA] p-4';
-                      const titulo = 'text-xs font-bold uppercase tracking-wider text-teal-800';
+                      const cartao = secaoClasse;
+                      const titulo = tituloSecao;
                       const retornoAtalhos: { label: string; meses?: number; dias?: number }[] = [
                         { label: 'Em 30 dias', dias: 30 },
                         { label: 'Em 3 meses', meses: 3 },
@@ -6962,7 +7354,7 @@ export default function Home() {
                           <div className={cartao}>
                             <p className={titulo}>Quando e onde</p>
                             <div>
-                              <label className="text-xs text-slate-500 mb-1 block">Data e horário <span className="text-red-600">*</span></label>
+                              <label className="mb-1.5 block text-sm font-semibold text-[#26332E]">Data e horário <span className="text-red-600">*</span></label>
                               <input
                                 className={inputClasse}
                                 type="datetime-local"
@@ -7077,7 +7469,7 @@ export default function Home() {
                                 />
                               </div>
                               <div>
-                                <label className="text-xs text-slate-500 mb-1 block">Retorno (opcional)</label>
+                                <label className="mb-1.5 block text-sm font-semibold text-[#26332E]">Retorno (opcional)</label>
                                 <div className="flex flex-wrap gap-2 mb-2">
                                   <button
                                     type="button"
@@ -7125,7 +7517,7 @@ export default function Home() {
                                         <input type="date" className={inputClasse} value={agendarRetornoData} onChange={(e) => setAgendarRetornoData(e.target.value)} />
                                       )}
                                       <div>
-                                        <label className="text-xs text-slate-500 mb-1 block">Avisar na Home</label>
+                                        <label className="mb-1.5 block text-sm font-semibold text-[#26332E]">Avisar na Home</label>
                                         <select className={inputClasse} value={agendarAntec} onChange={(e) => setAgendarAntec(Number(e.target.value))}>
                                           {opcoesAntecedencia.map((o) => <option key={o.dias} value={o.dias}>{o.label}</option>)}
                                         </select>
@@ -7216,7 +7608,7 @@ export default function Home() {
 
                           {ehPassada && (() => {
                             const algoAberto = medsConsulta.length > 0 || examesConsulta.length > 0 || vacsConsulta.length > 0 || terapiasConsulta.length > 0 || exameNovoConsulta !== '';
-                            const chip = (ativo: boolean) => `rounded-full border px-3 py-2 text-sm ${ativo ? 'bg-teal-700 border-teal-700 text-white font-semibold' : 'border-slate-300 text-slate-700'}`;
+                            const chip = chipDs;
                             const botaoAdd = 'flex w-full items-center gap-3 rounded-2xl border border-dashed border-teal-700/40 bg-white px-4 py-3 text-left text-base font-semibold text-teal-800';
                             const atualizaMed = (i: number, patch: Partial<MedRascunho>) =>
                               setMedsConsulta((lista) => lista.map((m, idx) => (idx === i ? { ...m, ...patch } : m)));
@@ -7258,7 +7650,7 @@ export default function Home() {
                                           <input className={inputClasse} placeholder="Remédio *" value={m.nome} onChange={(e) => atualizaMed(i, { nome: e.target.value })} />
                                           <input className={inputClasse} placeholder="Dose (ex: 5 ml, 1 comprimido)" value={m.dose} onChange={(e) => atualizaMed(i, { dose: e.target.value })} />
                                           <div>
-                                            <label className="text-xs text-slate-500 mb-1 block">Frequência</label>
+                                            <label className="mb-1.5 block text-sm font-semibold text-[#26332E]">Frequência</label>
                                             <div className="flex flex-wrap gap-2">
                                               {frequenciasMedicacao.map((fo) => (
                                                 <button key={fo.id} type="button" onClick={() => atualizaMed(i, { freq: fo.id })} className={chip(m.freq === fo.id)}>{fo.label}</button>
@@ -7273,11 +7665,11 @@ export default function Home() {
                                           )}
                                           {horarios.length > 0 && <p className="text-xs text-teal-800">Horários: {horarios.join(' · ')}</p>}
                                           <div>
-                                            <label className="text-xs text-slate-500 mb-1 block">Início</label>
+                                            <label className="mb-1.5 block text-sm font-semibold text-[#26332E]">Início</label>
                                             <input type="date" className={inputClasse} value={m.inicio} onChange={(e) => atualizaMed(i, { inicio: e.target.value })} />
                                           </div>
                                           <div>
-                                            <label className="text-xs text-slate-500 mb-1 block">Duração</label>
+                                            <label className="mb-1.5 block text-sm font-semibold text-[#26332E]">Duração</label>
                                             <div className="flex flex-wrap gap-2">
                                               {[['3', '3 dias'], ['5', '5 dias'], ['7', '7 dias'], ['10', '10 dias'], ['14', '14 dias'], ['continuo', 'Uso contínuo'], ['dias', 'Outro (nº de dias)'], ['data', 'Escolher data de término']].map(([id, label]) => (
                                                 <button key={id} type="button" onClick={() => atualizaMed(i, { duracao: id })} className={chip(m.duracao === id)}>{label}</button>
@@ -7329,7 +7721,7 @@ export default function Home() {
                                       <button type="button" onClick={adicionarExame} className="shrink-0 rounded-xl border border-teal-700 px-4 text-sm font-semibold text-teal-800">Adicionar</button>
                                     </div>
                                     <div>
-                                      <label className="text-xs text-slate-500 mb-1 block">Fazer até</label>
+                                      <label className="mb-1.5 block text-sm font-semibold text-[#26332E]">Fazer até</label>
                                       <div className="flex flex-wrap gap-2">
                                         {[['retorno', 'Antes do retorno'], ['7d', 'Em 7 dias'], ['30d', 'Em 30 dias'], ['data', 'Escolher data']].map(([id, label]) => (
                                           <button key={id} type="button" onClick={() => setExPrazoConsulta(id)} className={chip(exPrazoConsulta === id)}>{label}</button>
@@ -7376,7 +7768,7 @@ export default function Home() {
                                           <input className={inputClasse} placeholder="Qual vacina?" value={v.outroNome} onChange={(e) => atualizaVac(i, { outroNome: e.target.value })} />
                                         )}
                                         <div>
-                                          <label className="text-xs text-slate-500 mb-1 block">Quando tomar</label>
+                                          <label className="mb-1.5 block text-sm font-semibold text-[#26332E]">Quando tomar</label>
                                           <div className="flex flex-wrap gap-2">
                                             {[['agora', 'Agora'], ['mes', 'No próximo mês'], ['3m', 'Em 3 meses'], ['data', 'Escolher data']].map(([id, label]) => (
                                               <button key={id} type="button" onClick={() => atualizaVac(i, { quando: id })} className={chip(v.quando === id)}>{label}</button>
@@ -7422,7 +7814,7 @@ export default function Home() {
                                         )}
                                         <input className={inputClasse} placeholder="Frequência (ex: 2x por semana)" value={t.frequencia} onChange={(e) => atualizaTer(i, { frequencia: e.target.value })} />
                                         <div>
-                                          <label className="text-xs text-slate-500 mb-1 block">Início</label>
+                                          <label className="mb-1.5 block text-sm font-semibold text-[#26332E]">Início</label>
                                           <input type="date" className={inputClasse} value={t.inicio} onChange={(e) => atualizaTer(i, { inicio: e.target.value })} />
                                         </div>
                                         <input className={inputClasse} placeholder="Profissional/clínica (opcional)" value={t.profissional} onChange={(e) => atualizaTer(i, { profissional: e.target.value })} />
@@ -7558,16 +7950,9 @@ export default function Home() {
                           )}
                           <p className="text-xs text-slate-500"><span className="text-red-600">*</span> Campos obrigatórios</p>
                           {erroConsulta && <p className="text-sm text-red-600">{erroConsulta}</p>}
-                          <div className="flex gap-2">
-                            <button disabled={carregando} onClick={salvarConsulta} className={botaoPrimario}>
-                              {carregando ? 'Salvando...' : 'Salvar consulta'}
-                            </button>
-                            <button onClick={() => setMostrarFormConsulta(false)} className={botaoSecundario}>
-                              Cancelar
-                            </button>
-                          </div>
+                          {renderBarraAcoes('Salvar consulta', salvarConsulta, () => setMostrarFormConsulta(false), carregando)}
                           {consultaEditandoId && (
-                            <button disabled={carregando} onClick={excluirConsulta} className="w-full text-sm text-red-600 pt-1">
+                            <button disabled={carregando} onClick={excluirConsulta} className="w-full rounded-[14px] border border-red-200 bg-white py-3 text-sm font-semibold text-red-600">
                               Excluir esta consulta
                             </button>
                           )}
@@ -7619,10 +8004,7 @@ export default function Home() {
 
                 {mostrarFormMedico && (
                   <>
-                    <button onClick={() => setMostrarFormMedico(false)} className="text-sm text-teal-700">
-                      ← Voltar
-                    </button>
-                    <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
+                    <div className="space-y-4 rounded-2xl bg-white border border-[#E1E6E3] p-[18px]">
                     <input
                       className={inputClasse}
                       placeholder="nome (ex: Dr. João Silva)"
@@ -7667,16 +8049,9 @@ export default function Home() {
                       onChange={(e) => setNovaObsMedico(e.target.value)}
                     />
                     {erroMedico && <p className="text-sm text-red-600">{erroMedico}</p>}
-                    <div className="flex gap-2">
-                      <button disabled={carregando} onClick={salvarMedico} className={botaoPrimario}>
-                        {carregando ? 'Salvando...' : 'Salvar'}
-                      </button>
-                      <button onClick={() => setMostrarFormMedico(false)} className={botaoSecundario}>
-                        Cancelar
-                      </button>
-                    </div>
+                    {renderBarraAcoes('Salvar', salvarMedico, () => setMostrarFormMedico(false), carregando)}
                     {medicoEditandoId && (
-                      <button disabled={carregando} onClick={excluirMedico} className="w-full text-sm text-red-600 pt-1">
+                      <button disabled={carregando} onClick={excluirMedico} className="w-full rounded-[14px] border border-red-200 bg-white py-3 text-sm font-semibold text-red-600">
                         Excluir este médico
                       </button>
                     )}
@@ -7762,10 +8137,7 @@ export default function Home() {
 
                 {mostrarFormExame && (
                   <>
-                    <button onClick={() => setMostrarFormExame(false)} className="text-sm text-teal-700">
-                      ← Voltar
-                    </button>
-                    <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
+                    <div className="space-y-4 rounded-2xl bg-white border border-[#E1E6E3] p-[18px]">
                     {!exameEditandoId && (
                       <div className="grid grid-cols-2 gap-2">
                         {([['realizado', 'Já realizei'], ['solicitado', 'Vou fazer (agendar)']] as const).map(([val, rot]) => (
@@ -7780,7 +8152,7 @@ export default function Home() {
                       onChange={(e) => setNovoNomeExame(e.target.value)}
                     />
                     <div>
-                      <label className="text-xs text-slate-400 mb-1 block">{exameStatusOriginal === 'solicitado' && !exameMarcarRealizado ? 'fazer até' : 'data de realização'}</label>
+                      <label className="mb-1.5 block text-sm font-semibold text-[#26332E]">{exameStatusOriginal === 'solicitado' && !exameMarcarRealizado ? 'fazer até' : 'data de realização'}</label>
                       <input
                         className={inputClasse}
                         type="date"
@@ -7827,16 +8199,9 @@ export default function Home() {
                     </div>
                     {renderAnexosSaude('Resultado do exame em PDF ou foto.')}
                     {erroExame && <p className="text-sm text-red-600">{erroExame}</p>}
-                    <div className="flex gap-2">
-                      <button disabled={carregando} onClick={salvarExame} className={botaoPrimario}>
-                        {carregando ? 'Salvando...' : 'Salvar'}
-                      </button>
-                      <button onClick={() => setMostrarFormExame(false)} className={botaoSecundario}>
-                        Cancelar
-                      </button>
-                    </div>
+                    {renderBarraAcoes('Salvar', salvarExame, () => setMostrarFormExame(false), carregando)}
                     {exameEditandoId && (
-                      <button disabled={carregando} onClick={excluirExame} className="w-full text-sm text-red-600 pt-1">
+                      <button disabled={carregando} onClick={excluirExame} className="w-full rounded-[14px] border border-red-200 bg-white py-3 text-sm font-semibold text-red-600">
                         Excluir este exame
                       </button>
                     )}
@@ -7919,10 +8284,7 @@ export default function Home() {
 
                 {mostrarFormVacina && (
                   <>
-                    <button onClick={() => setMostrarFormVacina(false)} className="text-sm text-teal-700">
-                      ← Voltar
-                    </button>
-                    <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
+                    <div className="space-y-4 rounded-2xl bg-white border border-[#E1E6E3] p-[18px]">
                     {!vacinaEditandoId && (
                       <div className="grid grid-cols-2 gap-2">
                         {([['realizado', 'Já tomei'], ['indicada', 'Vou tomar (agendar)']] as const).map(([val, rot]) => (
@@ -7958,7 +8320,7 @@ export default function Home() {
                       onChange={(e) => setNovaDoseVacina(e.target.value)}
                     />
                     <div>
-                      <label className="text-xs text-slate-400 mb-1 block">{vacinaStatusOriginal === 'indicada' && !vacinaMarcarRealizada ? 'data prevista' : 'data de aplicação'}</label>
+                      <label className="mb-1.5 block text-sm font-semibold text-[#26332E]">{vacinaStatusOriginal === 'indicada' && !vacinaMarcarRealizada ? 'data prevista' : 'data de aplicação'}</label>
                       <input
                         className={inputClasse}
                         type="date"
@@ -7967,7 +8329,7 @@ export default function Home() {
                       />
                     </div>
                     <div>
-                      <label className="text-xs text-slate-400 mb-1 block">próxima dose (opcional)</label>
+                      <label className="mb-1.5 block text-sm font-semibold text-[#26332E]">próxima dose (opcional)</label>
                       <input
                         className={inputClasse}
                         type="date"
@@ -8008,16 +8370,9 @@ export default function Home() {
                     </div>
                     {renderAnexosSaude('Foto ou PDF da carteirinha de vacinação (o app ainda não lê o conteúdo, só guarda).')}
                     {erroVacina && <p className="text-sm text-red-600">{erroVacina}</p>}
-                    <div className="flex gap-2">
-                      <button disabled={carregando} onClick={salvarVacina} className={botaoPrimario}>
-                        {carregando ? 'Salvando...' : 'Salvar'}
-                      </button>
-                      <button onClick={() => setMostrarFormVacina(false)} className={botaoSecundario}>
-                        Cancelar
-                      </button>
-                    </div>
+                    {renderBarraAcoes('Salvar', salvarVacina, () => setMostrarFormVacina(false), carregando)}
                     {vacinaEditandoId && (
-                      <button disabled={carregando} onClick={excluirVacina} className="w-full text-sm text-red-600 pt-1">
+                      <button disabled={carregando} onClick={excluirVacina} className="w-full rounded-[14px] border border-red-200 bg-white py-3 text-sm font-semibold text-red-600">
                         Excluir esta vacina
                       </button>
                     )}
@@ -8044,7 +8399,7 @@ export default function Home() {
                   <div className="flex-1 space-y-1">
                     <p className="text-xs text-slate-400">Foto do perfil</p>
                     <div className="flex flex-wrap gap-2">
-                      <label className="cursor-pointer rounded-full bg-teal-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-teal-700">
+                      <label className="cursor-pointer rounded-full bg-[#1E5B4A] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#184a3c]">
                         {enviandoFoto ? 'Enviando...' : membroSelecionado.foto_url ? 'Trocar foto' : 'Adicionar foto'}
                         <input
                           type="file"
@@ -8335,7 +8690,7 @@ export default function Home() {
                     </button>
                   </>
                 ) : (
-                  <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
+                  <div className="space-y-4 rounded-2xl bg-white border border-[#E1E6E3] p-[18px]">
                     <p className="text-xs font-medium text-slate-500">Pré-natal</p>
                     <select
                       className={inputClasse}
@@ -8449,14 +8804,7 @@ export default function Home() {
                       />
                     </div>
                     {erroNascimento && <p className="text-sm text-red-600">{erroNascimento}</p>}
-                    <div className="flex gap-2">
-                      <button disabled={carregando} onClick={salvarNascimento} className={botaoPrimario}>
-                        {carregando ? 'Salvando...' : 'Salvar'}
-                      </button>
-                      <button onClick={() => setMostrarFormNascimento(false)} className={botaoSecundario}>
-                        Cancelar
-                      </button>
-                    </div>
+                    {renderBarraAcoes('Salvar', salvarNascimento, () => setMostrarFormNascimento(false), carregando)}
                   </div>
                 )}
               </div>
@@ -8485,7 +8833,7 @@ export default function Home() {
                     <button onClick={abrirEdicaoDesenvolvimento} className={botaoPrimario}>{desenvolvimento ? 'Editar' : '+ Adicionar'}</button>
                   </>
                 ) : (
-                  <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
+                  <div className="space-y-4 rounded-2xl bg-white border border-[#E1E6E3] p-[18px]">
                     <input className={inputClasse} placeholder="sustentou a cabeça (ex: 3 meses)" value={formDesenvolvimento.sustentou_cabeca} onChange={(e) => setFormDesenvolvimento((f) => ({ ...f, sustentou_cabeca: e.target.value }))} />
                     <input className={inputClasse} placeholder="sentou (ex: 6 meses)" value={formDesenvolvimento.sentou} onChange={(e) => setFormDesenvolvimento((f) => ({ ...f, sentou: e.target.value }))} />
                     <input className={inputClasse} placeholder="engatinhou (ex: 8 meses)" value={formDesenvolvimento.engatinhou} onChange={(e) => setFormDesenvolvimento((f) => ({ ...f, engatinhou: e.target.value }))} />
@@ -8498,10 +8846,7 @@ export default function Home() {
                     </select>
                     <textarea className={inputClasse} rows={2} placeholder="observações (opcional)" value={formDesenvolvimento.observacao} onChange={(e) => setFormDesenvolvimento((f) => ({ ...f, observacao: e.target.value }))} />
                     {erroDesenvolvimento && <p className="text-sm text-red-600">{erroDesenvolvimento}</p>}
-                    <div className="flex gap-2">
-                      <button disabled={carregando} onClick={salvarDesenvolvimento} className={botaoPrimario}>{carregando ? 'Salvando...' : 'Salvar'}</button>
-                      <button onClick={() => setMostrarFormDesenvolvimento(false)} className={botaoSecundario}>Cancelar</button>
-                    </div>
+                    {renderBarraAcoes('Salvar', salvarDesenvolvimento, () => setMostrarFormDesenvolvimento(false), carregando)}
                   </div>
                 )}
               </div>
@@ -8526,7 +8871,7 @@ export default function Home() {
                     <button onClick={abrirEdicaoAlimentacaoInfantil} className={botaoPrimario}>{alimentacaoInfantil ? 'Editar' : '+ Adicionar'}</button>
                   </>
                 ) : (
-                  <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
+                  <div className="space-y-4 rounded-2xl bg-white border border-[#E1E6E3] p-[18px]">
                     <select className={inputClasse} value={formAlimentacaoInfantil.aleitamento_materno} onChange={(e) => setFormAlimentacaoInfantil((f) => ({ ...f, aleitamento_materno: e.target.value as '' | 'sim' | 'nao' }))}>
                       <option value="">houve aleitamento materno?</option>
                       <option value="sim">Sim</option>
@@ -8537,10 +8882,7 @@ export default function Home() {
                     <textarea className={inputClasse} rows={2} placeholder="como foi a introdução alimentar (opcional)" value={formAlimentacaoInfantil.introducao_alimentar} onChange={(e) => setFormAlimentacaoInfantil((f) => ({ ...f, introducao_alimentar: e.target.value }))} />
                     <textarea className={inputClasse} rows={2} placeholder="aceitação alimentar (opcional)" value={formAlimentacaoInfantil.aceitacao_alimentar} onChange={(e) => setFormAlimentacaoInfantil((f) => ({ ...f, aceitacao_alimentar: e.target.value }))} />
                     {erroAlimentacaoInfantil && <p className="text-sm text-red-600">{erroAlimentacaoInfantil}</p>}
-                    <div className="flex gap-2">
-                      <button disabled={carregando} onClick={salvarAlimentacaoInfantil} className={botaoPrimario}>{carregando ? 'Salvando...' : 'Salvar'}</button>
-                      <button onClick={() => setMostrarFormAlimentacaoInfantil(false)} className={botaoSecundario}>Cancelar</button>
-                    </div>
+                    {renderBarraAcoes('Salvar', salvarAlimentacaoInfantil, () => setMostrarFormAlimentacaoInfantil(false), carregando)}
                   </div>
                 )}
               </div>
@@ -8565,7 +8907,7 @@ export default function Home() {
                     <button onClick={abrirEdicaoPuberdade} className={botaoPrimario}>{puberdadeSexualidade ? 'Editar' : '+ Adicionar'}</button>
                   </>
                 ) : (
-                  <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
+                  <div className="space-y-4 rounded-2xl bg-white border border-[#E1E6E3] p-[18px]">
                     <input className={inputClasse} placeholder="menarca/espermarca (ex: 12 anos)" value={formPuberdade.menarca_espermarca} onChange={(e) => setFormPuberdade((f) => ({ ...f, menarca_espermarca: e.target.value }))} />
                     <input className={inputClasse} placeholder="ciclo menstrual (opcional)" value={formPuberdade.ciclo_menstrual} onChange={(e) => setFormPuberdade((f) => ({ ...f, ciclo_menstrual: e.target.value }))} />
                     <select className={inputClasse} value={formPuberdade.vida_sexual_ativa} onChange={(e) => setFormPuberdade((f) => ({ ...f, vida_sexual_ativa: e.target.value as '' | 'sim' | 'nao' }))}>
@@ -8576,10 +8918,7 @@ export default function Home() {
                     <input className={inputClasse} placeholder="métodos contraceptivos (opcional)" value={formPuberdade.metodos_contraceptivos} onChange={(e) => setFormPuberdade((f) => ({ ...f, metodos_contraceptivos: e.target.value }))} />
                     <textarea className={inputClasse} rows={2} placeholder="histórico de ISTs (opcional)" value={formPuberdade.historico_ist} onChange={(e) => setFormPuberdade((f) => ({ ...f, historico_ist: e.target.value }))} />
                     {erroPuberdade && <p className="text-sm text-red-600">{erroPuberdade}</p>}
-                    <div className="flex gap-2">
-                      <button disabled={carregando} onClick={salvarPuberdade} className={botaoPrimario}>{carregando ? 'Salvando...' : 'Salvar'}</button>
-                      <button onClick={() => setMostrarFormPuberdade(false)} className={botaoSecundario}>Cancelar</button>
-                    </div>
+                    {renderBarraAcoes('Salvar', salvarPuberdade, () => setMostrarFormPuberdade(false), carregando)}
                   </div>
                 )}
               </div>
@@ -8612,7 +8951,7 @@ export default function Home() {
                     <button onClick={abrirEdicaoSaudeMental} className={botaoPrimario}>{saudeMental ? 'Editar' : '+ Adicionar'}</button>
                   </>
                 ) : (
-                  <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
+                  <div className="space-y-4 rounded-2xl bg-white border border-[#E1E6E3] p-[18px]">
                     <input className={inputClasse} placeholder="como está o humor (opcional)" value={formSaudeMental.humor} onChange={(e) => setFormSaudeMental((f) => ({ ...f, humor: e.target.value }))} />
                     <select className={inputClasse} value={formSaudeMental.ansiedade} onChange={(e) => setFormSaudeMental((f) => ({ ...f, ansiedade: e.target.value as '' | 'sim' | 'nao' }))}>
                       <option value="">tem ansiedade?</option>
@@ -8636,10 +8975,7 @@ export default function Home() {
                     </select>
                     <textarea className={inputClasse} rows={2} placeholder="observações (opcional)" value={formSaudeMental.observacao} onChange={(e) => setFormSaudeMental((f) => ({ ...f, observacao: e.target.value }))} />
                     {erroSaudeMental && <p className="text-sm text-red-600">{erroSaudeMental}</p>}
-                    <div className="flex gap-2">
-                      <button disabled={carregando} onClick={salvarSaudeMental} className={botaoPrimario}>{carregando ? 'Salvando...' : 'Salvar'}</button>
-                      <button onClick={() => setMostrarFormSaudeMental(false)} className={botaoSecundario}>Cancelar</button>
-                    </div>
+                    {renderBarraAcoes('Salvar', salvarSaudeMental, () => setMostrarFormSaudeMental(false), carregando)}
                   </div>
                 )}
               </div>
@@ -8663,16 +8999,13 @@ export default function Home() {
                     <button onClick={abrirEdicaoHabitosVida} className={botaoPrimario}>{habitosVida ? 'Editar' : '+ Adicionar'}</button>
                   </>
                 ) : (
-                  <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
+                  <div className="space-y-4 rounded-2xl bg-white border border-[#E1E6E3] p-[18px]">
                     <textarea className={inputClasse} rows={2} placeholder="alimentação do dia a dia (opcional)" value={formHabitosVida.alimentacao} onChange={(e) => setFormHabitosVida((f) => ({ ...f, alimentacao: e.target.value }))} />
                     <textarea className={inputClasse} rows={2} placeholder="atividade física (opcional)" value={formHabitosVida.atividade_fisica} onChange={(e) => setFormHabitosVida((f) => ({ ...f, atividade_fisica: e.target.value }))} />
                     <textarea className={inputClasse} rows={2} placeholder="sono (opcional)" value={formHabitosVida.sono} onChange={(e) => setFormHabitosVida((f) => ({ ...f, sono: e.target.value }))} />
                     <textarea className={inputClasse} rows={2} placeholder="uso de telas (opcional)" value={formHabitosVida.uso_telas} onChange={(e) => setFormHabitosVida((f) => ({ ...f, uso_telas: e.target.value }))} />
                     {erroHabitosVida && <p className="text-sm text-red-600">{erroHabitosVida}</p>}
-                    <div className="flex gap-2">
-                      <button disabled={carregando} onClick={salvarHabitosVida} className={botaoPrimario}>{carregando ? 'Salvando...' : 'Salvar'}</button>
-                      <button onClick={() => setMostrarFormHabitosVida(false)} className={botaoSecundario}>Cancelar</button>
-                    </div>
+                    {renderBarraAcoes('Salvar', salvarHabitosVida, () => setMostrarFormHabitosVida(false), carregando)}
                   </div>
                 )}
               </div>
@@ -8696,7 +9029,7 @@ export default function Home() {
                   </div>
                 )}
                 {!mostrarFormCrescimento && crescimento.length >= 2 && (
-                  <div className="rounded-xl border border-[#E5E1DA] p-3">
+                  <div className="rounded-xl bg-white border border-[#E5E1DA] p-3">
                     <p className="text-xs font-medium text-slate-500 mb-2">Peso (kg) ao longo do tempo</p>
                     <ResponsiveContainer width="100%" height={180}>
                       <LineChart data={crescimento.map((m) => ({
@@ -8773,12 +9106,9 @@ export default function Home() {
 
                 {mostrarFormCrescimento && (
                   <>
-                    <button onClick={() => setMostrarFormCrescimento(false)} className="text-sm text-teal-700">
-                      ← Voltar
-                    </button>
-                    <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
+                    <div className="space-y-4 rounded-2xl bg-white border border-[#E1E6E3] p-[18px]">
                     <div>
-                      <label className="text-xs text-slate-400 mb-1 block">data da medição</label>
+                      <label className="mb-1.5 block text-sm font-semibold text-[#26332E]">data da medição</label>
                       <input
                         className={inputClasse}
                         type="date"
@@ -8805,21 +9135,103 @@ export default function Home() {
                       ))}
                     </select>
                     {erroCrescimento && <p className="text-sm text-red-600">{erroCrescimento}</p>}
-                    <div className="flex gap-2">
-                      <button disabled={carregando} onClick={salvarMedicaoCrescimento} className={botaoPrimario}>
-                        {carregando ? 'Salvando...' : 'Salvar'}
-                      </button>
-                      <button onClick={() => setMostrarFormCrescimento(false)} className={botaoSecundario}>
-                        Cancelar
-                      </button>
-                    </div>
+                    {renderBarraAcoes('Salvar', salvarMedicaoCrescimento, () => setMostrarFormCrescimento(false), carregando)}
                     {crescimentoEditandoId && (
-                      <button disabled={carregando} onClick={excluirMedicaoCrescimento} className="w-full text-sm text-red-600 pt-1">
+                      <button disabled={carregando} onClick={excluirMedicaoCrescimento} className="w-full rounded-[14px] border border-red-200 bg-white py-3 text-sm font-semibold text-red-600">
                         Excluir esta medição
                       </button>
                     )}
                     </div>
                   </>
+                )}
+              </div>
+            )}
+
+            {telaDetalhe === 'parentes' && (
+              <div className="space-y-3">
+                <div className="rounded-xl bg-teal-50 border border-teal-100 p-3">
+                  <p className="text-xs text-teal-800">
+                    Registre só as <strong>doenças</strong> de parentes de sangue que já faleceram (pai, mãe, avós, irmãos), sem precisar criar um perfil completo. Eles não aparecem na lista de membros, mas o histórico entra nos <strong>Cuidados Preventivos</strong> da família. Pais e parentes que estão vivos continuam como membros normais.
+                  </p>
+                </div>
+                {parenteErro && <p className="rounded-lg bg-red-50 p-2 text-sm text-red-700">{parenteErro}</p>}
+
+                {parentes.length === 0 && !mostrarFormParente && (
+                  <p className="text-sm text-slate-400 text-center py-2">Nenhum parente registrado ainda.</p>
+                )}
+
+                {parentes.map((pt) => (
+                  <div key={pt.id} className="rounded-xl border border-[#E5E1DA] bg-white p-3 space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="font-medium text-slate-800">{pt.nome}</p>
+                        <p className="text-xs text-slate-400">{rotuloParente[pt.parentesco || ''] || 'Parente'} · falecido(a)</p>
+                      </div>
+                      {parenteRemovendo === pt.id ? (
+                        <button onClick={() => removerParente(pt.id)} className="shrink-0 text-xs font-semibold text-red-600">confirmar remoção</button>
+                      ) : (
+                        <button onClick={() => setParenteRemovendo(pt.id)} className="shrink-0 text-xs text-slate-400">remover</button>
+                      )}
+                    </div>
+                    {pt.condicao.length === 0 && <p className="text-xs text-slate-400">Nenhuma doença registrada.</p>}
+                    {pt.condicao.map((c) => (
+                      <div key={c.id} className="flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2">
+                        <p className="text-sm text-slate-700">{c.nome}{c.observacao ? <span className="text-slate-400"> · {c.observacao}</span> : null}</p>
+                        <button onClick={() => removerDoencaParente(c.id)} aria-label="Remover doença" className="shrink-0 text-xs text-red-600">✕</button>
+                      </div>
+                    ))}
+                    {parenteDoencaPara === pt.id ? (
+                      <div className="space-y-2 rounded-lg bg-slate-50 p-3">
+                        <select className={inputClasse} value={parenteDoenca} onChange={(e) => setParenteDoenca(e.target.value)}>
+                          <option value="">qual doença?</option>
+                          {categoriasDoencas.map((cat) => (
+                            <optgroup key={cat} label={cat}>
+                              {doencasComuns.filter((d) => d.categoria === cat).map((d) => (
+                                <option key={d.nome} value={d.nome}>{d.nome}</option>
+                              ))}
+                            </optgroup>
+                          ))}
+                        </select>
+                        {parenteDoenca === 'Outra doença (especificar)' && (
+                          <input className={inputClasse} placeholder="qual doença?" value={parenteDoencaOutra} onChange={(e) => setParenteDoencaOutra(e.target.value)} />
+                        )}
+                        <input className={inputClasse} placeholder="observação (ex: aos 55 anos, causa do falecimento) - opcional" value={parenteDoencaObs} onChange={(e) => setParenteDoencaObs(e.target.value)} />
+                        <div className="flex gap-2">
+                          <button disabled={carregando} onClick={adicionarDoencaParente} className={botaoPrimario}>Adicionar</button>
+                          <button onClick={() => { setParenteDoencaPara(null); setParenteDoenca(''); setParenteDoencaOutra(''); setParenteDoencaObs(''); }} className={botaoSecundario}>Fechar</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button onClick={() => { setParenteDoencaPara(pt.id); setParenteErro(''); }} className="text-sm font-semibold text-teal-700">+ adicionar doença</button>
+                    )}
+                  </div>
+                ))}
+
+                {!mostrarFormParente ? (
+                  <button onClick={() => { reiniciarFormParente(); setMostrarFormParente(true); }} className={botaoSecundario}>+ Adicionar parente falecido</button>
+                ) : (
+                  <div className="space-y-4 rounded-2xl bg-white border border-[#E1E6E3] p-[18px]">
+                    <select className={inputClasse} value={parenteTipo} onChange={(e) => setParenteTipo(e.target.value)}>
+                      <option value="">quem era?</option>
+                      {Object.entries(rotuloParente).map(([val, rot]) => <option key={val} value={val}>{rot}</option>)}
+                    </select>
+                    {parenteTipo && parenteTipo !== 'pai' && parenteTipo !== 'mae' && (
+                      <select className={inputClasse} value={parenteSexo} onChange={(e) => setParenteSexo(e.target.value)}>
+                        <option value="">sexo biológico</option>
+                        <option value="feminino">Feminino</option>
+                        <option value="masculino">Masculino</option>
+                      </select>
+                    )}
+                    <input className={inputClasse} placeholder="nome (opcional, ex: Avó Maria)" value={parenteNome} onChange={(e) => setParenteNome(e.target.value)} />
+                    <div className="grid grid-cols-2 gap-2">
+                      <input className={inputClasse} inputMode="numeric" maxLength={4} placeholder="ano de nascimento (opcional)" value={parenteAnoNasc} onChange={(e) => setParenteAnoNasc(e.target.value.replace(/\D/g, ''))} />
+                      <input className={inputClasse} inputMode="numeric" maxLength={4} placeholder="ano do falecimento (opcional)" value={parenteAnoFal} onChange={(e) => setParenteAnoFal(e.target.value.replace(/\D/g, ''))} />
+                    </div>
+                    <div className="flex gap-2">
+                      <button disabled={carregando} onClick={salvarParente} className={botaoPrimario}>{carregando ? 'Salvando...' : 'Salvar e adicionar doenças'}</button>
+                      <button onClick={() => { setMostrarFormParente(false); reiniciarFormParente(); }} className={botaoSecundario}>Cancelar</button>
+                    </div>
+                  </div>
                 )}
               </div>
             )}
@@ -8864,7 +9276,7 @@ export default function Home() {
                 {membroSelecionado.parentesco && riscos != null && riscos
                   .filter((r) => !filtroEspecialidadeRisco || r.categoria === filtroEspecialidadeRisco)
                   .map((r) => (
-                  <div key={r.id} className="rounded-xl border border-[#E5E1DA] p-3">
+                  <div key={r.id} className="rounded-xl bg-white border border-[#E5E1DA] p-3">
                     <div className="flex items-start justify-between gap-2">
                       <div>
                         <span className="inline-block mb-1 text-xs bg-slate-100 text-slate-600 rounded-full px-2 py-0.5">
@@ -8892,7 +9304,7 @@ export default function Home() {
                       {historicoGeral
                         .filter((nome) => !filtroEspecialidadeRisco || obterCategoriaDoenca(nome) === filtroEspecialidadeRisco)
                         .map((nome) => (
-                        <div key={nome} className="rounded-xl border border-[#E5E1DA] p-3">
+                        <div key={nome} className="rounded-xl bg-white border border-[#E5E1DA] p-3">
                           <span className="inline-block mb-1 text-xs bg-slate-100 text-slate-600 rounded-full px-2 py-0.5">
                             {obterCategoriaDoenca(nome)}
                           </span>
@@ -9073,10 +9485,7 @@ export default function Home() {
 
                 {mostrarFormTerapia && (
                   <>
-                    <button onClick={() => setMostrarFormTerapia(false)} className="text-sm text-teal-700">
-                      ← Voltar
-                    </button>
-                    <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
+                    <div className="space-y-4 rounded-2xl bg-white border border-[#E1E6E3] p-[18px]">
                       <select className={inputClasse} value={formTerapia.tipo} onChange={(e) => setFormTerapia({ ...formTerapia, tipo: e.target.value, outroTipo: '' })}>
                         <option value="">tipo de terapia</option>
                         {tiposTerapia.map((tt) => (
@@ -9088,11 +9497,11 @@ export default function Home() {
                       )}
                       <input className={inputClasse} placeholder="frequência (ex: 2x por semana)" value={formTerapia.frequencia} onChange={(e) => setFormTerapia({ ...formTerapia, frequencia: e.target.value })} />
                       <div>
-                        <label className="text-xs text-slate-400 mb-1 block">data de início</label>
+                        <label className="mb-1.5 block text-sm font-semibold text-[#26332E]">data de início</label>
                         <input className={inputClasse} type="date" value={formTerapia.inicio} onChange={(e) => setFormTerapia({ ...formTerapia, inicio: e.target.value })} />
                       </div>
                       <div>
-                        <label className="text-xs text-slate-400 mb-1 block">data de término (deixe em branco se ainda estiver em andamento)</label>
+                        <label className="mb-1.5 block text-sm font-semibold text-[#26332E]">data de término (deixe em branco se ainda estiver em andamento)</label>
                         <input className={inputClasse} type="date" value={formTerapia.fim} onChange={(e) => setFormTerapia({ ...formTerapia, fim: e.target.value })} />
                       </div>
                       <input className={inputClasse} placeholder="profissional (opcional)" value={formTerapia.profissional} onChange={(e) => setFormTerapia({ ...formTerapia, profissional: e.target.value })} />
@@ -9156,16 +9565,9 @@ export default function Home() {
                         </button>
                       </div>
                       {erroTerapia && <p className="text-sm text-red-600">{erroTerapia}</p>}
-                      <div className="flex gap-2">
-                        <button disabled={carregando} onClick={salvarTerapia} className={botaoPrimario}>
-                          {carregando ? 'Salvando...' : 'Salvar'}
-                        </button>
-                        <button onClick={() => setMostrarFormTerapia(false)} className={botaoSecundario}>
-                          Cancelar
-                        </button>
-                      </div>
+                      {renderBarraAcoes('Salvar', salvarTerapia, () => setMostrarFormTerapia(false), carregando)}
                       {terapiaEditandoId && (
-                        <button disabled={carregando} onClick={excluirTerapia} className="w-full text-sm text-red-600 pt-1">
+                        <button disabled={carregando} onClick={excluirTerapia} className="w-full rounded-[14px] border border-red-200 bg-white py-3 text-sm font-semibold text-red-600">
                           Excluir esta terapia
                         </button>
                       )}
@@ -9225,10 +9627,7 @@ export default function Home() {
 
                 {mostrarFormAtividadeFisica && (
                   <>
-                    <button onClick={() => setMostrarFormAtividadeFisica(false)} className="text-sm text-teal-700">
-                      ← Voltar
-                    </button>
-                    <div className="space-y-3 rounded-xl border border-[#E5E1DA] p-4">
+                    <div className="space-y-4 rounded-2xl bg-white border border-[#E1E6E3] p-[18px]">
                       <select
                         className={inputClasse}
                         value={novoNomeAtividade}
@@ -9256,7 +9655,7 @@ export default function Home() {
                         />
                       )}
                       <div>
-                        <label className="text-xs text-slate-400 mb-1 block">data de início</label>
+                        <label className="mb-1.5 block text-sm font-semibold text-[#26332E]">data de início</label>
                         <input
                           className={inputClasse}
                           type="date"
@@ -9265,7 +9664,7 @@ export default function Home() {
                         />
                       </div>
                       <div>
-                        <label className="text-xs text-slate-400 mb-1 block">data de término (deixe em branco se ainda estiver praticando)</label>
+                        <label className="mb-1.5 block text-sm font-semibold text-[#26332E]">data de término (deixe em branco se ainda estiver praticando)</label>
                         <input
                           className={inputClasse}
                           type="date"
@@ -9305,16 +9704,9 @@ export default function Home() {
                         onChange={(e) => setNovaObsAtividade(e.target.value)}
                       />
                       {erroAtividadeFisica && <p className="text-sm text-red-600">{erroAtividadeFisica}</p>}
-                      <div className="flex gap-2">
-                        <button disabled={carregando} onClick={salvarAtividadeFisica} className={botaoPrimario}>
-                          {carregando ? 'Salvando...' : 'Salvar'}
-                        </button>
-                        <button onClick={() => setMostrarFormAtividadeFisica(false)} className={botaoSecundario}>
-                          Cancelar
-                        </button>
-                      </div>
+                      {renderBarraAcoes('Salvar', salvarAtividadeFisica, () => setMostrarFormAtividadeFisica(false), carregando)}
                       {atividadeEditandoId && (
-                        <button disabled={carregando} onClick={excluirAtividadeFisica} className="w-full text-sm text-red-600 pt-1">
+                        <button disabled={carregando} onClick={excluirAtividadeFisica} className="w-full rounded-[14px] border border-red-200 bg-white py-3 text-sm font-semibold text-red-600">
                           Excluir esta atividade
                         </button>
                       )}

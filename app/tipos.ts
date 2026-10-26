@@ -265,7 +265,7 @@ export type Medico = {
 };
 
 export type Passo = 'login' | 'cadastro' | 'onboarding' | 'painel';
-export type Aba = 'geral' | 'condicoes' | 'cirurgias' | 'medicacoes' | 'consultas' | 'odontologia' | 'exames' | 'vacinas' | 'nascimento' | 'menupessoal' | 'gestacao' | 'desenvolvimento' | 'alimentacaoinfantil' | 'puberdade' | 'saudemental' | 'habitosvida' | 'crescimento' | 'riscos' | 'medicos' | 'bemestar' | 'nutricionista' | 'esportes' | 'novoregistro' | 'onboardingvoz' | 'eventoresumo' | 'feedeventos' | 'terapias';
+export type Aba = 'geral' | 'condicoes' | 'cirurgias' | 'medicacoes' | 'consultas' | 'odontologia' | 'exames' | 'vacinas' | 'nascimento' | 'menupessoal' | 'gestacao' | 'desenvolvimento' | 'alimentacaoinfantil' | 'puberdade' | 'saudemental' | 'habitosvida' | 'crescimento' | 'riscos' | 'medicos' | 'bemestar' | 'nutricionista' | 'esportes' | 'novoregistro' | 'onboardingvoz' | 'eventoresumo' | 'feedeventos' | 'terapias' | 'parentes';
 
 // ATENÇÃO: estas são orientações gerais de rastreamento, baseadas em diretrizes conhecidas
 // (ex: sociedades de mastologia, coloproctologia, urologia, diabetes). Elas NÃO substituem
