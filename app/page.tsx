@@ -3733,7 +3733,7 @@ export default function Home() {
   const setaSelect = (
     <svg className="pointer-events-none absolute right-3.5 top-3.5 text-[#55615B]" width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6" /></svg>
   );
-  const selectClasse = `${inputClasse} appearance-none pr-10`;
+  const selectClasse = `${inputClasse} sel-ds appearance-none pr-10`;
 
   function renderCampo(rotulo: string, filho: ReactNode, opts: { obrigatorio?: boolean; dica?: string; acao?: ReactNode } = {}) {
     return (
@@ -4174,7 +4174,7 @@ export default function Home() {
     const ordenados = [...cards].sort((a, b) => chaveOrdemPendencia(a.item).localeCompare(chaveOrdemPendencia(b.item)));
     const rotulos: Record<string, string> = { consulta: 'Consulta', vacina: 'Vacina', medicacao: 'Medicação', exame: 'Exame', terapia: 'Terapia', agendar: 'Agendar' };
     return (
-      <div className="-mx-3 flex snap-x snap-mandatory gap-2.5 overflow-x-auto px-3 pb-1" style={{ scrollbarWidth: 'none' }}>
+      <div className="-mx-[18px] flex snap-x snap-mandatory gap-2.5 overflow-x-auto px-[18px] pb-1" style={{ scrollbarWidth: 'none' }}>
         {ordenados.map((c) => {
           const atrasado = chaveOrdemPendencia(c.item) < hojeStr;
           const chave = chaveOrdemPendencia(c.item);
@@ -4190,17 +4190,17 @@ export default function Home() {
             <button
               key={`${c.membroId}-${c.item.id}`}
               onClick={() => abrirPendencia(c.item, c.membroId)}
-              className={`flex min-h-[104px] w-[40%] min-w-[148px] shrink-0 snap-start flex-col rounded-lg border-y border-r border-l-[3px] bg-white p-2.5 text-left shadow-sm transition hover:shadow ${atrasado ? 'border-slate-200 border-l-rose-400' : 'border-slate-200 border-l-teal-500'} sm:w-[31%]`}
+              className={`flex min-h-[104px] w-[40%] min-w-[148px] shrink-0 snap-start flex-col rounded-lg border-y border-r border-l-[3px] bg-[#F7F9F8] p-3 text-left transition hover:bg-[#EEF4F1] ${atrasado ? 'border-slate-200 border-l-rose-400' : 'border-slate-200 border-l-teal-500'} sm:w-[31%]`}
             >
               <div className="flex items-center justify-between gap-1">
                 <span className="flex min-w-0 items-center gap-1.5">
                   <span className="shrink-0 opacity-70 [&>svg]:h-3.5 [&>svg]:w-3.5">{iconePendencia(c.item.tipo)}</span>
-                  <span className="truncate text-[10px] font-semibold uppercase tracking-wide text-slate-400">{rotulos[c.item.tipo] || ''}</span>
+                  <span className="truncate text-[11px] font-semibold uppercase tracking-wide text-slate-400">{rotulos[c.item.tipo] || ''}</span>
                 </span>
-                <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-semibold ${etiqueta.cor}`}>{etiqueta.texto}</span>
+                <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${etiqueta.cor}`}>{etiqueta.texto}</span>
               </div>
-              <p className="mt-1.5 line-clamp-2 text-[13px] font-semibold leading-snug text-slate-800">{titulo}</p>
-              <p className={`mt-auto line-clamp-2 whitespace-pre-line pt-1 text-[11px] leading-tight ${atrasado ? 'font-medium text-rose-600' : 'text-slate-500'}`}>{c.item.detalhe}</p>
+              <p className="mt-1.5 line-clamp-2 text-[14px] font-semibold leading-snug text-slate-800">{titulo}</p>
+              <p className={`mt-auto line-clamp-2 whitespace-pre-line pt-1 text-[12px] leading-tight ${atrasado ? 'font-medium text-rose-600' : 'text-slate-500'}`}>{c.item.detalhe}</p>
               {mostrarDono && <p className="mt-1 truncate border-t border-slate-100 pt-1 text-[11px] font-medium text-teal-700">{c.membroNome}</p>}
             </button>
           );
@@ -5100,7 +5100,7 @@ export default function Home() {
     condicoes: condicaoEditandoId, cirurgias: condicaoEditandoId, medicos: medicoEditandoId, exames: exameEditandoId,
     vacinas: vacinaEditandoId, crescimento: crescimentoEditandoId, terapias: terapiaEditandoId,
   };
-  const emTelaDetalhe = passo === 'painel' && !!membroSelecionado && telaDetalhe !== null;
+  const emTelaDetalhe = passo === 'painel' && !!membroSelecionado;
 
   // Troca de aba do menu inferior sempre volta pra tela "raiz" daquela aba (fecha
   // qualquer categoria/formulário que estivesse aberto na aba anterior), pra nunca
@@ -5170,6 +5170,8 @@ export default function Home() {
   ];
 
   return (
+    <>
+    <style>{`select.w-full:not(.sel-ds){appearance:none;-webkit-appearance:none;font-family:inherit;padding-right:40px;background-repeat:no-repeat;background-position:right 14px center;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%2355615B' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")}`}</style>
     <main className={`min-h-screen flex justify-center ${emTelaDetalhe ? 'bg-[#F4F6F4] items-start p-0' : 'bg-[#FAFAF8] items-center p-4'}`}>
       <div className={`w-full ${larguraContainer} transition-all ${emTelaDetalhe ? 'px-4 pt-3 pb-24' : `rounded-2xl bg-white p-8 shadow-sm border border-[#E5E1DA] ${passo === 'painel' ? 'pb-24' : ''}`}`}>
         {!membroSelecionado && (
@@ -5330,43 +5332,56 @@ export default function Home() {
 
         {passo === 'painel' && abaInferior === 'home' && membroSelecionado && telaDetalhe === null && (
           <div className="relative">
-            <div className="mb-4 flex items-center justify-between">
+            <header className="-mx-4 -mt-3 mb-5 flex items-center gap-2 border-b border-[#E1E6E3] bg-white py-3 pl-2 pr-3">
               <button
                 onClick={() => setMostrarMenuPessoal((v) => !v)}
                 aria-label="Mais informações"
                 aria-expanded={mostrarMenuPessoal}
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 hover:bg-[#FAFAF8] hover:text-slate-700"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-[#3B4A44]"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" className="h-5 w-5">
-                  <line x1="3" y1="6" x2="21" y2="6" />
-                  <line x1="3" y1="12" x2="21" y2="12" />
-                  <line x1="3" y1="18" x2="21" y2="18" />
-                </svg>
+                <svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
               </button>
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => { setMostrarAvisos((v) => !v); setMostrarMenuPessoal(false); }}
-                  aria-label="Avisos"
-                  aria-expanded={mostrarAvisos}
-                  className="relative flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 hover:bg-[#FAFAF8] hover:text-slate-700"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
-                    <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
-                    <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-                  </svg>
-                  {obterAvisos().length > 0 && (
-                    <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-semibold text-white">{obterAvisos().length}</span>
-                  )}
-                </button>
-              </div>
-            </div>
+              <button
+                onClick={() => setMostrarTrocaMembro(true)}
+                aria-label={`Trocar de membro da família. Membro atual: ${membroSelecionado.nome}`}
+                aria-haspopup="dialog"
+                className="flex h-[52px] min-w-0 flex-1 items-center gap-2.5 rounded-full border border-[#CFE0D8] bg-[#EEF4F1] pl-1.5 pr-2 text-left"
+              >
+                {membroSelecionado.foto_url ? (
+                  <img src={membroSelecionado.foto_url} alt={membroSelecionado.nome} className="h-10 w-10 shrink-0 rounded-full object-cover" />
+                ) : (
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#CBE7DB] text-[17px] font-bold text-[#1E5B4A]">
+                    {membroSelecionado.nome.charAt(0).toUpperCase()}
+                  </span>
+                )}
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span className="truncate text-base font-bold text-[#1A2421]">{membroSelecionado.nome}</span>
+                  <span className="text-[13px] text-[#55615B]">{calcularIdade(membroSelecionado.data_nascimento)} anos</span>
+                </span>
+                <span className="flex h-[34px] shrink-0 items-center gap-1.5 rounded-full bg-[#1E5B4A] pl-2.5 pr-3 text-[13px] font-semibold leading-none text-white">
+                  <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round"><path d="M7 4L3 8l4 4" /><path d="M3 8h14" /><path d="M17 20l4-4-4-4" /><path d="M21 16H7" /></svg>
+                  Trocar de membro
+                </span>
+              </button>
+              <button
+                onClick={() => { setMostrarAvisos((v) => !v); setMostrarMenuPessoal(false); }}
+                aria-label="Avisos"
+                aria-expanded={mostrarAvisos}
+                className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-[#3B4A44]"
+              >
+                <svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0" /></svg>
+                {obterAvisos().length > 0 && (
+                  <span className="absolute right-0.5 top-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[#B4441F] px-1 text-[11px] font-semibold text-white">{obterAvisos().length}</span>
+                )}
+              </button>
+            </header>
 
             {mostrarAvisos && (() => {
               const avisos = obterAvisos();
               return (
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setMostrarAvisos(false)} />
-                  <div className="absolute right-0 top-10 z-50 w-[92%] max-w-sm overflow-hidden rounded-xl border border-[#E5E1DA] bg-white shadow-lg">
+                  <div className="absolute right-0 top-[66px] z-50 w-[92%] max-w-sm overflow-hidden rounded-xl border border-[#E5E1DA] bg-white shadow-lg">
                     <p className="border-b border-[#F2F0EC] px-4 py-3 text-sm font-semibold text-slate-800">Avisos</p>
                     {avisos.length === 0 && <p className="px-4 py-4 text-sm text-slate-400">Nada para hoje ou amanhã.</p>}
                     {avisos.map((a) => (
@@ -5404,7 +5419,7 @@ export default function Home() {
                   className="fixed inset-0 z-40"
                   onClick={() => setMostrarMenuPessoal(false)}
                 />
-                <div className="absolute left-0 top-10 z-50 w-[85%] max-w-sm overflow-hidden rounded-xl border border-[#E5E1DA] bg-white shadow-lg">
+                <div className="absolute left-0 top-[66px] z-50 w-[85%] max-w-sm overflow-hidden rounded-xl border border-[#E5E1DA] bg-white shadow-lg">
                   {itensMenuPessoal().map((item) => (
                     <button
                       key={item.id}
@@ -5425,34 +5440,7 @@ export default function Home() {
               </>
             )}
 
-            <button
-              onClick={() => setMostrarTrocaMembro(true)}
-              aria-label={`Trocar de membro da família. Membro atual: ${membroSelecionado.nome}`}
-              aria-haspopup="dialog"
-              className="mb-5 flex w-full items-center gap-3 rounded-full border border-teal-200 bg-teal-50 py-1.5 pl-1.5 pr-2 text-left transition hover:bg-teal-100/60"
-            >
-              {membroSelecionado.foto_url ? (
-                <img
-                  src={membroSelecionado.foto_url}
-                  alt={membroSelecionado.nome}
-                  className="h-11 w-11 shrink-0 rounded-full object-cover"
-                />
-              ) : (
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-teal-100 text-lg font-bold text-teal-800">
-                  {membroSelecionado.nome.charAt(0).toUpperCase()}
-                </div>
-              )}
-              <div className="min-w-0 flex-1">
-                <h2 className="truncate text-base font-bold text-slate-800">{membroSelecionado.nome}</h2>
-                <p className="text-xs text-slate-500">{calcularIdade(membroSelecionado.data_nascimento)} anos</p>
-              </div>
-              <span className="flex shrink-0 items-center gap-1.5 rounded-full bg-teal-700 px-3 py-2 text-xs font-semibold leading-none text-white">
-                <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round"><path d="M7 4L3 8l4 4" /><path d="M3 8h14" /><path d="M17 20l4-4-4-4" /><path d="M21 16H7" /></svg>
-                Trocar de membro
-              </span>
-            </button>
-
-            {mostrarTrocaMembro && (
+{mostrarTrocaMembro && (
               <div className="fixed inset-0 z-50 flex flex-col justify-end">
                 <button aria-label="Fechar" onClick={() => { setMostrarTrocaMembro(false); setModoExcluirMembro(false); setMembroParaExcluir(null); }} className="absolute inset-0 bg-slate-900/45" />
                 <div role="dialog" aria-label="Trocar de membro" className="relative mx-auto flex max-h-[85vh] w-full max-w-2xl flex-col gap-1.5 overflow-y-auto rounded-t-3xl bg-white px-4 pb-6 pt-2.5 shadow-xl">
@@ -5531,28 +5519,33 @@ export default function Home() {
               </div>
             )}
 
-            <div className="rounded-2xl bg-slate-100 p-3">
-              <h3 className="mb-2.5 text-sm font-semibold text-slate-700">Pendências de {membroSelecionado.nome}</h3>
+            <section className={secaoClasse}>
+              <h3 className={tituloSecao}>Pendências de {membroSelecionado.nome}</h3>
               {(() => {
                 const pendencias = obterPendencias();
                 if (pendencias.length === 0) {
-                  return <p className="text-sm text-slate-400 py-2">Nada pendente por aqui no momento.</p>;
+                  return (
+                    <div className="flex items-center gap-2.5 text-[15px] text-[#3B4A44]">
+                      <svg className="shrink-0 text-[#1E5B4A]" width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M8 12.5l2.5 2.5L16 9.5" /></svg>
+                      Nada pendente por aqui no momento.
+                    </div>
+                  );
                 }
                 return renderCarrosselPendencias(
                   pendencias.map((item) => ({ membroId: membroSelecionado.id, membroNome: membroSelecionado.nome, item })),
                   false,
                 );
               })()}
-            </div>
+            </section>
 
             {meuPapel === 'admin' && pendenciasFamiliares.filter((f) => f.membroId !== membroSelecionado?.id).length > 0 && (
-              <div className="mt-4 rounded-2xl bg-slate-100 p-3">
+              <section className={`${secaoClasse} mt-4`}>
                 <button
                   onClick={() => setMostrarPendenciasFamilia((v) => !v)}
-                  className={`flex w-full items-center justify-between ${mostrarPendenciasFamilia ? 'mb-2.5' : ''}`}
+                  className="flex w-full items-center justify-between"
                 >
-                  <h3 className="text-sm font-semibold text-slate-700">Pendências da família</h3>
-                  <span className="text-xs text-teal-700">{mostrarPendenciasFamilia ? 'ocultar ▲' : 'mostrar ▼'}</span>
+                  <h3 className={tituloSecao}>Pendências da família</h3>
+                  <svg className={`text-[#55615B] transition-transform ${mostrarPendenciasFamilia ? 'rotate-180' : ''}`} width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6" /></svg>
                 </button>
                 {mostrarPendenciasFamilia && renderCarrosselPendencias(
                   pendenciasFamiliares
@@ -5560,17 +5553,17 @@ export default function Home() {
                     .flatMap((f) => f.itens.map((item) => ({ membroId: f.membroId, membroNome: f.membroNome, item }))),
                   true,
                 )}
-              </div>
+              </section>
             )}
 
-            <div className="mt-4">
-              <h3 className="mb-2.5 text-sm font-semibold text-slate-700">Dicas de saúde e bem-estar</h3>
+            <div className="mt-5">
+              <h3 className={`${tituloSecao} mb-2.5 px-0.5`}>Dicas de saúde e bem-estar</h3>
               <div
-                className={`relative overflow-hidden rounded-2xl border border-teal-100 bg-gradient-to-br from-teal-50 to-emerald-50 p-4 transition-opacity duration-300 ${dicaVisivel ? 'opacity-100' : 'opacity-0'}`}
+                className={`relative overflow-hidden rounded-2xl border border-[#D5E2DC] bg-[#EEF4F1] px-[18px] py-4 transition-opacity duration-300 ${dicaVisivel ? 'opacity-100' : 'opacity-0'}`}
               >
                 <div className="flex items-start gap-3">
                   <span className="shrink-0 text-2xl leading-none">{dicasParaMembro[dicaIndex % dicasParaMembro.length].icone}</span>
-                  <p className="text-sm text-teal-800">{dicasParaMembro[dicaIndex % dicasParaMembro.length].texto}</p>
+                  <p className="text-[15px] leading-snug text-[#1F4A3D]">{dicasParaMembro[dicaIndex % dicasParaMembro.length].texto}</p>
                 </div>
               </div>
               <div className="mt-2 flex justify-center gap-1.5">
@@ -5614,7 +5607,7 @@ export default function Home() {
 
         {passo === 'painel' && abaInferior === 'configuracao' && (
           <div className="space-y-6">
-            <h2 className="text-lg font-semibold text-slate-800">Configuração</h2>
+            <h2 className="text-[22px] font-bold tracking-[-0.01em] text-[#1A2421]">Configuração</h2>
 
             <div className="space-y-2 rounded-xl bg-white border border-[#E5E1DA] p-4">
               <p className="text-xs text-slate-400">Conta</p>
@@ -5999,10 +5992,10 @@ export default function Home() {
 
         {passo === 'painel' && (abaInferior === 'incluir' || abaInferior === 'consultar') && membroSelecionado && telaDetalhe === null && (
           <div>
-            <h2 className="mb-1 text-lg font-semibold text-slate-800">
+            <h2 className="mb-1 text-[22px] font-bold tracking-[-0.01em] text-[#1A2421]">
               {abaInferior === 'incluir' ? 'Incluir registro' : 'Consultar registros'}
             </h2>
-            <p className="mb-4 text-xs text-slate-400">
+            <p className="mb-4 text-sm text-[#55615B]">
               {abaInferior === 'incluir'
                 ? `Escolha a categoria do que você quer adicionar pra ${membroSelecionado.nome}.`
                 : `Escolha o que você quer consultar de ${membroSelecionado.nome}.`}
@@ -6020,7 +6013,7 @@ export default function Home() {
                 <button
                   key={s.id}
                   onClick={() => abrirCategoriaNoModo(s.id)}
-                  className="flex flex-col items-center gap-1.5 rounded-xl border border-[#E5E1DA] bg-white px-1 py-3 text-teal-700 transition hover:bg-[#FAFAF8]"
+                  className="flex flex-col items-center gap-1.5 rounded-2xl border border-[#E1E6E3] bg-white px-1 py-3.5 text-[#1E5B4A] transition hover:bg-[#F4F6F4]"
                 >
                   {iconeSecao(s.id, 22)}
                   <span className="w-full text-[10px] font-medium text-slate-600 text-center leading-tight">
@@ -7384,55 +7377,34 @@ export default function Home() {
                                 onChange={(e) => setNovaDataHoraConsulta(e.target.value)}
                               />
                             </div>
-                            {ehFutura && (
-                              <label className="flex items-start gap-2 rounded-xl bg-teal-50 p-3 text-sm text-slate-700">
-                                <input
-                                  type="checkbox"
-                                  className="mt-1"
-                                  checked={novoLembreteConsulta}
-                                  onChange={(e) => setNovoLembreteConsulta(e.target.checked)}
-                                />
-                                <span>
-                                  <span className="font-medium">Quero um lembrete desta consulta</span>
-                                  <span className="block text-xs text-slate-500">Ela aparece como pendência na Home até acontecer.</span>
-                                </span>
-                              </label>
-                            )}
-                            <input
-                              className={inputClasse}
-                              placeholder="Local (opcional)"
-                              value={novoLocalConsulta}
-                              onChange={(e) => setNovoLocalConsulta(e.target.value)}
-                            />
+                            {ehFutura && renderChecagem('Quero um lembrete desta consulta', 'Aparece como pendência na Home até acontecer', novoLembreteConsulta, setNovoLembreteConsulta)}
+                            {renderCampo('Local', (
+                              <input className={inputClasse} placeholder="Ex.: Clínica, hospital ou teleconsulta" value={novoLocalConsulta} onChange={(e) => setNovoLocalConsulta(e.target.value)} />
+                            ))}
                           </div>
 
                           <div className={cartao}>
                             <p className={titulo}>Com quem</p>
-                            <select
-                              className={inputClasse}
-                              value={novaEspecialidadeConsulta}
-                              onChange={(e) => setNovaEspecialidadeConsulta(e.target.value)}
-                            >
-                              <option value="">Especialidade *</option>
-                              {especialidadesMedicas.map((esp) => (
-                                <option key={esp} value={esp}>{esp}</option>
-                              ))}
-                            </select>
-                            {novaEspecialidadeConsulta === 'Outros' && (
+                            {renderCampo('Especialidade', renderSelectDs(novaEspecialidadeConsulta, setNovaEspecialidadeConsulta, (
+                              <>
+                                <option value="">Selecione</option>
+                                {especialidadesMedicas.map((esp) => (
+                                  <option key={esp} value={esp}>{esp}</option>
+                                ))}
+                              </>
+                            )), { obrigatorio: true })}
+                            {novaEspecialidadeConsulta === 'Outros' && renderCampo('Qual especialidade?', (
+                              <input className={inputClasse} placeholder="Especialidade" value={especialidadeOutroConsulta} onChange={(e) => setEspecialidadeOutroConsulta(e.target.value)} />
+                            ))}
+                            {renderCampo('Profissional', (
                               <input
                                 className={inputClasse}
-                                placeholder="Qual especialidade?"
-                                value={especialidadeOutroConsulta}
-                                onChange={(e) => setEspecialidadeOutroConsulta(e.target.value)}
+                                placeholder="Ex.: Dr. João Silva"
+                                list="lista-medicos-cadastrados"
+                                value={novoProfissionalConsulta}
+                                onChange={(e) => setNovoProfissionalConsulta(e.target.value)}
                               />
-                            )}
-                            <input
-                              className={inputClasse}
-                              placeholder="Profissional (opcional, ex: Dr. João Silva)"
-                              list="lista-medicos-cadastrados"
-                              value={novoProfissionalConsulta}
-                              onChange={(e) => setNovoProfissionalConsulta(e.target.value)}
-                            />
+                            ))}
                             <datalist id="lista-medicos-cadastrados">
                               {medicos.map((m) => (
                                 <option key={m.id} value={m.nome} />
@@ -7442,7 +7414,7 @@ export default function Home() {
                               <p className="text-xs text-teal-700 -mt-1"><Ic n="mais" /> “{novoProfissionalConsulta.trim()}” será cadastrado como novo médico.</p>
                             )}
                             {medicos.length > 0 && !novoProfissionalConsulta.trim() && (
-                              <p className="text-xs text-slate-400 -mt-1">
+                              <p className="text-[13px] text-[#55615B] -mt-1">
                                 <Ic n="lampada" /> Comece a digitar para escolher entre seus médicos já cadastrados.
                               </p>
                             )}
@@ -7450,53 +7422,32 @@ export default function Home() {
 
                           <div className={cartao}>
                             <p className={titulo}>Sobre o quê</p>
-                            <input
-                              className={inputClasse}
-                              placeholder="Motivo (opcional)"
-                              value={novoMotivoConsulta}
-                              onChange={(e) => setNovoMotivoConsulta(e.target.value)}
-                            />
-                            <select
-                              className={inputClasse}
-                              value={novaCondicaoRelacionadaConsulta}
-                              onChange={(e) => setNovaCondicaoRelacionadaConsulta(e.target.value)}
-                            >
-                              <option value="">Relacionar a um problema de saúde (opcional)</option>
-                              {condicoes.map((c) => (
-                                <option key={c.id} value={c.id}>{c.nome}</option>
-                              ))}
-                            </select>
+                            {renderCampo('Motivo', (
+                              <input className={inputClasse} placeholder="Ex.: rotina, dor de garganta, check-up" value={novoMotivoConsulta} onChange={(e) => setNovoMotivoConsulta(e.target.value)} />
+                            ))}
+                            {renderCampo('Relacionar a um problema de saúde', renderSelectDs(novaCondicaoRelacionadaConsulta, setNovaCondicaoRelacionadaConsulta, (
+                              <>
+                                <option value="">Nenhum</option>
+                                {condicoes.map((c) => (
+                                  <option key={c.id} value={c.id}>{c.nome}</option>
+                                ))}
+                              </>
+                            )), { dica: 'Agrupa esta consulta no histórico do problema.' })}
                           </div>
 
                           {ehPassada && (
                             <div className={cartao}>
                               <p className={titulo}>Depois da consulta</p>
-                              <div>
-                                <div className="flex items-center justify-between mb-1">
-                                  <label className="text-xs text-slate-500">Anotações: o que o médico disse, o que acompanhar...</label>
-                                  <button
-                                    type="button"
-                                    onClick={() => alternarReconhecimentoVoz('anotacaoConsulta', setNovaAnotacaoConsulta)}
-                                    className={`shrink-0 rounded-full px-2 py-1 text-xs ${gravandoCampo === 'anotacaoConsulta' ? 'bg-red-100 text-red-700 animate-pulse' : 'bg-slate-100 text-slate-600'}`}
-                                  >
-                                    <Ic n="mic" /> {gravandoCampo === 'anotacaoConsulta' ? 'Ouvindo...' : 'Falar'}
-                                  </button>
-                                </div>
-                                <textarea
-                                  className={inputClasse}
-                                  placeholder="Anotações (opcional)"
-                                  rows={3}
-                                  value={novaAnotacaoConsulta}
-                                  onChange={(e) => setNovaAnotacaoConsulta(e.target.value)}
-                                />
-                              </div>
+                              {renderCampo('Anotações', (
+                                <textarea className={inputClasse} placeholder="O que o médico disse, orientações, exames e remédios pedidos" rows={4} value={novaAnotacaoConsulta} onChange={(e) => setNovaAnotacaoConsulta(e.target.value)} />
+                              ), { acao: renderBotaoDitar('anotacaoConsulta', setNovaAnotacaoConsulta) })}
                               <div>
                                 <label className="mb-1.5 block text-sm font-semibold text-[#26332E]">Retorno (opcional)</label>
                                 <div className="flex flex-wrap gap-2 mb-2">
                                   <button
                                     type="button"
                                     onClick={() => setNovaDataRetornoConsulta('')}
-                                    className={`rounded-full border px-3 py-2 text-sm ${!novaDataRetornoConsulta ? 'bg-teal-700 border-teal-700 text-white font-semibold' : 'border-slate-300 text-slate-700'}`}
+                                    className={chipDs(!novaDataRetornoConsulta)}
                                   >
                                     Sem retorno
                                   </button>
@@ -7505,7 +7456,7 @@ export default function Home() {
                                       key={a.label}
                                       type="button"
                                       onClick={() => setNovaDataRetornoConsulta(calcRetorno(a))}
-                                      className={`rounded-full border px-3 py-2 text-sm ${novaDataRetornoConsulta === calcRetorno(a) ? 'bg-teal-700 border-teal-700 text-white font-semibold' : 'border-slate-300 text-slate-700'}`}
+                                      className={chipDs(novaDataRetornoConsulta === calcRetorno(a))}
                                     >
                                       {a.label}
                                     </button>
@@ -7518,7 +7469,7 @@ export default function Home() {
                                   onChange={(e) => setNovaDataRetornoConsulta(e.target.value)}
                                 />
                                 {novaDataRetornoConsulta && (
-                                  <p className="mt-1 text-xs text-slate-400">Ao salvar, o retorno entra como consulta agendada às 09:00, com lembrete. Depois você ajusta o horário na própria consulta.</p>
+                                  <p className="mt-1 text-[13px] text-[#55615B]">Ao salvar, o retorno entra como consulta agendada às 09:00, com lembrete. Depois você ajusta o horário na própria consulta.</p>
                                 )}
                                 <div className="mt-3 space-y-2 rounded-xl bg-slate-50 p-3">
                                   <label className="flex items-center gap-2 text-sm text-slate-700">
@@ -7532,7 +7483,7 @@ export default function Home() {
                                           ? ([['m1', 'Em 1 mês'], ['m3', 'Em 3 meses'], ['m6', 'Em 6 meses'], ['m12', 'Em 1 ano'], ['data', 'Escolher data']] as const)
                                           : ([['7', 'Em 7 dias'], ['15', 'Em 15 dias'], ['30', 'Em 30 dias'], ['data', 'Escolher data']] as const)
                                         ).map(([id, label]) => (
-                                          <button key={id} type="button" onClick={() => setAgendarRetornoQuando(id)} className={`rounded-full border px-3 py-2 text-sm ${agendarRetornoQuando === id ? 'bg-teal-700 border-teal-700 text-white font-semibold' : 'border-slate-300 text-slate-700'}`}>{label}</button>
+                                          <button key={id} type="button" onClick={() => setAgendarRetornoQuando(id)} className={chipDs(agendarRetornoQuando === id)}>{label}</button>
                                         ))}
                                       </div>
                                       {agendarRetornoQuando === 'data' && (
@@ -7544,7 +7495,7 @@ export default function Home() {
                                           {opcoesAntecedencia.map((o) => <option key={o.dias} value={o.dias}>{o.label}</option>)}
                                         </select>
                                       </div>
-                                      <p className="text-xs text-slate-400">
+                                      <p className="text-[13px] text-[#55615B]">
                                         {novaDataRetornoConsulta ? 'Os prazos contam a partir da data do retorno. ' : ''}A data escolhida é o prazo para agendar. O aviso fica na Home até você marcar uma consulta de {novaEspecialidadeConsulta === 'Outros' ? (especialidadeOutroConsulta || 'outra especialidade') : (novaEspecialidadeConsulta || 'essa especialidade')}{novaDataRetornoConsulta ? ' depois do retorno' : ''}.
                                       </p>
                                     </>
@@ -7556,7 +7507,7 @@ export default function Home() {
 
                           <div className={cartao}>
                             <p className={titulo}>Foto do pedido médico</p>
-                            <p className="text-xs text-slate-400">Pedido de exame, receita ou laudo. Fica guardado só para quem tem acesso a este membro.</p>
+                            <p className="text-[13px] text-[#55615B]">Pedido de exame, receita ou laudo. Fica guardado só para quem tem acesso a este membro.</p>
                             {anexosConsulta.length > 0 && (
                               <div className="grid grid-cols-3 gap-2">
                                 {anexosConsulta.map((a) => (
@@ -7566,7 +7517,7 @@ export default function Home() {
                                     ) : a.url ? (
                                       <a href={a.url} target="_blank" rel="noreferrer"><img src={a.url} alt={a.nome || 'anexo'} className="h-24 w-full rounded-xl object-cover" /></a>
                                     ) : (
-                                      <div className="flex h-24 items-center justify-center rounded-xl bg-slate-100 text-xs text-slate-400">indisponível</div>
+                                      <div className="flex h-24 items-center justify-center rounded-xl bg-slate-100 text-[13px] text-[#55615B]">indisponível</div>
                                     )}
                                     <button type="button" aria-label="Remover anexo" onClick={() => excluirAnexoConsulta(a)} className="absolute right-1 top-1 rounded-full bg-white/90 px-1.5 text-xs text-red-600">✕</button>
                                   </div>
@@ -7581,7 +7532,7 @@ export default function Home() {
                                     <button type="button" onClick={() => setAnexosNovosConsulta((l) => l.filter((_, idx) => idx !== i))} className="text-xs text-red-600">remover</button>
                                   </div>
                                 ))}
-                                <p className="text-xs text-slate-400">Será enviado ao salvar a consulta.</p>
+                                <p className="text-[13px] text-[#55615B]">Será enviado ao salvar a consulta.</p>
                               </div>
                             )}
                             <label className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-2xl border border-dashed border-teal-700/40 bg-white px-4 py-3 text-sm font-semibold text-teal-800">
@@ -7618,7 +7569,7 @@ export default function Home() {
                                 {linhas.map((l) => (
                                   <button key={l.chave} type="button" onClick={l.abrir} className="flex w-full items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2 text-left text-sm">
                                     <span className="min-w-0">
-                                      <span className="block text-xs text-slate-400">{l.rotulo}</span>
+                                      <span className="block text-[13px] text-[#55615B]">{l.rotulo}</span>
                                       <span className="block truncate text-slate-800">{l.detalhe}</span>
                                     </span>
                                     <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-slate-300"><path d="M9 18l6-6-6-6" /></svg>
@@ -7665,12 +7616,12 @@ export default function Home() {
                                         <div key={i} className="space-y-3 border-t border-[#E5E1DA] pt-3 first:border-t-0 first:pt-0">
                                           {medsConsulta.length > 1 && (
                                             <div className="flex items-center justify-between">
-                                              <p className="text-xs text-slate-500">Medicação {i + 1}</p>
+                                              <p className="text-[13px] text-[#55615B]">Medicação {i + 1}</p>
                                               <button type="button" onClick={() => setMedsConsulta((l) => l.filter((_, idx) => idx !== i))} className="text-xs text-red-600">remover</button>
                                             </div>
                                           )}
-                                          <input className={inputClasse} placeholder="Remédio *" value={m.nome} onChange={(e) => atualizaMed(i, { nome: e.target.value })} />
-                                          <input className={inputClasse} placeholder="Dose (ex: 5 ml, 1 comprimido)" value={m.dose} onChange={(e) => atualizaMed(i, { dose: e.target.value })} />
+                                          {renderCampo('Remédio', <input className={inputClasse} placeholder="" value={m.nome} onChange={(e) => atualizaMed(i, { nome: e.target.value })} />, { obrigatorio: true })}
+                                          {renderCampo('Dose', <input className={inputClasse} placeholder="Ex.: 5 ml, 1 comprimido" value={m.dose} onChange={(e) => atualizaMed(i, { dose: e.target.value })} />)}
                                           <div>
                                             <label className="mb-1.5 block text-sm font-semibold text-[#26332E]">Frequência</label>
                                             <div className="flex flex-wrap gap-2">
@@ -7681,7 +7632,7 @@ export default function Home() {
                                           </div>
                                           {horarios.length > 0 && (
                                             <div className="flex items-center gap-2">
-                                              <label className="text-xs text-slate-500 shrink-0">1ª dose às</label>
+                                              <label className={rotuloCampo}>1ª dose às</label>
                                               <input type="time" className={inputClasse} value={m.primeira} onChange={(e) => atualizaMed(i, { primeira: e.target.value })} />
                                             </div>
                                           )}
@@ -7712,7 +7663,7 @@ export default function Home() {
                                               );
                                             })()}
                                           </div>
-                                          <input className={inputClasse} placeholder="Como tomar (ex: após as refeições)" value={m.como} onChange={(e) => atualizaMed(i, { como: e.target.value })} />
+                                          {renderCampo('Como tomar', <input className={inputClasse} placeholder="Ex.: após as refeições" value={m.como} onChange={(e) => atualizaMed(i, { como: e.target.value })} />)}
                                         </div>
                                       );
                                     })}
@@ -7753,7 +7704,7 @@ export default function Home() {
                                         <input type="date" className={`${inputClasse} mt-2`} value={exPrazoDataConsulta} onChange={(e) => setExPrazoDataConsulta(e.target.value)} />
                                       )}
                                       {exPrazoConsulta === 'retorno' && (
-                                        <p className="text-xs text-slate-500 mt-1">
+                                        <p className="text-[13px] text-[#55615B] mt-1">
                                           {novaDataRetornoConsulta ? 'Prazo: 7 dias antes do retorno, para o resultado chegar a tempo.' : 'Defina um retorno acima para calcular o prazo (senão usa 30 dias).'}
                                         </p>
                                       )}
@@ -7775,10 +7726,11 @@ export default function Home() {
                                       <div key={i} className="space-y-3 border-t border-[#E5E1DA] pt-3 first:border-t-0 first:pt-0">
                                         {vacsConsulta.length > 1 && (
                                           <div className="flex items-center justify-between">
-                                            <p className="text-xs text-slate-500">Vacina {i + 1}</p>
+                                            <p className="text-[13px] text-[#55615B]">Vacina {i + 1}</p>
                                             <button type="button" onClick={() => setVacsConsulta((l) => l.filter((_, idx) => idx !== i))} className="text-xs text-red-600">remover</button>
                                           </div>
                                         )}
+                                        <label className={`${rotuloCampo} -mb-1.5`}>Vacina</label>
                                         <select className={inputClasse} value={v.nome} onChange={(e) => atualizaVac(i, { nome: e.target.value })}>
                                           <option value="">Vacina * (mesma lista da carteirinha)</option>
                                           {vacinasComuns.map((vc) => (
@@ -7787,7 +7739,7 @@ export default function Home() {
                                           <option value="Outra (especificar)">Outra (especificar)</option>
                                         </select>
                                         {v.nome === 'Outra (especificar)' && (
-                                          <input className={inputClasse} placeholder="Qual vacina?" value={v.outroNome} onChange={(e) => atualizaVac(i, { outroNome: e.target.value })} />
+                                          renderCampo('Qual vacina?', <input className={inputClasse} placeholder="" value={v.outroNome} onChange={(e) => atualizaVac(i, { outroNome: e.target.value })} />)
                                         )}
                                         <div>
                                           <label className="mb-1.5 block text-sm font-semibold text-[#26332E]">Quando tomar</label>
@@ -7800,7 +7752,7 @@ export default function Home() {
                                             <input type="date" className={`${inputClasse} mt-2`} value={v.quandoData} onChange={(e) => atualizaVac(i, { quandoData: e.target.value })} />
                                           )}
                                         </div>
-                                        <input className={inputClasse} placeholder="Observação (opcional)" value={v.obs} onChange={(e) => atualizaVac(i, { obs: e.target.value })} />
+                                        {renderCampo('Observação', <input className={inputClasse} placeholder="" value={v.obs} onChange={(e) => atualizaVac(i, { obs: e.target.value })} />)}
                                       </div>
                                     ))}
                                     <button type="button" onClick={() => setVacsConsulta((l) => [...l, vacVazia()])} className="text-sm font-semibold text-teal-800">+ Adicionar outra vacina</button>
@@ -7821,10 +7773,11 @@ export default function Home() {
                                       <div key={i} className="space-y-3 border-t border-[#E5E1DA] pt-3 first:border-t-0 first:pt-0">
                                         {terapiasConsulta.length > 1 && (
                                           <div className="flex items-center justify-between">
-                                            <p className="text-xs text-slate-500">Terapia {i + 1}</p>
+                                            <p className="text-[13px] text-[#55615B]">Terapia {i + 1}</p>
                                             <button type="button" onClick={() => setTerapiasConsulta((l) => l.filter((_, idx) => idx !== i))} className="text-xs text-red-600">remover</button>
                                           </div>
                                         )}
+                                        <label className={`${rotuloCampo} -mb-1.5`}>Tipo de terapia</label>
                                         <select className={inputClasse} value={t.tipo} onChange={(e) => atualizaTer(i, { tipo: e.target.value })}>
                                           <option value="">Tipo de terapia *</option>
                                           {tiposTerapia.map((tt) => (
@@ -7832,16 +7785,16 @@ export default function Home() {
                                           ))}
                                         </select>
                                         {t.tipo === 'Outra (especificar)' && (
-                                          <input className={inputClasse} placeholder="Qual terapia?" value={t.outroTipo} onChange={(e) => atualizaTer(i, { outroTipo: e.target.value })} />
+                                          renderCampo('Qual terapia?', <input className={inputClasse} placeholder="" value={t.outroTipo} onChange={(e) => atualizaTer(i, { outroTipo: e.target.value })} />)
                                         )}
-                                        <input className={inputClasse} placeholder="Frequência (ex: 2x por semana)" value={t.frequencia} onChange={(e) => atualizaTer(i, { frequencia: e.target.value })} />
+                                        {renderCampo('Frequência', <input className={inputClasse} placeholder="Ex.: 2x por semana" value={t.frequencia} onChange={(e) => atualizaTer(i, { frequencia: e.target.value })} />)}
                                         <div>
                                           <label className="mb-1.5 block text-sm font-semibold text-[#26332E]">Início</label>
                                           <input type="date" className={inputClasse} value={t.inicio} onChange={(e) => atualizaTer(i, { inicio: e.target.value })} />
                                         </div>
-                                        <input className={inputClasse} placeholder="Profissional/clínica (opcional)" value={t.profissional} onChange={(e) => atualizaTer(i, { profissional: e.target.value })} />
+                                        {renderCampo('Profissional/clínica', <input className={inputClasse} placeholder="" value={t.profissional} onChange={(e) => atualizaTer(i, { profissional: e.target.value })} />)}
                                         <div className="space-y-2">
-                                          <label className="text-xs text-slate-500 block">Datas das sessões (opcional)</label>
+                                          <label className={rotuloCampo}>Datas das sessões (opcional)</label>
                                           {(t.sessoes || []).map((s, si) => (
                                             <div key={si} className="flex items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2 text-sm">
                                               <span className="text-slate-800">{formatarData(s.data_hora.slice(0, 10))} às {s.data_hora.slice(11, 16)}</span>
@@ -7865,7 +7818,7 @@ export default function Home() {
                                             + Adicionar data
                                           </button>
                                         </div>
-                                        <input className={inputClasse} placeholder="Observação (opcional)" value={t.obs} onChange={(e) => atualizaTer(i, { obs: e.target.value })} />
+                                        {renderCampo('Observação', <input className={inputClasse} placeholder="" value={t.obs} onChange={(e) => atualizaTer(i, { obs: e.target.value })} />)}
                                       </div>
                                     ))}
                                     <button type="button" onClick={() => setTerapiasConsulta((l) => [...l, terapiaVazia()])} className="text-sm font-semibold text-teal-800">+ Adicionar outra terapia</button>
@@ -7903,7 +7856,7 @@ export default function Home() {
                           )}
 
                     <details className="rounded-2xl bg-white border border-[#E5E1DA] p-4 space-y-3">
-                      <summary className="text-xs font-bold uppercase tracking-wider text-teal-800 cursor-pointer">Financeiro / reembolso (opcional)</summary>
+                      <summary className={`${tituloSecao} cursor-pointer`}>Financeiro / reembolso (opcional)</summary>
                       <div className="flex rounded-xl bg-slate-100 p-1">
                         <button
                           type="button"
@@ -7970,7 +7923,7 @@ export default function Home() {
                               Consulta cancelada
                             </label>
                           )}
-                          <p className="text-xs text-slate-500"><span className="text-red-600">*</span> Campos obrigatórios</p>
+                          <p className="text-[13px] text-[#55615B]"><span className="text-red-600">*</span> Campos obrigatórios</p>
                           {erroConsulta && <p className="text-sm text-red-600">{erroConsulta}</p>}
                           {renderBarraAcoes('Salvar consulta', salvarConsulta, () => setMostrarFormConsulta(false), carregando)}
                           {consultaEditandoId && (
@@ -9673,5 +9626,6 @@ export default function Home() {
         </nav>
       )}
     </main>
+    </>
   );
 }
