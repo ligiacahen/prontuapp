@@ -3735,13 +3735,80 @@ export default function Home() {
   );
   const selectClasse = `${inputClasse} appearance-none pr-10`;
 
+  function renderCampo(rotulo: string, filho: ReactNode, opts: { obrigatorio?: boolean; dica?: string; acao?: ReactNode } = {}) {
+    return (
+      <div className="flex flex-col gap-1.5">
+        <div className="flex items-center justify-between gap-2">
+          <label className={rotuloCampo}>{rotulo}{opts.obrigatorio && <span className="text-[#B4441F]"> *</span>}</label>
+          {opts.acao}
+        </div>
+        {filho}
+        {opts.dica && <span className="text-[13px] text-[#55615B]">{opts.dica}</span>}
+      </div>
+    );
+  }
+  function renderSecao(titulo: string, filhos: ReactNode, subtitulo?: string) {
+    return (
+      <section className={secaoClasse}>
+        <div className="flex flex-col gap-0.5">
+          <h3 className={tituloSecao}>{titulo}</h3>
+          {subtitulo && <span className="text-[13px] text-[#55615B]">{subtitulo}</span>}
+        </div>
+        {filhos}
+      </section>
+    );
+  }
+  function renderSelectDs(valor: string, aoMudar: (v: string) => void, filhos: ReactNode) {
+    return (
+      <div className="relative">
+        <select className={selectClasse} value={valor} onChange={(e) => aoMudar(e.target.value)}>{filhos}</select>
+        {setaSelect}
+      </div>
+    );
+  }
+  function renderSegmentado(opcoes: readonly (readonly [string, string])[], valor: string, aoMudar: (v: string) => void) {
+    return (
+      <div className="grid gap-1 rounded-2xl bg-[#E7ECE9] p-1" style={{ gridTemplateColumns: `repeat(${opcoes.length}, minmax(0, 1fr))` }}>
+        {opcoes.map(([val, rot]) => (
+          <button key={val} type="button" onClick={() => aoMudar(val)} className={`h-11 rounded-xl text-sm font-semibold transition ${valor === val ? 'bg-white text-[#1E5B4A] shadow-sm' : 'text-[#55615B]'}`}>
+            {rot}
+          </button>
+        ))}
+      </div>
+    );
+  }
+  function renderBotaoDitar(campo: string, setter: React.Dispatch<React.SetStateAction<string>>) {
+    return (
+      <button
+        type="button"
+        onClick={() => alternarReconhecimentoVoz(campo, setter)}
+        className={`flex h-9 items-center gap-1.5 rounded-full border px-3 text-sm font-semibold ${gravandoCampo === campo ? 'animate-pulse border-red-200 bg-red-50 text-red-700' : 'border-[#B9CEC5] bg-[#EEF4F1] text-[#1E5B4A]'}`}
+      >
+        <Ic n="mic" /> {gravandoCampo === campo ? 'Ouvindo...' : 'Ditar'}
+      </button>
+    );
+  }
+  function renderChecagem(rotulo: string, descricao: string | null, ativo: boolean, aoMudar: (v: boolean) => void) {
+    return (
+      <button type="button" role="switch" aria-checked={ativo} onClick={() => aoMudar(!ativo)} className="flex items-center justify-between gap-3 rounded-xl bg-[#EEF4F1] px-3.5 py-3 text-left">
+        <span className="flex flex-col gap-0.5">
+          <span className="text-sm font-semibold text-[#26332E]">{rotulo}</span>
+          {descricao && <span className="text-[13px] text-[#55615B]">{descricao}</span>}
+        </span>
+        <span className={`relative h-8 w-[52px] shrink-0 rounded-full transition ${ativo ? 'bg-[#1E5B4A]' : 'bg-[#B9C4BF]'}`}>
+          <span className={`absolute top-[3px] h-[26px] w-[26px] rounded-full bg-white shadow transition-all ${ativo ? 'left-[23px]' : 'left-[3px]'}`} />
+        </span>
+      </button>
+    );
+  }
+
   // Barra fixa embaixo com Cancelar / Salvar (fica por cima da navegação inferior)
   function renderBarraAcoes(rotuloSalvar: string, aoSalvar: () => void, aoCancelar: () => void, ocupado: boolean) {
     return (
       <>
         <div className="fixed inset-x-0 bottom-0 z-50 border-t border-[#E1E6E3] bg-white">
           <div className="mx-auto flex w-full max-w-2xl gap-3 px-4 py-3">
-            <button type="button" onClick={aoCancelar} className="h-[50px] flex-1 rounded-[14px] border border-[#CDD5D1] bg-white text-base font-semibold text-[#26332E]">
+            <button type="button" onClick={() => { aoCancelar(); if (abaInferior === 'incluir') setTelaDetalhe(null); }} className="h-[50px] flex-1 rounded-[14px] border border-[#CDD5D1] bg-white text-base font-semibold text-[#26332E]">
               Cancelar
             </button>
             <button type="button" disabled={ocupado} onClick={aoSalvar} className="h-[50px] flex-[2] rounded-[14px] bg-[#1E5B4A] text-base font-semibold text-white disabled:opacity-50">
@@ -5819,7 +5886,7 @@ export default function Home() {
                   {!mostrarFormConvite ? (
                     <button onClick={abrirFormConvite} className={botaoPrimario}>+ Convidar alguém</button>
                   ) : (
-                    <div className="space-y-3 rounded-xl bg-white border border-[#E5E1DA] p-3">
+                    <div className="space-y-3 rounded-2xl bg-white border border-[#E1E6E3] p-4">
                       <input className={inputClasse} placeholder="nome ou apelido (ex: Babá Maria)" value={conviteApelido} onChange={(e) => setConviteApelido(e.target.value)} />
                       <select className={inputClasse} value={convitePapel} onChange={(e) => setConvitePapel(e.target.value as PapelUsuario)}>
                         <option value="familiar">Familiar (entra na família)</option>
@@ -6016,14 +6083,17 @@ export default function Home() {
                   onClick={() => {
                     if (telaDetalhe && formDaTela[telaDetalhe]?.[0]) {
                       formDaTela[telaDetalhe][1]();
+                      if (abaInferior === 'incluir') setTelaDetalhe(null);
                       return;
                     }
                     if (telaDetalhe === 'medicacoes' && mostrarFormMedicacao) {
                       setMostrarFormMedicacao(false);
+                      if (abaInferior === 'incluir') setTelaDetalhe(null);
                       return;
                     }
                     if ((telaDetalhe === 'consultas' || telaDetalhe === 'odontologia' || telaDetalhe === 'nutricionista') && mostrarFormConsulta) {
                       setMostrarFormConsulta(false);
+                      if (abaInferior === 'incluir') setTelaDetalhe(null);
                       return;
                     }
                     if (onboardingAtivo) {
@@ -6632,7 +6702,7 @@ export default function Home() {
                       <button
                         onClick={() => abrirNovaCondicao(ehCirurgias ? 'cirurgia' : 'doenca')}
                         aria-label={ehCirurgias ? 'Nova cirurgia ou internação' : 'Novo evento de saúde'}
-                        className="flex items-center gap-1 text-sm font-semibold text-teal-700"
+                        className="flex h-10 items-center gap-1.5 rounded-full bg-[#1E5B4A] px-4 text-sm font-semibold text-white"
                       >
                         <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
                         {ehCirurgias ? 'nova' : 'novo'}
@@ -6673,7 +6743,7 @@ export default function Home() {
                     role="button"
                     tabIndex={0}
                     onKeyDown={(e) => { if (e.key === 'Enter') abrirResumoEvento(c); }}
-                    className="w-full cursor-pointer rounded-xl border border-[#E5E1DA] p-3 text-left transition hover:bg-[#FAFAF8]"
+                    className="w-full cursor-pointer rounded-2xl bg-white border border-[#E1E6E3] p-4 text-left transition hover:bg-[#FAFAF8]"
                   >
                     <div className="flex items-center justify-between">
                       <p className="font-medium text-slate-800">{c.nome}</p>
@@ -6718,120 +6788,72 @@ export default function Home() {
 
                 {mostrarFormCondicao && (
                   <>
-                    <div className="space-y-4 rounded-2xl bg-white border border-[#E1E6E3] p-[18px]">
-                    <select
-                      className={inputClasse}
-                      value={novoTipoCondicao}
-                      onChange={(e) => {
-                        setNovoTipoCondicao(e.target.value);
-                        setNovoNomeCondicao('');
-                        setDoencaOutraNome('');
-                      }}
-                    >
-                      {!ehCirurgias && <option value="doenca">Hipótese diagnóstica</option>}
-                      <option value="cirurgia">Cirurgia</option>
-                      <option value="internacao">Internação</option>
-                    </select>
-                    {novoTipoCondicao === 'doenca' ? (
+                    <div className="space-y-4">
+
+                    {renderSecao(ehCirurgias ? 'O procedimento' : 'O problema de saúde', (
                       <>
-                        <select
-                          className={inputClasse}
-                          value={novoNomeCondicao}
-                          onChange={(e) => setNovoNomeCondicao(e.target.value)}
-                        >
-                          <option value="">selecione a hipótese diagnóstica</option>
-                          {categoriasDoencas.map((cat) => (
-                            <optgroup key={cat} label={cat}>
-                              {doencasComuns.filter((d) => d.categoria === cat).map((d) => (
-                                <option key={d.nome} value={d.nome}>{d.nome}</option>
-                              ))}
-                            </optgroup>
-                          ))}
-                        </select>
-                        {novoNomeCondicao === 'Outra doença (especificar)' && (
-                          <input
-                            className={inputClasse}
-                            placeholder="qual hipótese diagnóstica?"
-                            value={doencaOutraNome}
-                            onChange={(e) => setDoencaOutraNome(e.target.value)}
-                          />
+                        {renderCampo('Tipo', (
+                          <div className="flex flex-wrap gap-2">
+                            {(ehCirurgias ? [['cirurgia', 'Cirurgia'], ['internacao', 'Internação']] : [['doenca', 'Hipótese diagnóstica'], ['cirurgia', 'Cirurgia'], ['internacao', 'Internação']]).map(([val, rot]) => (
+                              <button key={val} type="button" className={chipDs(novoTipoCondicao === val)} onClick={() => { setNovoTipoCondicao(val); setNovoNomeCondicao(''); setDoencaOutraNome(''); }}>{rot}</button>
+                            ))}
+                          </div>
+                        ))}
+                        {novoTipoCondicao === 'doenca' ? (
+                          <>
+                            {renderCampo('Hipótese diagnóstica', renderSelectDs(novoNomeCondicao, setNovoNomeCondicao, (
+                              <>
+                                <option value="">selecione</option>
+                                {categoriasDoencas.map((cat) => (
+                                  <optgroup key={cat} label={cat}>
+                                    {doencasComuns.filter((d) => d.categoria === cat).map((d) => (
+                                      <option key={d.nome} value={d.nome}>{d.nome}</option>
+                                    ))}
+                                  </optgroup>
+                                ))}
+                              </>
+                            )), { obrigatorio: true })}
+                            {novoNomeCondicao === 'Outra doença (especificar)' && renderCampo('Qual?', (
+                              <input className={inputClasse} placeholder="Qual hipótese diagnóstica?" value={doencaOutraNome} onChange={(e) => setDoencaOutraNome(e.target.value)} />
+                            ))}
+                          </>
+                        ) : (
+                          renderCampo(novoTipoCondicao === 'internacao' ? 'Motivo da internação' : 'Nome da cirurgia', (
+                            <input className={inputClasse} placeholder={novoTipoCondicao === 'internacao' ? 'Ex.: Pneumonia' : 'Ex.: Apendicectomia'} value={novoNomeCondicao} onChange={(e) => setNovoNomeCondicao(e.target.value)} />
+                          ), { obrigatorio: true })
                         )}
+                        {renderCampo(novoTipoCondicao === 'doenca' ? 'Data do diagnóstico' : novoTipoCondicao === 'internacao' ? 'Data da internação' : 'Data da cirurgia', (
+                          <input className={inputClasse} type="date" value={novaDataCondicao} onChange={(e) => setNovaDataCondicao(e.target.value)} />
+                        ))}
+                        {ehCirurgias && renderCampo('Médico', (
+                          <input className={inputClasse} placeholder="Nome do médico" value={novoMedicoCondicao} onChange={(e) => setNovoMedicoCondicao(e.target.value)} />
+                        ), { dica: 'Opcional' })}
                       </>
-                    ) : (
-                      <input
-                        className={inputClasse}
-                        placeholder={novoTipoCondicao === 'internacao' ? 'motivo da internação (ex: Pneumonia)' : 'nome da cirurgia (ex: Apendicectomia)'}
-                        value={novoNomeCondicao}
-                        onChange={(e) => setNovoNomeCondicao(e.target.value)}
-                      />
-                    )}
-                    <input
-                      className={inputClasse}
-                      type="date"
-                      placeholder="data do diagnóstico/procedimento"
-                      value={novaDataCondicao}
-                      onChange={(e) => setNovaDataCondicao(e.target.value)}
-                    />
-                    {ehCirurgias && (
-                      <input
-                        className={inputClasse}
-                        placeholder="nome do médico (opcional)"
-                        value={novoMedicoCondicao}
-                        onChange={(e) => setNovoMedicoCondicao(e.target.value)}
-                      />
-                    )}
-                    <select className={inputClasse} value={novoStatusCondicao} onChange={(e) => setNovoStatusCondicao(e.target.value)}>
-                      <option value="ativa">Ativa</option>
-                      <option value="resolvida">Resolvida</option>
-                      <option value="cronica">Crônica</option>
-                    </select>
-                    <label className="flex items-center gap-2 text-sm text-slate-600">
-                      <input
-                        type="checkbox"
-                        checked={novoRelevanteGenetico}
-                        onChange={(e) => setNovoRelevanteGenetico(e.target.checked)}
-                      />
-                      Relevante geneticamente (aparece no histórico familiar)
-                    </label>
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="text-xs text-slate-400">breve relato (opcional)</label>
-                        <button
-                          type="button"
-                          onClick={() => alternarReconhecimentoVoz('obsCondicao', setNovaObservacaoCondicao)}
-                          className={`shrink-0 rounded-full px-2 py-1 text-xs ${gravandoCampo === 'obsCondicao' ? 'bg-red-100 text-red-700 animate-pulse' : 'bg-slate-100 text-slate-600'}`}
-                        >
-                          <Ic n="mic" /> {gravandoCampo === 'obsCondicao' ? 'Ouvindo...' : 'Falar'}
-                        </button>
-                      </div>
-                      <textarea
-                        className={inputClasse}
-                        placeholder="breve relato (opcional)"
-                        rows={2}
-                        value={novaObservacaoCondicao}
-                        onChange={(e) => setNovaObservacaoCondicao(e.target.value)}
-                      />
-                    </div>
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="text-xs text-slate-400">orientações (opcional)</label>
-                        <button
-                          type="button"
-                          onClick={() => alternarReconhecimentoVoz('orientacaoCondicao', setNovaOrientacaoCondicao)}
-                          className={`shrink-0 rounded-full px-2 py-1 text-xs ${gravandoCampo === 'orientacaoCondicao' ? 'bg-red-100 text-red-700 animate-pulse' : 'bg-slate-100 text-slate-600'}`}
-                        >
-                          <Ic n="mic" /> {gravandoCampo === 'orientacaoCondicao' ? 'Ouvindo...' : 'Falar'}
-                        </button>
-                      </div>
-                      <textarea
-                        className={inputClasse}
-                        placeholder="orientações do médico, cuidados a seguir... (opcional)"
-                        rows={2}
-                        value={novaOrientacaoCondicao}
-                        onChange={(e) => setNovaOrientacaoCondicao(e.target.value)}
-                      />
-                    </div>
-                    {erroCondicao && <p className="text-sm text-red-600">{erroCondicao}</p>}
+                    ))}
+                    {renderSecao('Situação', (
+                      <>
+                        {renderCampo('Como está agora?', (
+                          <div className="flex flex-wrap gap-2">
+                            {[['ativa', 'Ativa'], ['resolvida', 'Resolvida'], ['cronica', 'Crônica']].map(([val, rot]) => (
+                              <button key={val} type="button" className={chipDs(novoStatusCondicao === val)} onClick={() => setNovoStatusCondicao(val)}>{rot}</button>
+                            ))}
+                          </div>
+                        ))}
+                        {renderChecagem('Relevante geneticamente', 'Aparece no histórico familiar', novoRelevanteGenetico, setNovoRelevanteGenetico)}
+                      </>
+                    ))}
+                    {renderSecao('Detalhes', (
+                      <>
+                        {renderCampo('Breve relato', (
+                          <textarea className={inputClasse} placeholder="O que aconteceu, como começou..." rows={3} value={novaObservacaoCondicao} onChange={(e) => setNovaObservacaoCondicao(e.target.value)} />
+                        ), { acao: renderBotaoDitar('obsCondicao', setNovaObservacaoCondicao), dica: 'Opcional' })}
+                        {renderCampo('Orientações', (
+                          <textarea className={inputClasse} placeholder="Orientações do médico, cuidados a seguir..." rows={3} value={novaOrientacaoCondicao} onChange={(e) => setNovaOrientacaoCondicao(e.target.value)} />
+                        ), { acao: renderBotaoDitar('orientacaoCondicao', setNovaOrientacaoCondicao), dica: 'Opcional' })}
+                      </>
+                    ))}
+
+{erroCondicao && <p className="text-sm text-red-600">{erroCondicao}</p>}
                     {renderBarraAcoes('Salvar', salvarCondicao, () => setMostrarFormCondicao(false), carregando)}
                     {condicaoEditandoId && (
                       <button disabled={carregando} onClick={excluirCondicao} className="w-full rounded-[14px] border border-red-200 bg-white py-3 text-sm font-semibold text-red-600">
@@ -6901,7 +6923,7 @@ export default function Home() {
                           <button
                             key={m.id}
                             onClick={() => { setTelaDetalhe('medicacoes'); abrirEdicaoMedicacao(m); }}
-                            className="w-full rounded-xl border border-[#E5E1DA] p-3 text-left transition hover:bg-[#FAFAF8]"
+                            className="w-full rounded-2xl bg-white border border-[#E1E6E3] p-4 text-left transition hover:bg-[#FAFAF8]"
                           >
                             <p className="text-sm font-medium text-slate-800">{m.nome}</p>
                             <p className="text-xs text-slate-400">
@@ -6928,7 +6950,7 @@ export default function Home() {
                           <button
                             key={cs.id}
                             onClick={() => { setTelaDetalhe('consultas'); abrirEdicaoConsulta(cs); }}
-                            className="w-full rounded-xl border border-[#E5E1DA] p-3 text-left transition hover:bg-[#FAFAF8]"
+                            className="w-full rounded-2xl bg-white border border-[#E1E6E3] p-4 text-left transition hover:bg-[#FAFAF8]"
                           >
                             <p className="text-sm font-medium text-slate-800">{cs.especialidade?.nome || 'Consulta'}</p>
                             <p className="text-xs text-slate-400">{new Date(cs.data_hora).toLocaleDateString('pt-BR')}</p>
@@ -6953,7 +6975,7 @@ export default function Home() {
                           <button
                             key={e.id}
                             onClick={() => { setTelaDetalhe('exames'); abrirEdicaoExame(e); }}
-                            className="w-full rounded-xl border border-[#E5E1DA] p-3 text-left transition hover:bg-[#FAFAF8]"
+                            className="w-full rounded-2xl bg-white border border-[#E1E6E3] p-4 text-left transition hover:bg-[#FAFAF8]"
                           >
                             <p className="text-sm font-medium text-slate-800">{e.nome}</p>
                             <p className="text-xs text-slate-400">{formatarData(e.data_realizacao)}{e.laboratorio ? ` · ${e.laboratorio}` : ''}</p>
@@ -6978,7 +7000,7 @@ export default function Home() {
                           <button
                             key={v.id}
                             onClick={() => { setTelaDetalhe('vacinas'); abrirEdicaoVacina(v); }}
-                            className="w-full rounded-xl border border-[#E5E1DA] p-3 text-left transition hover:bg-[#FAFAF8]"
+                            className="w-full rounded-2xl bg-white border border-[#E1E6E3] p-4 text-left transition hover:bg-[#FAFAF8]"
                           >
                             <p className="text-sm font-medium text-slate-800">{v.nome}{v.dose ? ` — ${v.dose}` : ''}</p>
                             <p className="text-xs text-slate-400">{formatarData(v.data_aplicacao)}</p>
@@ -7003,7 +7025,7 @@ export default function Home() {
                           <button
                             key={m.id}
                             onClick={() => { setTelaDetalhe('crescimento'); abrirEdicaoCrescimento(m); }}
-                            className="w-full rounded-xl border border-[#E5E1DA] p-3 text-left transition hover:bg-[#FAFAF8]"
+                            className="w-full rounded-2xl bg-white border border-[#E1E6E3] p-4 text-left transition hover:bg-[#FAFAF8]"
                           >
                             <p className="text-sm font-medium text-slate-800">
                               {m.peso_kg != null ? `${m.peso_kg} kg` : ''}{m.peso_kg != null && m.altura_cm != null ? ' · ' : ''}{m.altura_cm != null ? `${m.altura_cm} cm` : ''}
@@ -7029,7 +7051,7 @@ export default function Home() {
                         <button
                           onClick={abrirNovaMedicacao}
                           aria-label="Nova medicação"
-                          className="flex items-center gap-1 text-sm font-semibold text-teal-700"
+                          className="flex h-10 items-center gap-1.5 rounded-full bg-[#1E5B4A] px-4 text-sm font-semibold text-white"
                         >
                           <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
                           nova
@@ -7235,7 +7257,7 @@ export default function Home() {
                         <button
                           onClick={() => abrirNovaConsulta(especialidadePadraoTela)}
                           aria-label="Nova consulta"
-                          className="flex items-center gap-1 text-sm font-semibold text-teal-700"
+                          className="flex h-10 items-center gap-1.5 rounded-full bg-[#1E5B4A] px-4 text-sm font-semibold text-white"
                         >
                           <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
                           {abaCons === 'a' ? 'agendar' : 'registrar'}
@@ -7974,7 +7996,7 @@ export default function Home() {
                       <button
                         onClick={abrirNovoMedico}
                         aria-label="Novo médico"
-                        className="flex items-center gap-1 text-sm font-semibold text-teal-700"
+                        className="flex h-10 items-center gap-1.5 rounded-full bg-[#1E5B4A] px-4 text-sm font-semibold text-white"
                       >
                         <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
                         novo
@@ -7990,7 +8012,7 @@ export default function Home() {
                       <button
                         key={m.id}
                         onClick={() => abrirEdicaoMedico(m)}
-                        className="w-full rounded-xl border border-[#E5E1DA] p-3 text-left transition hover:bg-[#FAFAF8]"
+                        className="w-full rounded-2xl bg-white border border-[#E1E6E3] p-4 text-left transition hover:bg-[#FAFAF8]"
                       >
                         <p className="font-medium text-slate-800">{m.nome} <Ic n="editar" /></p>
                         <p className="text-xs text-slate-400">
@@ -8004,51 +8026,39 @@ export default function Home() {
 
                 {mostrarFormMedico && (
                   <>
-                    <div className="space-y-4 rounded-2xl bg-white border border-[#E1E6E3] p-[18px]">
-                    <input
-                      className={inputClasse}
-                      placeholder="nome (ex: Dr. João Silva)"
-                      value={novoNomeMedico}
-                      onChange={(e) => setNovoNomeMedico(e.target.value)}
-                    />
-                    <select
-                      className={inputClasse}
-                      value={novaEspecialidadeMedico}
-                      onChange={(e) => setNovaEspecialidadeMedico(e.target.value)}
-                    >
-                      <option value="">especialidade (opcional)</option>
-                      {especialidadesMedicas.map((e) => (
-                        <option key={e} value={e}>{e}</option>
-                      ))}
-                    </select>
-                    {novaEspecialidadeMedico === 'Outros' && (
-                      <input
-                        className={inputClasse}
-                        placeholder="qual especialidade?"
-                        value={especialidadeOutraMedico}
-                        onChange={(e) => setEspecialidadeOutraMedico(e.target.value)}
-                      />
-                    )}
-                    <input
-                      className={inputClasse}
-                      placeholder="telefone (opcional)"
-                      value={novoTelefoneMedico}
-                      onChange={(e) => setNovoTelefoneMedico(e.target.value)}
-                    />
-                    <input
-                      className={inputClasse}
-                      placeholder="local/clínica (opcional)"
-                      value={novoLocalMedico}
-                      onChange={(e) => setNovoLocalMedico(e.target.value)}
-                    />
-                    <textarea
-                      className={inputClasse}
-                      placeholder="observação (opcional)"
-                      rows={2}
-                      value={novaObsMedico}
-                      onChange={(e) => setNovaObsMedico(e.target.value)}
-                    />
-                    {erroMedico && <p className="text-sm text-red-600">{erroMedico}</p>}
+                    <div className="space-y-4">
+
+                    {renderSecao('Quem é', (
+                      <>
+                        {renderCampo('Nome', (
+                          <input className={inputClasse} placeholder="Ex.: Dr. João Silva" value={novoNomeMedico} onChange={(e) => setNovoNomeMedico(e.target.value)} />
+                        ), { obrigatorio: true })}
+                        {renderCampo('Especialidade', renderSelectDs(novaEspecialidadeMedico, setNovaEspecialidadeMedico, (
+                          <>
+                            <option value="">Selecione</option>
+                            {especialidadesMedicas.map((e) => <option key={e} value={e}>{e}</option>)}
+                          </>
+                        )))}
+                        {novaEspecialidadeMedico === 'Outros' && renderCampo('Qual especialidade?', (
+                          <input className={inputClasse} placeholder="Especialidade" value={especialidadeOutraMedico} onChange={(e) => setEspecialidadeOutraMedico(e.target.value)} />
+                        ))}
+                      </>
+                    ))}
+                    {renderSecao('Contato', (
+                      <>
+                        {renderCampo('Telefone', (
+                          <input className={inputClasse} type="tel" inputMode="tel" placeholder="(11) 90000-0000" value={novoTelefoneMedico} onChange={(e) => setNovoTelefoneMedico(e.target.value)} />
+                        ), { dica: 'Opcional' })}
+                        {renderCampo('Local ou clínica', (
+                          <input className={inputClasse} placeholder="Ex.: Clínica Bem-Estar" value={novoLocalMedico} onChange={(e) => setNovoLocalMedico(e.target.value)} />
+                        ), { dica: 'Opcional' })}
+                      </>
+                    ))}
+                    {renderSecao('Observações', (
+                      <textarea className={inputClasse} placeholder="Ex.: atende só com hora marcada" rows={3} value={novaObsMedico} onChange={(e) => setNovaObsMedico(e.target.value)} />
+                    ))}
+
+{erroMedico && <p className="text-sm text-red-600">{erroMedico}</p>}
                     {renderBarraAcoes('Salvar', salvarMedico, () => setMostrarFormMedico(false), carregando)}
                     {medicoEditandoId && (
                       <button disabled={carregando} onClick={excluirMedico} className="w-full rounded-[14px] border border-red-200 bg-white py-3 text-sm font-semibold text-red-600">
@@ -8080,7 +8090,7 @@ export default function Home() {
                               <button
                                 onClick={() => abrirNovoExame(aba === 'a')}
                                 aria-label="Novo exame"
-                                className="flex items-center gap-1 text-sm font-semibold text-teal-700"
+                                className="flex h-10 items-center gap-1.5 rounded-full bg-[#1E5B4A] px-4 text-sm font-semibold text-white"
                               >
                                 <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
                                 {aba === 'a' ? 'agendar' : 'registrar'}
@@ -8118,7 +8128,7 @@ export default function Home() {
                             <button
                               key={e.id}
                               onClick={() => abrirEdicaoExame(e)}
-                              className="w-full rounded-xl border border-[#E5E1DA] p-3 text-left transition hover:bg-[#FAFAF8]"
+                              className="w-full rounded-2xl bg-white border border-[#E1E6E3] p-4 text-left transition hover:bg-[#FAFAF8]"
                             >
                               <div className="flex items-center justify-between gap-2">
                                 <p className="font-medium text-slate-800">{e.nome} <Ic n="editar" /></p>
@@ -8137,68 +8147,43 @@ export default function Home() {
 
                 {mostrarFormExame && (
                   <>
-                    <div className="space-y-4 rounded-2xl bg-white border border-[#E1E6E3] p-[18px]">
-                    {!exameEditandoId && (
-                      <div className="grid grid-cols-2 gap-2">
-                        {([['realizado', 'Já realizei'], ['solicitado', 'Vou fazer (agendar)']] as const).map(([val, rot]) => (
-                          <button key={val} type="button" onClick={() => setExameStatusOriginal(val)} className={`rounded-xl px-3 py-2 text-sm font-medium ${exameStatusOriginal === val ? 'bg-teal-700 text-white' : 'bg-slate-100 text-slate-600'}`}>{rot}</button>
-                        ))}
-                      </div>
-                    )}
-                    <input
-                      className={inputClasse}
-                      placeholder="nome do exame (ex: Hemograma completo)"
-                      value={novoNomeExame}
-                      onChange={(e) => setNovoNomeExame(e.target.value)}
-                    />
-                    <div>
-                      <label className="mb-1.5 block text-sm font-semibold text-[#26332E]">{exameStatusOriginal === 'solicitado' && !exameMarcarRealizado ? 'fazer até' : 'data de realização'}</label>
-                      <input
-                        className={inputClasse}
-                        type="date"
-                        value={novaDataExame}
-                        onChange={(e) => setNovaDataExame(e.target.value)}
-                      />
-                    </div>
-                    {exameEditandoId && exameStatusOriginal === 'solicitado' && (
-                      <label className="flex items-center gap-2 rounded-xl bg-teal-50 p-3 text-sm text-slate-700">
-                        <input type="checkbox" checked={exameMarcarRealizado} onChange={(e) => setExameMarcarRealizado(e.target.checked)} />
-                        Já realizei este exame (informe a data de realização acima)
-                      </label>
-                    )}
-                    <input
-                      className={inputClasse}
-                      placeholder="laboratório (opcional)"
-                      value={novoLaboratorioExame}
-                      onChange={(e) => setNovoLaboratorioExame(e.target.value)}
-                    />
-                    <select className={inputClasse} value={novaCondicaoRelacionadaExame} onChange={(e) => setNovaCondicaoRelacionadaExame(e.target.value)}>
-                      <option value="">relacionado a qual evento de saúde? (opcional)</option>
-                      {condicoes.map((c) => (
-                        <option key={c.id} value={c.id}>{c.nome}</option>
-                      ))}
-                    </select>
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="text-xs text-slate-400">resumo do resultado (opcional)</label>
-                        <button
-                          type="button"
-                          onClick={() => alternarReconhecimentoVoz('resultadoExame', setNovoResultadoExame)}
-                          className={`shrink-0 rounded-full px-2 py-1 text-xs ${gravandoCampo === 'resultadoExame' ? 'bg-red-100 text-red-700 animate-pulse' : 'bg-slate-100 text-slate-600'}`}
-                        >
-                          <Ic n="mic" /> {gravandoCampo === 'resultadoExame' ? 'Ouvindo...' : 'Falar'}
-                        </button>
-                      </div>
-                      <textarea
-                        className={inputClasse}
-                        placeholder="resumo do resultado (opcional)"
-                        rows={3}
-                        value={novoResultadoExame}
-                        onChange={(e) => setNovoResultadoExame(e.target.value)}
-                      />
-                    </div>
-                    {renderAnexosSaude('Resultado do exame em PDF ou foto.')}
-                    {erroExame && <p className="text-sm text-red-600">{erroExame}</p>}
+                    <div className="space-y-4">
+
+                    {!exameEditandoId && renderSegmentado([['realizado', 'Já realizei'], ['solicitado', 'Vou fazer (agendar)']], exameStatusOriginal, setExameStatusOriginal)}
+                    {renderSecao('O exame', (
+                      <>
+                        {renderCampo('Nome', (
+                          <input className={inputClasse} placeholder="Ex.: Hemograma completo" value={novoNomeExame} onChange={(e) => setNovoNomeExame(e.target.value)} />
+                        ), { obrigatorio: true })}
+                        {renderCampo('Laboratório ou clínica', (
+                          <input className={inputClasse} placeholder="Ex.: Laboratório Central" value={novoLaboratorioExame} onChange={(e) => setNovoLaboratorioExame(e.target.value)} />
+                        ), { dica: 'Opcional' })}
+                        {renderCampo('Relacionar a um problema de saúde', renderSelectDs(novaCondicaoRelacionadaExame, setNovaCondicaoRelacionadaExame, (
+                          <>
+                            <option value="">Nenhum</option>
+                            {condicoes.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                          </>
+                        )))}
+                      </>
+                    ))}
+                    {renderSecao('Quando', (
+                      <>
+                        {renderCampo(exameStatusOriginal === 'solicitado' && !exameMarcarRealizado ? 'Fazer até' : 'Data de realização', (
+                          <input className={inputClasse} type="date" value={novaDataExame} onChange={(e) => setNovaDataExame(e.target.value)} />
+                        ), { obrigatorio: true })}
+                        {exameEditandoId && exameStatusOriginal === 'solicitado' && renderChecagem('Já realizei este exame', 'Informe a data de realização acima', exameMarcarRealizado, setExameMarcarRealizado)}
+                      </>
+                    ))}
+                    {renderSecao('Resultado', (
+                      <>
+                        {renderCampo('Resumo do resultado', (
+                          <textarea className={inputClasse} placeholder="O que o exame mostrou, valores importantes..." rows={3} value={novoResultadoExame} onChange={(e) => setNovoResultadoExame(e.target.value)} />
+                        ), { acao: renderBotaoDitar('resultadoExame', setNovoResultadoExame), dica: 'Opcional' })}
+                        {renderAnexosSaude('Resultado do exame em PDF ou foto.')}
+                      </>
+                    ))}
+
+{erroExame && <p className="text-sm text-red-600">{erroExame}</p>}
                     {renderBarraAcoes('Salvar', salvarExame, () => setMostrarFormExame(false), carregando)}
                     {exameEditandoId && (
                       <button disabled={carregando} onClick={excluirExame} className="w-full rounded-[14px] border border-red-200 bg-white py-3 text-sm font-semibold text-red-600">
@@ -8229,7 +8214,7 @@ export default function Home() {
                               <button
                                 onClick={() => abrirNovaVacina(aba === 'a')}
                                 aria-label="Nova vacina"
-                                className="flex items-center gap-1 text-sm font-semibold text-teal-700"
+                                className="flex h-10 items-center gap-1.5 rounded-full bg-[#1E5B4A] px-4 text-sm font-semibold text-white"
                               >
                                 <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
                                 {aba === 'a' ? 'agendar' : 'registrar'}
@@ -8251,7 +8236,7 @@ export default function Home() {
                         <div key={v.id} className="space-y-1">
                         <button
                           onClick={() => abrirEdicaoVacina(v)}
-                          className="w-full rounded-xl border border-[#E5E1DA] p-3 text-left transition hover:bg-[#FAFAF8]"
+                          className="w-full rounded-2xl bg-white border border-[#E1E6E3] p-4 text-left transition hover:bg-[#FAFAF8]"
                         >
                           <div className="flex items-center justify-between">
                             <p className="font-medium text-slate-800">{v.nome} <Ic n="editar" /></p>
@@ -8284,92 +8269,52 @@ export default function Home() {
 
                 {mostrarFormVacina && (
                   <>
-                    <div className="space-y-4 rounded-2xl bg-white border border-[#E1E6E3] p-[18px]">
-                    {!vacinaEditandoId && (
-                      <div className="grid grid-cols-2 gap-2">
-                        {([['realizado', 'Já tomei'], ['indicada', 'Vou tomar (agendar)']] as const).map(([val, rot]) => (
-                          <button key={val} type="button" onClick={() => setVacinaStatusOriginal(val)} className={`rounded-xl px-3 py-2 text-sm font-medium ${vacinaStatusOriginal === val ? 'bg-teal-700 text-white' : 'bg-slate-100 text-slate-600'}`}>{rot}</button>
+                    <div className="space-y-4">
+
+                    {!vacinaEditandoId && renderSegmentado([['realizado', 'Já tomei'], ['indicada', 'Vou tomar (agendar)']], vacinaStatusOriginal, setVacinaStatusOriginal)}
+                    {renderSecao('A vacina', (
+                      <>
+                        {renderCampo('Vacina', renderSelectDs(novoNomeVacina, (v) => { setNovoNomeVacina(v); setVacinaOutroNome(''); }, (
+                          <>
+                            <option value="">selecione</option>
+                            {vacinasComuns.map((v) => <option key={v} value={v}>{v}</option>)}
+                          </>
+                        )), { obrigatorio: true })}
+                        {novoNomeVacina === 'Outra (especificar)' && renderCampo('Qual vacina?', (
+                          <input className={inputClasse} placeholder="Nome da vacina" value={vacinaOutroNome} onChange={(e) => setVacinaOutroNome(e.target.value)} />
                         ))}
-                      </div>
-                    )}
-                    <select
-                      className={inputClasse}
-                      value={novoNomeVacina}
-                      onChange={(e) => {
-                        setNovoNomeVacina(e.target.value);
-                        setVacinaOutroNome('');
-                      }}
-                    >
-                      <option value="">selecione a vacina</option>
-                      {vacinasComuns.map((v) => (
-                        <option key={v} value={v}>{v}</option>
-                      ))}
-                    </select>
-                    {novoNomeVacina === 'Outra (especificar)' && (
-                      <input
-                        className={inputClasse}
-                        placeholder="qual vacina?"
-                        value={vacinaOutroNome}
-                        onChange={(e) => setVacinaOutroNome(e.target.value)}
-                      />
-                    )}
-                    <input
-                      className={inputClasse}
-                      placeholder="dose (ex: 1ª dose, reforço)"
-                      value={novaDoseVacina}
-                      onChange={(e) => setNovaDoseVacina(e.target.value)}
-                    />
-                    <div>
-                      <label className="mb-1.5 block text-sm font-semibold text-[#26332E]">{vacinaStatusOriginal === 'indicada' && !vacinaMarcarRealizada ? 'data prevista' : 'data de aplicação'}</label>
-                      <input
-                        className={inputClasse}
-                        type="date"
-                        value={novaDataVacina}
-                        onChange={(e) => setNovaDataVacina(e.target.value)}
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1.5 block text-sm font-semibold text-[#26332E]">próxima dose (opcional)</label>
-                      <input
-                        className={inputClasse}
-                        type="date"
-                        value={novaProximaDoseVacina}
-                        onChange={(e) => setNovaProximaDoseVacina(e.target.value)}
-                      />
-                    </div>
-                    {vacinaEditandoId && vacinaStatusOriginal === 'indicada' && (
-                      <label className="flex items-center gap-2 rounded-xl bg-teal-50 p-3 text-sm text-slate-700">
-                        <input type="checkbox" checked={vacinaMarcarRealizada} onChange={(e) => setVacinaMarcarRealizada(e.target.checked)} />
-                        Já tomei esta vacina (informe a data de aplicação acima)
-                      </label>
-                    )}
-                    <select className={inputClasse} value={novaCondicaoRelacionadaVacina} onChange={(e) => setNovaCondicaoRelacionadaVacina(e.target.value)}>
-                      <option value="">relacionada a qual evento de saúde? (opcional)</option>
-                      {condicoes.map((c) => (
-                        <option key={c.id} value={c.id}>{c.nome}</option>
-                      ))}
-                    </select>
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="text-xs text-slate-400">observações (opcional)</label>
-                        <button
-                          type="button"
-                          onClick={() => alternarReconhecimentoVoz('obsVacina', setNovaObsVacina)}
-                          className={`shrink-0 rounded-full px-2 py-1 text-xs ${gravandoCampo === 'obsVacina' ? 'bg-red-100 text-red-700 animate-pulse' : 'bg-slate-100 text-slate-600'}`}
-                        >
-                          <Ic n="mic" /> {gravandoCampo === 'obsVacina' ? 'Ouvindo...' : 'Falar'}
-                        </button>
-                      </div>
-                      <textarea
-                        className={inputClasse}
-                        placeholder="observações (opcional)"
-                        rows={2}
-                        value={novaObsVacina}
-                        onChange={(e) => setNovaObsVacina(e.target.value)}
-                      />
-                    </div>
-                    {renderAnexosSaude('Foto ou PDF da carteirinha de vacinação (o app ainda não lê o conteúdo, só guarda).')}
-                    {erroVacina && <p className="text-sm text-red-600">{erroVacina}</p>}
+                        {renderCampo('Dose', (
+                          <input className={inputClasse} placeholder="Ex.: 1ª dose, reforço" value={novaDoseVacina} onChange={(e) => setNovaDoseVacina(e.target.value)} />
+                        ), { dica: 'Opcional' })}
+                      </>
+                    ))}
+                    {renderSecao('Quando', (
+                      <>
+                        {renderCampo(vacinaStatusOriginal === 'indicada' && !vacinaMarcarRealizada ? 'Data prevista' : 'Data de aplicação', (
+                          <input className={inputClasse} type="date" value={novaDataVacina} onChange={(e) => setNovaDataVacina(e.target.value)} />
+                        ), { obrigatorio: true })}
+                        {vacinaEditandoId && vacinaStatusOriginal === 'indicada' && renderChecagem('Já tomei esta vacina', 'Informe a data de aplicação acima', vacinaMarcarRealizada, setVacinaMarcarRealizada)}
+                        {renderCampo('Próxima dose', (
+                          <input className={inputClasse} type="date" value={novaProximaDoseVacina} onChange={(e) => setNovaProximaDoseVacina(e.target.value)} />
+                        ), { dica: 'Opcional' })}
+                      </>
+                    ))}
+                    {renderSecao('Detalhes', (
+                      <>
+                        {renderCampo('Relacionar a um problema de saúde', renderSelectDs(novaCondicaoRelacionadaVacina, setNovaCondicaoRelacionadaVacina, (
+                          <>
+                            <option value="">Nenhum</option>
+                            {condicoes.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                          </>
+                        )))}
+                        {renderCampo('Observações', (
+                          <textarea className={inputClasse} placeholder="Reações, lote, onde tomou..." rows={3} value={novaObsVacina} onChange={(e) => setNovaObsVacina(e.target.value)} />
+                        ), { acao: renderBotaoDitar('obsVacina', setNovaObsVacina), dica: 'Opcional' })}
+                        {renderAnexosSaude('Foto ou PDF da carteirinha de vacinação (o app ainda não lê o conteúdo, só guarda).')}
+                      </>
+                    ))}
+
+{erroVacina && <p className="text-sm text-red-600">{erroVacina}</p>}
                     {renderBarraAcoes('Salvar', salvarVacina, () => setMostrarFormVacina(false), carregando)}
                     {vacinaEditandoId && (
                       <button disabled={carregando} onClick={excluirVacina} className="w-full rounded-[14px] border border-red-200 bg-white py-3 text-sm font-semibold text-red-600">
@@ -8929,7 +8874,7 @@ export default function Home() {
                 <p className="text-sm text-slate-500">Humor e pontos de atenção emocional.</p>
                 {(saudeMental?.ideacao_suicida || saudeMental?.automutilacao) && (
                   <div className="rounded-xl bg-amber-50 border border-amber-100 p-3">
-                    <p className="text-xs text-amber-800">
+                    <p className="text-sm text-amber-800">
                       Se isso ainda for uma preocupação atual, vale buscar apoio profissional (psicólogo/psiquiatra) o quanto antes — e, em caso de risco imediato, o CVV (188) atende 24h.
                     </p>
                   </div>
@@ -9020,7 +8965,7 @@ export default function Home() {
                       <button
                         onClick={abrirNovaMedicaoCrescimento}
                         aria-label="Nova medição"
-                        className="flex items-center gap-1 text-sm font-semibold text-teal-700"
+                        className="flex h-10 items-center gap-1.5 rounded-full bg-[#1E5B4A] px-4 text-sm font-semibold text-white"
                       >
                         <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
                         nova
@@ -9029,7 +8974,7 @@ export default function Home() {
                   </div>
                 )}
                 {!mostrarFormCrescimento && crescimento.length >= 2 && (
-                  <div className="rounded-xl bg-white border border-[#E5E1DA] p-3">
+                  <div className="rounded-2xl bg-white border border-[#E1E6E3] p-4">
                     <p className="text-xs font-medium text-slate-500 mb-2">Peso (kg) ao longo do tempo</p>
                     <ResponsiveContainer width="100%" height={180}>
                       <LineChart data={crescimento.map((m) => ({
@@ -9072,7 +9017,7 @@ export default function Home() {
                     <button
                       key={m.id}
                       onClick={() => abrirEdicaoCrescimento(m)}
-                      className="w-full rounded-xl border border-[#E5E1DA] p-3 text-left transition hover:bg-[#FAFAF8]"
+                      className="w-full rounded-2xl bg-white border border-[#E1E6E3] p-4 text-left transition hover:bg-[#FAFAF8]"
                     >
                       <div className="flex items-center justify-between">
                         <p className="font-medium text-slate-800">{formatarData(m.data_medicao)} <Ic n="editar" /></p>
@@ -9106,35 +9051,34 @@ export default function Home() {
 
                 {mostrarFormCrescimento && (
                   <>
-                    <div className="space-y-4 rounded-2xl bg-white border border-[#E1E6E3] p-[18px]">
-                    <div>
-                      <label className="mb-1.5 block text-sm font-semibold text-[#26332E]">data da medição</label>
-                      <input
-                        className={inputClasse}
-                        type="date"
-                        value={novaDataCrescimento}
-                        onChange={(e) => setNovaDataCrescimento(e.target.value)}
-                      />
-                    </div>
-                    <input
-                      className={inputClasse}
-                      placeholder="peso (kg, opcional)"
-                      value={novoPesoCrescimento}
-                      onChange={(e) => setNovoPesoCrescimento(e.target.value)}
-                    />
-                    <input
-                      className={inputClasse}
-                      placeholder="altura (cm, opcional)"
-                      value={novaAlturaCrescimento}
-                      onChange={(e) => setNovaAlturaCrescimento(e.target.value)}
-                    />
-                    <select className={inputClasse} value={novaCondicaoRelacionadaCrescimento} onChange={(e) => setNovaCondicaoRelacionadaCrescimento(e.target.value)}>
-                      <option value="">relacionada a qual evento de saúde? (opcional)</option>
-                      {condicoes.map((c) => (
-                        <option key={c.id} value={c.id}>{c.nome}</option>
-                      ))}
-                    </select>
-                    {erroCrescimento && <p className="text-sm text-red-600">{erroCrescimento}</p>}
+                    <div className="space-y-4">
+
+                    {renderSecao('A medição', (
+                      <>
+                        {renderCampo('Data da medição', (
+                          <input className={inputClasse} type="date" value={novaDataCrescimento} onChange={(e) => setNovaDataCrescimento(e.target.value)} />
+                        ), { obrigatorio: true })}
+                        <div className="grid grid-cols-2 gap-3">
+                          {renderCampo('Peso (kg)', (
+                            <input className={inputClasse} inputMode="decimal" placeholder="Ex.: 12,5" value={novoPesoCrescimento} onChange={(e) => setNovoPesoCrescimento(e.target.value)} />
+                          ))}
+                          {renderCampo('Altura (cm)', (
+                            <input className={inputClasse} inputMode="decimal" placeholder="Ex.: 88" value={novaAlturaCrescimento} onChange={(e) => setNovaAlturaCrescimento(e.target.value)} />
+                          ))}
+                        </div>
+                        <span className="text-[13px] text-[#55615B]">Preencha pelo menos um dos dois.</span>
+                      </>
+                    ))}
+                    {renderSecao('Origem', (
+                      renderCampo('Relacionar a um problema de saúde', renderSelectDs(novaCondicaoRelacionadaCrescimento, setNovaCondicaoRelacionadaCrescimento, (
+                        <>
+                          <option value="">Nenhum</option>
+                          {condicoes.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                        </>
+                      )))
+                    ))}
+
+{erroCrescimento && <p className="text-sm text-red-600">{erroCrescimento}</p>}
                     {renderBarraAcoes('Salvar', salvarMedicaoCrescimento, () => setMostrarFormCrescimento(false), carregando)}
                     {crescimentoEditandoId && (
                       <button disabled={carregando} onClick={excluirMedicaoCrescimento} className="w-full rounded-[14px] border border-red-200 bg-white py-3 text-sm font-semibold text-red-600">
@@ -9239,7 +9183,7 @@ export default function Home() {
             {telaDetalhe === 'riscos' && (
               <div className="space-y-3">
                 <div className="rounded-xl bg-amber-50 border border-amber-100 p-3">
-                  <p className="text-xs text-amber-800">
+                  <p className="text-sm text-amber-800">
                     Estas são sugestões gerais com base no histórico da família, não um diagnóstico. Converse sempre com um médico antes de mudar sua rotina de exames.
                   </p>
                 </div>
@@ -9276,7 +9220,7 @@ export default function Home() {
                 {membroSelecionado.parentesco && riscos != null && riscos
                   .filter((r) => !filtroEspecialidadeRisco || r.categoria === filtroEspecialidadeRisco)
                   .map((r) => (
-                  <div key={r.id} className="rounded-xl bg-white border border-[#E5E1DA] p-3">
+                  <div key={r.id} className="rounded-2xl bg-white border border-[#E1E6E3] p-4">
                     <div className="flex items-start justify-between gap-2">
                       <div>
                         <span className="inline-block mb-1 text-xs bg-slate-100 text-slate-600 rounded-full px-2 py-0.5">
@@ -9304,7 +9248,7 @@ export default function Home() {
                       {historicoGeral
                         .filter((nome) => !filtroEspecialidadeRisco || obterCategoriaDoenca(nome) === filtroEspecialidadeRisco)
                         .map((nome) => (
-                        <div key={nome} className="rounded-xl bg-white border border-[#E5E1DA] p-3">
+                        <div key={nome} className="rounded-2xl bg-white border border-[#E1E6E3] p-4">
                           <span className="inline-block mb-1 text-xs bg-slate-100 text-slate-600 rounded-full px-2 py-0.5">
                             {obterCategoriaDoenca(nome)}
                           </span>
@@ -9404,7 +9348,7 @@ export default function Home() {
                   <p className="text-xs text-slate-400">Escolha o que você quer acompanhar.</p>
                   <button
                     onClick={() => setTelaDetalhe('nutricionista')}
-                    className="w-full flex items-center gap-3 rounded-xl border border-[#E5E1DA] bg-white p-3 text-left transition hover:bg-[#FAFAF8]"
+                    className="w-full flex items-center gap-3 rounded-2xl border border-[#E1E6E3] bg-white p-4 text-left transition hover:bg-[#FAFAF8]"
                   >
                     <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#CCFBF1] text-teal-700">
                       {iconeSecao('nutricionista', 18)}
@@ -9421,7 +9365,7 @@ export default function Home() {
                   </button>
                   <button
                     onClick={() => setTelaDetalhe('esportes')}
-                    className="w-full flex items-center gap-3 rounded-xl border border-[#E5E1DA] bg-white p-3 text-left transition hover:bg-[#FAFAF8]"
+                    className="w-full flex items-center gap-3 rounded-2xl border border-[#E1E6E3] bg-white p-4 text-left transition hover:bg-[#FAFAF8]"
                   >
                     <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#CCFBF1] text-teal-700">
                       {iconeSecao('esportes', 18)}
@@ -9444,7 +9388,7 @@ export default function Home() {
                     <div className="flex items-center justify-between">
                       <p className="text-xs text-slate-400">{terapiasVisiveis.length} {abaTer === 'a' ? 'em andamento' : 'encerrada'}{terapiasVisiveis.length === 1 || abaTer === 'a' ? '' : 's'}</p>
                       {abaInferior !== 'consultar' && (
-                        <button onClick={abrirNovaTerapia} aria-label="Nova terapia" className="flex items-center gap-1 text-sm font-semibold text-teal-700">
+                        <button onClick={abrirNovaTerapia} aria-label="Nova terapia" className="flex h-10 items-center gap-1.5 rounded-full bg-[#1E5B4A] px-4 text-sm font-semibold text-white">
                           <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
                           nova
                         </button>
@@ -9460,7 +9404,7 @@ export default function Home() {
                       <button
                         key={t.id}
                         onClick={() => abrirEdicaoTerapia(t)}
-                        className="w-full rounded-xl border border-[#E5E1DA] p-3 text-left transition hover:bg-[#FAFAF8]"
+                        className="w-full rounded-2xl bg-white border border-[#E1E6E3] p-4 text-left transition hover:bg-[#FAFAF8]"
                       >
                         <div className="flex items-center justify-between">
                           <p className="font-medium text-slate-800">{t.tipo} <Ic n="editar" /></p>
@@ -9485,30 +9429,50 @@ export default function Home() {
 
                 {mostrarFormTerapia && (
                   <>
-                    <div className="space-y-4 rounded-2xl bg-white border border-[#E1E6E3] p-[18px]">
-                      <select className={inputClasse} value={formTerapia.tipo} onChange={(e) => setFormTerapia({ ...formTerapia, tipo: e.target.value, outroTipo: '' })}>
-                        <option value="">tipo de terapia</option>
-                        {tiposTerapia.map((tt) => (
-                          <option key={tt} value={tt}>{tt}</option>
-                        ))}
-                      </select>
-                      {formTerapia.tipo === 'Outra (especificar)' && (
-                        <input className={inputClasse} placeholder="qual terapia?" value={formTerapia.outroTipo} onChange={(e) => setFormTerapia({ ...formTerapia, outroTipo: e.target.value })} />
-                      )}
-                      <input className={inputClasse} placeholder="frequência (ex: 2x por semana)" value={formTerapia.frequencia} onChange={(e) => setFormTerapia({ ...formTerapia, frequencia: e.target.value })} />
-                      <div>
-                        <label className="mb-1.5 block text-sm font-semibold text-[#26332E]">data de início</label>
-                        <input className={inputClasse} type="date" value={formTerapia.inicio} onChange={(e) => setFormTerapia({ ...formTerapia, inicio: e.target.value })} />
-                      </div>
-                      <div>
-                        <label className="mb-1.5 block text-sm font-semibold text-[#26332E]">data de término (deixe em branco se ainda estiver em andamento)</label>
-                        <input className={inputClasse} type="date" value={formTerapia.fim} onChange={(e) => setFormTerapia({ ...formTerapia, fim: e.target.value })} />
-                      </div>
-                      <input className={inputClasse} placeholder="profissional (opcional)" value={formTerapia.profissional} onChange={(e) => setFormTerapia({ ...formTerapia, profissional: e.target.value })} />
-                      <input className={inputClasse} placeholder="clínica/local (opcional)" value={formTerapia.local} onChange={(e) => setFormTerapia({ ...formTerapia, local: e.target.value })} />
-                      <textarea className={inputClasse} placeholder="observações (opcional)" rows={2} value={formTerapia.obs} onChange={(e) => setFormTerapia({ ...formTerapia, obs: e.target.value })} />
-                      <div className="space-y-2 rounded-xl bg-slate-50 p-3">
-                        <p className="text-xs font-bold uppercase tracking-wider text-teal-800">Datas das sessões</p>
+                    <div className="space-y-4">
+
+                      {renderSecao('A terapia', (
+                        <>
+                          {renderCampo('Tipo de terapia', renderSelectDs(formTerapia.tipo, (v) => setFormTerapia({ ...formTerapia, tipo: v, outroTipo: '' }), (
+                            <>
+                              <option value="">Selecione</option>
+                              {tiposTerapia.map((tt) => <option key={tt} value={tt}>{tt}</option>)}
+                            </>
+                          )), { obrigatorio: true })}
+                          {formTerapia.tipo === 'Outra (especificar)' && renderCampo('Qual terapia?', (
+                            <input className={inputClasse} placeholder="Nome da terapia" value={formTerapia.outroTipo} onChange={(e) => setFormTerapia({ ...formTerapia, outroTipo: e.target.value })} />
+                          ))}
+                          {renderCampo('Frequência', (
+                            <input className={inputClasse} placeholder="Ex.: 2x por semana" value={formTerapia.frequencia} onChange={(e) => setFormTerapia({ ...formTerapia, frequencia: e.target.value })} />
+                          ))}
+                        </>
+                      ))}
+                      {renderSecao('Período', (
+                        <>
+                          {renderCampo('Começou em', (
+                            <input className={inputClasse} type="date" value={formTerapia.inicio} onChange={(e) => setFormTerapia({ ...formTerapia, inicio: e.target.value })} />
+                          ))}
+                          {renderCampo('Terminou em', (
+                            <input className={inputClasse} type="date" value={formTerapia.fim} onChange={(e) => setFormTerapia({ ...formTerapia, fim: e.target.value })} />
+                          ), { dica: 'Deixe em branco se ainda estiver em andamento.' })}
+                        </>
+                      ))}
+                      {renderSecao('Quem atende', (
+                        <>
+                          {renderCampo('Profissional', (
+                            <input className={inputClasse} placeholder="Nome do profissional" value={formTerapia.profissional} onChange={(e) => setFormTerapia({ ...formTerapia, profissional: e.target.value })} />
+                          ), { dica: 'Opcional' })}
+                          {renderCampo('Clínica ou local', (
+                            <input className={inputClasse} placeholder="Ex.: Clínica Crescer" value={formTerapia.local} onChange={(e) => setFormTerapia({ ...formTerapia, local: e.target.value })} />
+                          ), { dica: 'Opcional' })}
+                          {renderCampo('Observações', (
+                            <textarea className={inputClasse} rows={3} placeholder="Anotações sobre a terapia" value={formTerapia.obs} onChange={(e) => setFormTerapia({ ...formTerapia, obs: e.target.value })} />
+                          ), { dica: 'Opcional' })}
+                        </>
+                      ))}
+
+<section className={secaoClasse}>
+                        <h3 className={tituloSecao}>Datas das sessões</h3>
                         {(() => {
                           const lista: { chave: string; id?: string; data_hora: string; lembrete: boolean; idx?: number }[] = terapiaEditandoId
                             ? sessoesTerapia.filter((s) => s.terapia_id === terapiaEditandoId).map((s) => ({ chave: s.id, id: s.id, data_hora: s.data_hora, lembrete: s.lembrete }))
@@ -9563,7 +9527,7 @@ export default function Home() {
                         <button type="button" onClick={adicionarSessaoTerapia} disabled={!novaSessaoDataHora} className="w-full rounded-xl border border-teal-700 py-2 text-sm font-semibold text-teal-800 disabled:opacity-40">
                           + Adicionar data
                         </button>
-                      </div>
+                      </section>
                       {erroTerapia && <p className="text-sm text-red-600">{erroTerapia}</p>}
                       {renderBarraAcoes('Salvar', salvarTerapia, () => setMostrarFormTerapia(false), carregando)}
                       {terapiaEditandoId && (
@@ -9587,7 +9551,7 @@ export default function Home() {
                         <button
                           onClick={abrirNovaAtividadeFisica}
                           aria-label="Nova atividade"
-                          className="flex items-center gap-1 text-sm font-semibold text-teal-700"
+                          className="flex h-10 items-center gap-1.5 rounded-full bg-[#1E5B4A] px-4 text-sm font-semibold text-white"
                         >
                           <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
                           nova
@@ -9601,7 +9565,7 @@ export default function Home() {
                       <button
                         key={a.id}
                         onClick={() => abrirEdicaoAtividadeFisica(a)}
-                        className="w-full rounded-xl border border-[#E5E1DA] p-3 text-left transition hover:bg-[#FAFAF8]"
+                        className="w-full rounded-2xl bg-white border border-[#E1E6E3] p-4 text-left transition hover:bg-[#FAFAF8]"
                       >
                         <div className="flex items-center justify-between">
                           <p className="font-medium text-slate-800">{a.nome_atividade} <Ic n="editar" /></p>
@@ -9627,83 +9591,55 @@ export default function Home() {
 
                 {mostrarFormAtividadeFisica && (
                   <>
-                    <div className="space-y-4 rounded-2xl bg-white border border-[#E1E6E3] p-[18px]">
-                      <select
-                        className={inputClasse}
-                        value={novoNomeAtividade}
-                        onChange={(e) => {
-                          setNovoNomeAtividade(e.target.value);
-                          setAtividadeOutroNome('');
-                        }}
-                      >
-                        <option value="">selecione a atividade</option>
-                        {atividadesFisicasComuns.map((grupo) => (
-                          <optgroup key={grupo.categoria} label={grupo.categoria}>
-                            {grupo.itens.map((nome) => (
-                              <option key={nome} value={nome}>{nome}</option>
-                            ))}
-                          </optgroup>
-                        ))}
-                        <option value="Outra (especificar)">Outra (especificar)</option>
-                      </select>
-                      {novoNomeAtividade === 'Outra (especificar)' && (
-                        <input
-                          className={inputClasse}
-                          placeholder="qual atividade?"
-                          value={atividadeOutroNome}
-                          onChange={(e) => setAtividadeOutroNome(e.target.value)}
-                        />
-                      )}
-                      <div>
-                        <label className="mb-1.5 block text-sm font-semibold text-[#26332E]">data de início</label>
-                        <input
-                          className={inputClasse}
-                          type="date"
-                          value={novaDataInicioAtividade}
-                          onChange={(e) => setNovaDataInicioAtividade(e.target.value)}
-                        />
-                      </div>
-                      <div>
-                        <label className="mb-1.5 block text-sm font-semibold text-[#26332E]">data de término (deixe em branco se ainda estiver praticando)</label>
-                        <input
-                          className={inputClasse}
-                          type="date"
-                          value={novaDataFimAtividade}
-                          onChange={(e) => setNovaDataFimAtividade(e.target.value)}
-                        />
-                      </div>
-                      <input
-                        className={inputClasse}
-                        placeholder="frequência (ex: 2x por semana)"
-                        value={novaFrequenciaAtividade}
-                        onChange={(e) => setNovaFrequenciaAtividade(e.target.value)}
-                      />
-                      <input
-                        className={inputClasse}
-                        placeholder="local/escola/clube (opcional)"
-                        value={novoLocalAtividade}
-                        onChange={(e) => setNovoLocalAtividade(e.target.value)}
-                      />
-                      <input
-                        className={inputClasse}
-                        placeholder="professor(a)/instrutor(a) (opcional)"
-                        value={novoInstrutorAtividade}
-                        onChange={(e) => setNovoInstrutorAtividade(e.target.value)}
-                      />
-                      <input
-                        className={inputClasse}
-                        placeholder="nível/graduação (ex: iniciante, faixa branca) (opcional)"
-                        value={novoNivelAtividade}
-                        onChange={(e) => setNovoNivelAtividade(e.target.value)}
-                      />
-                      <textarea
-                        className={inputClasse}
-                        placeholder="observações (opcional)"
-                        rows={2}
-                        value={novaObsAtividade}
-                        onChange={(e) => setNovaObsAtividade(e.target.value)}
-                      />
-                      {erroAtividadeFisica && <p className="text-sm text-red-600">{erroAtividadeFisica}</p>}
+                    <div className="space-y-4">
+                      {renderSecao('A atividade', (
+                        <>
+                          {renderCampo('Atividade', renderSelectDs(novoNomeAtividade, (v) => { setNovoNomeAtividade(v); setAtividadeOutroNome(''); }, (
+                            <>
+                              <option value="">Selecione</option>
+                              {atividadesFisicasComuns.map((grupo) => (
+                                <optgroup key={grupo.categoria} label={grupo.categoria}>
+                                  {grupo.itens.map((nome) => <option key={nome} value={nome}>{nome}</option>)}
+                                </optgroup>
+                              ))}
+                              <option value="Outra (especificar)">Outra (especificar)</option>
+                            </>
+                          )), { obrigatorio: true })}
+                          {novoNomeAtividade === 'Outra (especificar)' && renderCampo('Qual atividade?', (
+                            <input className={inputClasse} placeholder="Nome da atividade" value={atividadeOutroNome} onChange={(e) => setAtividadeOutroNome(e.target.value)} />
+                          ))}
+                          {renderCampo('Frequência', (
+                            <input className={inputClasse} placeholder="Ex.: 2x por semana" value={novaFrequenciaAtividade} onChange={(e) => setNovaFrequenciaAtividade(e.target.value)} />
+                          ))}
+                          {renderCampo('Nível ou graduação', (
+                            <input className={inputClasse} placeholder="Ex.: iniciante, faixa branca" value={novoNivelAtividade} onChange={(e) => setNovoNivelAtividade(e.target.value)} />
+                          ), { dica: 'Opcional' })}
+                        </>
+                      ))}
+                      {renderSecao('Período', (
+                        <>
+                          {renderCampo('Começou em', (
+                            <input className={inputClasse} type="date" value={novaDataInicioAtividade} onChange={(e) => setNovaDataInicioAtividade(e.target.value)} />
+                          ))}
+                          {renderCampo('Parou em', (
+                            <input className={inputClasse} type="date" value={novaDataFimAtividade} onChange={(e) => setNovaDataFimAtividade(e.target.value)} />
+                          ), { dica: 'Deixe em branco se ainda estiver praticando.' })}
+                        </>
+                      ))}
+                      {renderSecao('Onde e com quem', (
+                        <>
+                          {renderCampo('Local, escola ou clube', (
+                            <input className={inputClasse} placeholder="Ex.: Clube Pinheiros" value={novoLocalAtividade} onChange={(e) => setNovoLocalAtividade(e.target.value)} />
+                          ), { dica: 'Opcional' })}
+                          {renderCampo('Professor(a) ou instrutor(a)', (
+                            <input className={inputClasse} placeholder="Nome" value={novoInstrutorAtividade} onChange={(e) => setNovoInstrutorAtividade(e.target.value)} />
+                          ), { dica: 'Opcional' })}
+                          {renderCampo('Observações', (
+                            <textarea className={inputClasse} rows={3} placeholder="Anotações" value={novaObsAtividade} onChange={(e) => setNovaObsAtividade(e.target.value)} />
+                          ), { dica: 'Opcional' })}
+                        </>
+                      ))}
+{erroAtividadeFisica && <p className="text-sm text-red-600">{erroAtividadeFisica}</p>}
                       {renderBarraAcoes('Salvar', salvarAtividadeFisica, () => setMostrarFormAtividadeFisica(false), carregando)}
                       {atividadeEditandoId && (
                         <button disabled={carregando} onClick={excluirAtividadeFisica} className="w-full rounded-[14px] border border-red-200 bg-white py-3 text-sm font-semibold text-red-600">
