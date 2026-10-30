@@ -252,6 +252,39 @@ export type HabitosVida = {
   atividade_fisica: string | null;
   sono: string | null;
   uso_telas: string | null;
+  respostas?: Record<string, string> | null;
+  observacoes?: Record<string, string> | null;
+  atualizado_em?: string | null;
+  agua_meta_ml?: number | null;
+};
+
+export type RegistroSaudeMental = {
+  id: string;
+  data_registro: string;
+  criado_por: string;
+  humor: number | null;
+  sinais: Record<string, string> | null;
+  acompanhamento: Record<string, boolean> | null;
+  diagnosticos: Record<string, boolean> | null;
+  anotacoes: string | null;
+};
+
+export type RegistroAgua = { id: string; dia: string; hora: string | null; ml: number };
+
+export type DiarioFoco = { id: string; modo: 'investigar' | 'dieta'; titulo: string; inicio: string; dias: number | null; detalhe: string | null; ativo: boolean };
+
+export type DiarioItem = {
+  id: string;
+  foco_id: string | null;
+  tipo: 'refeicao' | 'sintoma';
+  dia: string;
+  hora: string | null;
+  texto: string | null;
+  contem: string[] | null;
+  refeicao: string | null;
+  plano: string | null;
+  sintomas: string[] | null;
+  intensidade: string | null;
 };
 
 export type MedicaoCrescimento = {
@@ -285,7 +318,7 @@ export type Medico = {
 };
 
 export type Passo = 'login' | 'cadastro' | 'onboarding' | 'painel';
-export type Aba = 'geral' | 'condicoes' | 'cirurgias' | 'medicacoes' | 'consultas' | 'odontologia' | 'exames' | 'vacinas' | 'nascimento' | 'menupessoal' | 'gestacao' | 'gestacaoatual' | 'desenvolvimento' | 'alimentacaoinfantil' | 'puberdade' | 'saudemental' | 'habitosvida' | 'crescimento' | 'riscos' | 'medicos' | 'bemestar' | 'nutricionista' | 'esportes' | 'novoregistro' | 'onboardingvoz' | 'eventoresumo' | 'feedeventos' | 'terapias' | 'parentes';
+export type Aba = 'geral' | 'condicoes' | 'cirurgias' | 'medicacoes' | 'consultas' | 'odontologia' | 'exames' | 'vacinas' | 'nascimento' | 'menupessoal' | 'gestacao' | 'gestacaoatual' | 'agua' | 'diario' | 'desenvolvimento' | 'alimentacaoinfantil' | 'puberdade' | 'saudemental' | 'habitosvida' | 'crescimento' | 'riscos' | 'medicos' | 'bemestar' | 'nutricionista' | 'esportes' | 'novoregistro' | 'onboardingvoz' | 'eventoresumo' | 'feedeventos' | 'terapias' | 'parentes';
 
 // ATENÇÃO: estas são orientações gerais de rastreamento, baseadas em diretrizes conhecidas
 // (ex: sociedades de mastologia, coloproctologia, urologia, diabetes). Elas NÃO substituem

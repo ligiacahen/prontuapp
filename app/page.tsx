@@ -30,6 +30,10 @@ import type {
   SessaoTerapia,
   LembreteConsulta,
   Gestacao,
+  RegistroSaudeMental,
+  RegistroAgua,
+  DiarioFoco,
+  DiarioItem,
 } from './tipos';
 import {
   opcoesParentesco,
@@ -72,6 +76,7 @@ import {
 } from './utils';
 import { normalizar, marcosPreNatal, examesPreNatal, vacinasGestacao, gruposIntercorrencia, opcoesTipoParto, rotuloTipoParto } from './gestacao';
 import type { MarcoPreNatal, GrupoIntercorrencia } from './gestacao';
+import { humoresSM, frequenciasSM, sinaisSM, profissionaisSM, diagnosticosSM, secoesHabitos, resumoSecaoHabito, dicaHabito, metasAgua, coposAgua, formatarLitros, focosInvestigar, tagsDiario, refeicoesDiario, planoDiario, planoRotulo, sintomasDiario, intensidadesDiario } from './saudehabitos';
 
 
 // Ícones de linha (substituem os emojis pequenos espalhados pela tela).
@@ -556,6 +561,35 @@ export default function Home() {
     ideacao_suicida: '' as '' | 'sim' | 'nao', automutilacao: '' as '' | 'sim' | 'nao', observacao: '',
   });
   const [erroSaudeMental, setErroSaudeMental] = useState('');
+  const [registrosSM, setRegistrosSM] = useState<RegistroSaudeMental[]>([]);
+  const [smEditandoId, setSmEditandoId] = useState<string | null>(null);
+  const [smHumor, setSmHumor] = useState<number | null>(null);
+  const [smSinais, setSmSinais] = useState<Record<string, string>>({});
+  const [smProf, setSmProf] = useState<Record<string, boolean>>({});
+  const [smDiag, setSmDiag] = useState<Record<string, boolean>>({});
+  const [smNota, setSmNota] = useState('');
+  const [smVerGrafico, setSmVerGrafico] = useState(false);
+  const [smPrivAberto, setSmPrivAberto] = useState(false);
+  const [smUsuarios, setSmUsuarios] = useState<{ id: string; nome: string }[]>([]);
+  const [smVisivelPara, setSmVisivelPara] = useState<string[]>([]);
+  const [hbResp, setHbResp] = useState<Record<string, string>>({});
+  const [hbObs, setHbObs] = useState<Record<string, string>>({});
+  const [registrosAgua, setRegistrosAgua] = useState<RegistroAgua[]>([]);
+  const [diarioFoco, setDiarioFoco] = useState<DiarioFoco | null>(null);
+  const [diarioItens, setDiarioItens] = useState<DiarioItem[]>([]);
+  const [formDiario, setFormDiario] = useState<'' | 'ref' | 'sint' | 'foco'>('');
+  const [dTexto, setDTexto] = useState('');
+  const [dContem, setDContem] = useState<Record<string, boolean>>({});
+  const [dSint, setDSint] = useState<Record<string, boolean>>({});
+  const [dIntens, setDIntens] = useState('leve');
+  const [dTipoRef, setDTipoRef] = useState('cafe');
+  const [dPlano, setDPlano] = useState('sim');
+  const [dModo, setDModo] = useState<'investigar' | 'dieta'>('investigar');
+  const [dFocoTitulo, setDFocoTitulo] = useState('');
+  const [dFocoTag, setDFocoTag] = useState('leite');
+  const [dFocoTexto, setDFocoTexto] = useState('');
+  const [erroDiario, setErroDiario] = useState('');
+  const [diarioCopiado, setDiarioCopiado] = useState(false);
 
   const [habitosVida, setHabitosVida] = useState<HabitosVida | null>(null);
   const [mostrarFormHabitosVida, setMostrarFormHabitosVida] = useState(false);
@@ -723,6 +757,15 @@ export default function Home() {
     window.scrollTo(0, 0);
   }, [telaDetalhe, onboardingPasso, abaInferior]);
 
+  // Ao abrir Hábitos de vida, carrega as respostas já salvas nos campos da tela.
+  useEffect(() => {
+    if (telaDetalhe === 'habitosvida') {
+      setHbResp(habitosVida?.respostas || {});
+      setHbObs(habitosVida?.observacoes || {});
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [telaDetalhe, habitosVida?.id, habitosVida?.atualizado_em]);
+
   useEffect(() => {
     if (membroSelecionado) {
       carregarCondicoes(membroSelecionado.id);
@@ -736,6 +779,9 @@ export default function Home() {
       carregarSessoesTerapia(membroSelecionado.id);
       carregarNascimento(membroSelecionado.id);
       carregarGestacao(membroSelecionado.id);
+      carregarRegistrosSM(membroSelecionado.id);
+      carregarAgua(membroSelecionado.id);
+      carregarDiario(membroSelecionado.id);
       carregarDesenvolvimento(membroSelecionado.id);
       carregarAlimentacaoInfantil(membroSelecionado.id);
       carregarPuberdadeSexualidade(membroSelecionado.id);
@@ -752,6 +798,10 @@ export default function Home() {
       setVacinas([]);
       setNascimento(null);
       setGestacao(null);
+      setRegistrosSM([]);
+      setRegistrosAgua([]);
+      setDiarioFoco(null);
+      setDiarioItens([]);
       setDesenvolvimento(null);
       setAlimentacaoInfantil(null);
       setPuberdadeSexualidade(null);
@@ -913,10 +963,10 @@ export default function Home() {
   async function carregarHabitosVida(membroId: string) {
     const { data, error } = await supabase
       .from('habitos_vida')
-      .select('id, alimentacao, atividade_fisica, sono, uso_telas')
+      .select('id, alimentacao, atividade_fisica, sono, uso_telas, respostas, observacoes, atualizado_em, agua_meta_ml')
       .eq('membro_id', membroId)
       .maybeSingle();
-    if (!error && membroAtualRef.current === membroId) setHabitosVida(data);
+    if (!error && membroAtualRef.current === membroId) setHabitosVida(data as HabitosVida | null);
   }
 
   async function carregarCrescimento(membroId: string) {
@@ -3625,66 +3675,272 @@ export default function Home() {
     await carregarPuberdadeSexualidade(membroSelecionado.id);
   }
 
-  function abrirEdicaoSaudeMental() {
-    setFormSaudeMental({
-      humor: saudeMental?.humor || '',
-      ansiedade: boolParaSelect(saudeMental?.ansiedade ?? null),
-      tristeza_persistente: boolParaSelect(saudeMental?.tristeza_persistente ?? null),
-      ideacao_suicida: boolParaSelect(saudeMental?.ideacao_suicida ?? null),
-      automutilacao: boolParaSelect(saudeMental?.automutilacao ?? null),
-      observacao: saudeMental?.observacao || '',
-    });
+  // ---------- Saúde mental (histórico de registros, privado) ----------
+  async function carregarRegistrosSM(membroId: string) {
+    const { data, error } = await supabase
+      .from('registro_saude_mental')
+      .select('id, data_registro, criado_por, humor, sinais, acompanhamento, diagnosticos, anotacoes')
+      .eq('membro_id', membroId)
+      .order('data_registro', { ascending: false })
+      .limit(300);
+    if (membroAtualRef.current !== membroId) return;
+    if (error) { setErroSaudeMental(error.message.includes('registro_saude_mental') ? 'O banco ainda não tem a tabela de registros. Rode o script saude_habitos.sql no Supabase.' : error.message); return; }
+    setRegistrosSM((data || []) as RegistroSaudeMental[]);
+  }
+
+  function abrirNovoRegistroSM() {
+    const ultimo = registrosSM.find((r) => r.criado_por === meuUsuarioId);
+    setSmEditandoId(null);
+    setSmHumor(null);
+    setSmSinais({});
+    setSmProf(ultimo?.acompanhamento || {});
+    setSmDiag(ultimo?.diagnosticos || {});
+    setSmNota('');
     setErroSaudeMental('');
     setMostrarFormSaudeMental(true);
   }
 
-  async function salvarSaudeMental() {
+  function abrirEdicaoRegistroSM(r: RegistroSaudeMental) {
+    if (r.criado_por !== meuUsuarioId) return;
+    setSmEditandoId(r.id);
+    setSmHumor(r.humor);
+    setSmSinais(r.sinais || {});
+    setSmProf(r.acompanhamento || {});
+    setSmDiag(r.diagnosticos || {});
+    setSmNota(r.anotacoes || '');
+    setErroSaudeMental('');
+    setMostrarFormSaudeMental(true);
+  }
+
+  async function salvarRegistroSM() {
     if (!membroSelecionado) return;
     setErroSaudeMental('');
+    if (smHumor == null) { setErroSaudeMental('Escolha como a pessoa tem se sentido.'); return; }
     setCarregando(true);
-    const f = formSaudeMental;
-    const { error } = await supabase.from('saude_mental').upsert({
-      membro_id: membroSelecionado.id,
-      humor: f.humor || null,
-      ansiedade: selectParaBool(f.ansiedade),
-      tristeza_persistente: selectParaBool(f.tristeza_persistente),
-      ideacao_suicida: selectParaBool(f.ideacao_suicida),
-      automutilacao: selectParaBool(f.automutilacao),
-      observacao: f.observacao || null,
-    }, { onConflict: 'membro_id' });
+    const dados = { humor: smHumor, sinais: smSinais, acompanhamento: smProf, diagnosticos: smDiag, anotacoes: smNota.trim() || null };
+    const { error } = smEditandoId
+      ? await supabase.from('registro_saude_mental').update(dados).eq('id', smEditandoId)
+      : await supabase.from('registro_saude_mental').insert({ membro_id: membroSelecionado.id, ...dados });
     setCarregando(false);
     if (error) { setErroSaudeMental(error.message); return; }
     setMostrarFormSaudeMental(false);
-    await carregarSaudeMental(membroSelecionado.id);
+    setSmEditandoId(null);
+    await carregarRegistrosSM(membroSelecionado.id);
   }
 
-  function abrirEdicaoHabitosVida() {
-    setFormHabitosVida({
-      alimentacao: habitosVida?.alimentacao || '',
-      atividade_fisica: habitosVida?.atividade_fisica || '',
-      sono: habitosVida?.sono || '',
-      uso_telas: habitosVida?.uso_telas || '',
-    });
-    setErroHabitosVida('');
-    setMostrarFormHabitosVida(true);
+  async function excluirRegistroSM() {
+    if (!smEditandoId || !membroSelecionado) return;
+    setCarregando(true);
+    const { error } = await supabase.from('registro_saude_mental').delete().eq('id', smEditandoId);
+    setCarregando(false);
+    if (error) { setErroSaudeMental(error.message); return; }
+    setMostrarFormSaudeMental(false);
+    setSmEditandoId(null);
+    await carregarRegistrosSM(membroSelecionado.id);
   }
 
+  async function abrirPrivacidadeSM() {
+    if (!membroSelecionado) return;
+    setSmPrivAberto(true);
+    const { data: lista } = await supabase.rpc('listar_usuarios_do_membro', { p_membro: membroSelecionado.id });
+    setSmUsuarios((lista || []) as { id: string; nome: string }[]);
+    const { data: priv } = await supabase.from('saude_mental_privacidade').select('visivel_para').eq('membro_id', membroSelecionado.id).eq('dono_id', meuUsuarioId || '').maybeSingle();
+    setSmVisivelPara((priv?.visivel_para || []) as string[]);
+  }
+
+  async function alternarVisivelSM(usuarioId: string) {
+    if (!membroSelecionado || !meuUsuarioId) return;
+    const novo = smVisivelPara.includes(usuarioId) ? smVisivelPara.filter((x) => x !== usuarioId) : [...smVisivelPara, usuarioId];
+    setSmVisivelPara(novo);
+    const { error } = await supabase.from('saude_mental_privacidade').upsert({ membro_id: membroSelecionado.id, dono_id: meuUsuarioId, visivel_para: novo }, { onConflict: 'membro_id,dono_id' });
+    if (error) setErroSaudeMental(error.message);
+  }
+
+  // ---------- Hábitos de vida ----------
   async function salvarHabitosVida() {
     if (!membroSelecionado) return;
     setErroHabitosVida('');
     setCarregando(true);
-    const f = formHabitosVida;
+    const resumo = (id: string) => {
+      const sec = secoesHabitos.find((s) => s.id === id);
+      return sec ? resumoSecaoHabito(sec, hbResp, hbObs[id] || '') || null : null;
+    };
     const { error } = await supabase.from('habitos_vida').upsert({
       membro_id: membroSelecionado.id,
-      alimentacao: f.alimentacao || null,
-      atividade_fisica: f.atividade_fisica || null,
-      sono: f.sono || null,
-      uso_telas: f.uso_telas || null,
+      respostas: hbResp,
+      observacoes: hbObs,
+      atualizado_em: new Date().toISOString(),
+      alimentacao: [resumo('alim'), resumo('vicio')].filter(Boolean).join(' · ') || null,
+      atividade_fisica: resumo('ativ'),
+      sono: resumo('sono'),
+      uso_telas: resumo('tela'),
     }, { onConflict: 'membro_id' });
     setCarregando(false);
-    if (error) { setErroHabitosVida(error.message); return; }
-    setMostrarFormHabitosVida(false);
+    if (error) { setErroHabitosVida(error.message.includes('respostas') ? 'O banco ainda não tem as colunas novas. Rode o script saude_habitos.sql no Supabase.' : error.message); return; }
     await carregarHabitosVida(membroSelecionado.id);
+    setTelaDetalhe(null);
+  }
+
+  // ---------- Água ----------
+  async function carregarAgua(membroId: string) {
+    const desde = somarDias(dataLocalISO(new Date()), -6);
+    const { data, error } = await supabase.from('registro_agua').select('id, dia, hora, ml').eq('membro_id', membroId).gte('dia', desde).order('criado_em', { ascending: true });
+    if (!error && membroAtualRef.current === membroId) setRegistrosAgua((data || []) as RegistroAgua[]);
+  }
+
+  async function adicionarAgua(ml: number) {
+    if (!membroSelecionado) return;
+    const agora = new Date();
+    const hora = `${String(agora.getHours()).padStart(2, '0')}:${String(agora.getMinutes()).padStart(2, '0')}`;
+    const { error } = await supabase.from('registro_agua').insert({ membro_id: membroSelecionado.id, dia: dataLocalISO(agora), hora, ml });
+    if (error) { setErroDiario(error.message); return; }
+    await carregarAgua(membroSelecionado.id);
+  }
+
+  async function removerAgua(id: string) {
+    if (!membroSelecionado) return;
+    await supabase.from('registro_agua').delete().eq('id', id);
+    await carregarAgua(membroSelecionado.id);
+  }
+
+  async function definirMetaAgua(ml: number) {
+    if (!membroSelecionado) return;
+    const { error } = await supabase.from('habitos_vida').upsert({ membro_id: membroSelecionado.id, agua_meta_ml: ml }, { onConflict: 'membro_id' });
+    if (error) { setErroDiario(error.message); return; }
+    await carregarHabitosVida(membroSelecionado.id);
+  }
+
+  // ---------- Diário alimentar ----------
+  async function carregarDiario(membroId: string) {
+    const { data: focos, error } = await supabase
+      .from('diario_foco')
+      .select('id, modo, titulo, inicio, dias, detalhe, ativo')
+      .eq('membro_id', membroId)
+      .eq('ativo', true)
+      .order('criado_em', { ascending: false })
+      .limit(1);
+    if (membroAtualRef.current !== membroId) return;
+    if (error) { setErroDiario(error.message.includes('diario') ? 'O banco ainda não tem as tabelas do diário. Rode o script saude_habitos.sql no Supabase.' : error.message); return; }
+    const foco = ((focos || [])[0] as DiarioFoco | undefined) || null;
+    setDiarioFoco(foco);
+    const desde = foco ? foco.inicio : somarDias(dataLocalISO(new Date()), -14);
+    const { data: itens } = await supabase
+      .from('diario_item')
+      .select('id, foco_id, tipo, dia, hora, texto, contem, refeicao, plano, sintomas, intensidade')
+      .eq('membro_id', membroId)
+      .gte('dia', desde)
+      .order('dia', { ascending: false })
+      .order('hora', { ascending: false })
+      .limit(600);
+    if (membroAtualRef.current === membroId) setDiarioItens((itens || []) as DiarioItem[]);
+  }
+
+  function abrirFormDiario(tipo: 'ref' | 'sint' | 'foco') {
+    setDTexto('');
+    setDContem({});
+    setDSint({});
+    setDIntens('leve');
+    setDTipoRef('cafe');
+    setDPlano('sim');
+    setDModo('investigar');
+    setDFocoTitulo(focosInvestigar[0].titulo);
+    setDFocoTag(focosInvestigar[0].tag);
+    setDFocoTexto('');
+    setErroDiario('');
+    setFormDiario(tipo);
+  }
+
+  async function salvarFocoDiario() {
+    if (!membroSelecionado) return;
+    const titulo = dModo === 'investigar' ? dFocoTitulo : dFocoTitulo.trim();
+    if (!titulo) { setErroDiario('Escreva para que é este diário.'); return; }
+    setCarregando(true);
+    const { error } = await supabase.from('diario_foco').insert({
+      membro_id: membroSelecionado.id,
+      modo: dModo,
+      titulo,
+      inicio: dataLocalISO(new Date()),
+      dias: dModo === 'investigar' ? 14 : null,
+      detalhe: dModo === 'investigar' ? dFocoTag : (dFocoTexto.trim() || null),
+    });
+    setCarregando(false);
+    if (error) { setErroDiario(error.message); return; }
+    setFormDiario('');
+    await carregarDiario(membroSelecionado.id);
+  }
+
+  async function encerrarFocoDiario() {
+    if (!diarioFoco || !membroSelecionado) return;
+    await supabase.from('diario_foco').update({ ativo: false }).eq('id', diarioFoco.id);
+    await carregarDiario(membroSelecionado.id);
+  }
+
+  async function salvarItemDiario() {
+    if (!membroSelecionado) return;
+    const agora = new Date();
+    const hora = `${String(agora.getHours()).padStart(2, '0')}:${String(agora.getMinutes()).padStart(2, '0')}`;
+    let linha: Record<string, unknown>;
+    if (formDiario === 'sint') {
+      const sintomas = Object.keys(dSint).filter((k) => dSint[k]);
+      if (sintomas.length === 0) { setErroDiario('Marque pelo menos um sintoma.'); return; }
+      linha = { tipo: 'sintoma', sintomas, intensidade: dIntens, texto: sintomas.join(', ') };
+    } else {
+      if (!dTexto.trim()) { setErroDiario('Escreva o que comeu ou bebeu.'); return; }
+      linha = { tipo: 'refeicao', texto: dTexto.trim(), contem: Object.keys(dContem).filter((k) => dContem[k]), refeicao: dTipoRef, plano: diarioFoco?.modo === 'dieta' ? dPlano : null };
+    }
+    setCarregando(true);
+    const { error } = await supabase.from('diario_item').insert({ membro_id: membroSelecionado.id, foco_id: diarioFoco?.id || null, dia: dataLocalISO(agora), hora, ...linha });
+    setCarregando(false);
+    if (error) { setErroDiario(error.message); return; }
+    setFormDiario('');
+    await carregarDiario(membroSelecionado.id);
+  }
+
+  async function removerItemDiario(id: string) {
+    if (!membroSelecionado) return;
+    await supabase.from('diario_item').delete().eq('id', id);
+    await carregarDiario(membroSelecionado.id);
+  }
+
+  function minutosDe(h: string | null): number {
+    if (!h) return 0;
+    const [hh, mm] = h.split(':').map(Number);
+    return (hh || 0) * 60 + (mm || 0);
+  }
+  // Conta refeições (com ou sem o alimento suspeito) seguidas de sintoma no mesmo dia, em até 6 horas.
+  function contarRefeicoesComSintoma(tag: string) {
+    const refs = diarioItens.filter((i) => i.tipo === 'refeicao');
+    const sints = diarioItens.filter((i) => i.tipo === 'sintoma');
+    const seguida = (r: DiarioItem) => sints.some((s) => s.dia === r.dia && minutosDe(s.hora) >= minutosDe(r.hora) && minutosDe(s.hora) - minutosDe(r.hora) <= 360);
+    const com = refs.filter((r) => (r.contem || []).includes(tag));
+    const sem = refs.filter((r) => !(r.contem || []).includes(tag));
+    return { com: com.length, comSint: com.filter(seguida).length, sem: sem.length, semSint: sem.filter(seguida).length };
+  }
+
+  function textoRelatorioDiario(): string {
+    if (!diarioFoco || !membroSelecionado) return '';
+    const linhas: string[] = [`Diário alimentar de ${membroSelecionado.nome}`, `${diarioFoco.modo === 'investigar' ? 'Investigando' : 'Acompanhando'}: ${diarioFoco.titulo} (desde ${formatarData(diarioFoco.inicio)})`];
+    if (diarioFoco.modo === 'investigar' && diarioFoco.detalhe) {
+      const c = contarRefeicoesComSintoma(diarioFoco.detalhe);
+      linhas.push(`Refeições com ${tagsDiario[diarioFoco.detalhe].toLowerCase()}: ${c.comSint} de ${c.com} tiveram sintoma em até 6 horas.`);
+      linhas.push(`Refeições sem: ${c.semSint} de ${c.sem} tiveram sintoma em até 6 horas.`);
+    }
+    linhas.push('');
+    [...diarioItens].reverse().forEach((i) => {
+      linhas.push(`${formatarData(i.dia)} ${i.hora || ''} - ${i.tipo === 'sintoma' ? 'Sintoma' : 'Refeição'}: ${i.texto || ''}${i.intensidade ? ` (${i.intensidade})` : ''}${(i.contem || []).length ? ` [${(i.contem || []).map((t) => tagsDiario[t]).join(', ')}]` : ''}`);
+    });
+    linhas.push('', 'Registro feito pelo ProntuApp. Quem interpreta é o médico.');
+    return linhas.join('\n');
+  }
+
+  async function copiarRelatorioDiario() {
+    try {
+      await navigator.clipboard.writeText(textoRelatorioDiario());
+      setDiarioCopiado(true);
+      setTimeout(() => setDiarioCopiado(false), 2500);
+    } catch {
+      setErroDiario('Não consegui copiar. Tente de novo.');
+    }
   }
 
   function abrirNovaMedicaoCrescimento() {
@@ -3814,43 +4070,82 @@ export default function Home() {
     await carregarRiscosGeneticos({ ...membroSelecionado, parentesco: novoValor || null });
   }
 
+  // Reduz a foto (máx. 1024 px, JPEG) antes de enviar: fotos de celular costumam passar de 5MB.
+  async function reduzirImagem(arquivo: File): Promise<Blob> {
+    const url = URL.createObjectURL(arquivo);
+    try {
+      const img: HTMLImageElement = await new Promise((resolve, reject) => {
+        const el = new Image();
+        el.onload = () => resolve(el);
+        el.onerror = () => reject(new Error('Não consegui abrir essa imagem. Tente uma foto em JPG ou PNG.'));
+        el.src = url;
+      });
+      const escala = Math.min(1, 1024 / Math.max(img.width, img.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(img.width * escala));
+      canvas.height = Math.max(1, Math.round(img.height * escala));
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('Não consegui preparar a imagem.');
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      const blob: Blob | null = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.85));
+      if (!blob) throw new Error('Não consegui preparar a imagem.');
+      return blob;
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }
+
+  function mensagemErroFoto(msg: string): string {
+    if (/row-level security|violates|not authorized|permission/i.test(msg)) return 'Sem permissão para trocar a foto deste perfil. Se o acesso for só para visualizar, peça acesso de edição.';
+    if (/bucket/i.test(msg) && /not found/i.test(msg)) return 'A pasta de fotos ainda não existe no banco. Rode o script saude_habitos.sql no Supabase.';
+    return msg;
+  }
+
   async function salvarFotoMembro(arquivo: File) {
     if (!membroSelecionado) return;
     if (!arquivo.type.startsWith('image/')) {
       setErroFoto('Selecione um arquivo de imagem (jpg, png, etc).');
       return;
     }
-    if (arquivo.size > 5 * 1024 * 1024) {
-      setErroFoto('A imagem deve ter no máximo 5MB.');
-      return;
-    }
     setErroFoto('');
     setEnviandoFoto(true);
 
-    const extensao = arquivo.name.split('.').pop() || 'jpg';
-    const caminho = `${membroSelecionado.id}/${Date.now()}.${extensao}`;
+    let blob: Blob;
+    try {
+      blob = await reduzirImagem(arquivo);
+    } catch (e) {
+      setEnviandoFoto(false);
+      setErroFoto(e instanceof Error ? e.message : 'Não consegui preparar a imagem.');
+      return;
+    }
 
+    const caminho = `${membroSelecionado.id}/${Date.now()}.jpg`;
     const { error: erroUpload } = await supabase.storage
       .from('fotos-membros')
-      .upload(caminho, arquivo, { upsert: true });
+      .upload(caminho, blob, { upsert: true, contentType: 'image/jpeg' });
 
     if (erroUpload) {
       setEnviandoFoto(false);
-      setErroFoto(erroUpload.message);
+      setErroFoto(mensagemErroFoto(erroUpload.message));
       return;
     }
 
     const { data: urlData } = supabase.storage.from('fotos-membros').getPublicUrl(caminho);
     const novaUrl = urlData.publicUrl;
 
-    const { error: erroUpdate } = await supabase
+    const { data: atualizado, error: erroUpdate } = await supabase
       .from('membro')
       .update({ foto_url: novaUrl })
-      .eq('id', membroSelecionado.id);
+      .eq('id', membroSelecionado.id)
+      .select('id');
 
     setEnviandoFoto(false);
     if (erroUpdate) {
-      setErroFoto(erroUpdate.message);
+      setErroFoto(mensagemErroFoto(erroUpdate.message));
+      return;
+    }
+    if (!atualizado || atualizado.length === 0) {
+      setErroFoto('A foto foi enviada, mas não consegui salvar no perfil. Você pode não ter acesso de edição a este perfil.');
       return;
     }
     setMembroSelecionado({ ...membroSelecionado, foto_url: novaUrl });
@@ -4567,6 +4862,400 @@ export default function Home() {
 
         {erroGestacao && <p className="text-sm text-red-600">{erroGestacao}</p>}
         <p className="text-xs text-[#55615B]">Orientações gerais baseadas no pré-natal do Ministério da Saúde e no calendário de vacinação da gestante da SBIm. Não substituem o obstetra, que pode ajustar tudo conforme cada caso.</p>
+      </div>
+    );
+  }
+
+  // ---------- Telas: Saúde mental, Hábitos, Água, Diário ----------
+  function renderTelaSaudeMental() {
+    if (!membroSelecionado) return null;
+    const meus = registrosSM;
+    const rotuloHumor = (n: number | null) => humoresSM.find((h) => h.id === n)?.label || '—';
+    const corHumor = (n: number | null) => humoresSM.find((h) => h.id === n)?.cor || '#CDD5D1';
+
+    if (mostrarFormSaudeMental) {
+      return (
+        <div className="space-y-4">
+          {renderSecao('Como tem se sentido', (
+            <div className="grid grid-cols-5 gap-1.5">
+              {humoresSM.map((h) => {
+                const on = smHumor === h.id;
+                return (
+                  <button key={h.id} type="button" aria-pressed={on} onClick={() => setSmHumor(h.id)} className={`flex min-h-[64px] flex-col items-center justify-center gap-1.5 rounded-xl border px-0.5 py-1.5 text-center text-xs leading-tight ${on ? 'border-[#1E5B4A] bg-[#1E5B4A] font-bold text-white' : 'border-[#CDD5D1] bg-white font-medium text-[#26332E]'}`}>
+                    <span className="h-3.5 w-3.5 rounded-full" style={{ background: h.cor, boxShadow: on ? '0 0 0 3px #fff' : undefined }} />
+                    {h.label}
+                  </button>
+                );
+              })}
+            </div>
+          ), 'De modo geral, nas últimas 2 semanas')}
+          {renderSecao('Sinais de atenção', (
+            <div className="flex flex-col gap-4">
+              {sinaisSM.map((s) => (
+                <div key={s.id}>
+                  {renderCampo(s.label, renderSegmentado(frequenciasSM, smSinais[s.id] ?? '', (v) => setSmSinais((m) => ({ ...m, [s.id]: v }))))}
+                </div>
+              ))}
+            </div>
+          ), 'Com que frequência, nas últimas 2 semanas?')}
+          {renderSecao('Acompanhamento', (
+            <>
+              {renderCampo('Faz acompanhamento com', (
+                <div className="flex flex-wrap gap-2">
+                  {profissionaisSM.map((p) => <button key={p.id} type="button" aria-pressed={!!smProf[p.id]} className={chipDs(!!smProf[p.id])} onClick={() => setSmProf((m) => ({ ...m, [p.id]: !m[p.id] }))}>{p.label}</button>)}
+                </div>
+              ))}
+              {renderCampo('Diagnóstico dado por profissional', (
+                <div className="flex flex-wrap gap-2">
+                  {diagnosticosSM.map((d) => <button key={d} type="button" aria-pressed={!!smDiag[d]} className={chipDs(!!smDiag[d])} onClick={() => setSmDiag((m) => ({ ...m, [d]: !m[d] }))}>{d}</button>)}
+                </div>
+              ), { dica: 'Marque só o que foi diagnosticado. O app não faz diagnóstico.' })}
+            </>
+          ))}
+          <button type="button" onClick={() => setTelaDetalhe('medicacoes')} className="flex w-full items-center justify-between rounded-2xl border border-[#E1E6E3] bg-white p-[18px] text-left">
+            <span className="flex flex-col"><span className="text-sm font-semibold text-[#26332E]">Remédios em uso</span><span className="text-[13px] text-[#55615B]">Cadastre em Medicamentos para ter lembrete</span></span>
+            <span className="text-[#55615B]">›</span>
+          </button>
+          {renderSecao('Anotações', renderCampo('O que ajuda a lembrar depois', <textarea className={inputClasse} rows={3} value={smNota} onChange={(e) => setSmNota(e.target.value)} />, { acao: renderBotaoDitar('smNota', setSmNota) }))}
+          {smEditandoId && <button type="button" onClick={excluirRegistroSM} className="h-11 w-full rounded-xl border border-red-200 text-sm font-semibold text-red-700">Excluir este registro</button>}
+          {erroSaudeMental && <p className="text-sm text-red-600">{erroSaudeMental}</p>}
+          {renderBarraAcoes('Salvar registro', salvarRegistroSM, () => setMostrarFormSaudeMental(false), carregando)}
+        </div>
+      );
+    }
+
+    const cronologico = [...meus].reverse().map((r) => ({ data: formatarData(r.data_registro.slice(0, 10)), humor: r.humor }));
+    return (
+      <div className="space-y-4">
+        <button type="button" onClick={() => (smPrivAberto ? setSmPrivAberto(false) : abrirPrivacidadeSM())} className="flex w-full items-start gap-3 rounded-2xl bg-[#EEF4F1] p-4 text-left">
+          <span className="mt-0.5 text-[#1E5B4A]"><svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="11" width="16" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg></span>
+          <span className="flex flex-col"><span className="text-sm font-semibold text-[#1E5B4A]">Seção privada</span><span className="text-[13px] text-[#55615B]">Só você vê o que registra aqui. Toque para escolher quem mais pode ver.</span></span>
+        </button>
+        {smPrivAberto && (
+          <section className={secaoClasse}>
+            <h3 className={tituloSecao}>Quem mais pode ver seus registros</h3>
+            {smUsuarios.length === 0 ? <p className="text-sm text-[#55615B]">Não há outras pessoas com acesso a este perfil.</p> : smUsuarios.map((u) => renderChecagem(u.nome, null, smVisivelPara.includes(u.id), () => alternarVisivelSM(u.id)))}
+          </section>
+        )}
+        <button type="button" onClick={abrirNovoRegistroSM} className={botaoPrimario}>+ Novo registro</button>
+        {erroSaudeMental && <p className="text-sm text-red-600">{erroSaudeMental}</p>}
+        {meus.length >= 2 && (
+          <button type="button" onClick={() => setSmVerGrafico(!smVerGrafico)} className="h-11 w-full rounded-xl border border-[#CDD5D1] bg-white text-sm font-semibold text-[#1E5B4A]">
+            {smVerGrafico ? 'Esconder o gráfico' : 'Ver como tem se sentido ao longo do tempo'}
+          </button>
+        )}
+        {smVerGrafico && meus.length >= 2 && (
+          <section className={secaoClasse}>
+            <h3 className={tituloSecao}>Humor ao longo do tempo</h3>
+            <div className="h-48">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={cronologico}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#E1E6E3" />
+                  <XAxis dataKey="data" tick={{ fontSize: 11 }} />
+                  <YAxis domain={[1, 5]} ticks={[1, 2, 3, 4, 5]} tick={{ fontSize: 11 }} width={24} />
+                  <Tooltip formatter={(v) => rotuloHumor(Number(v))} />
+                  <Line type="monotone" dataKey="humor" stroke="#1E5B4A" strokeWidth={2} dot={{ r: 3 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+            <p className="text-[13px] text-[#55615B]">5 é muito bem e 1 é muito mal.</p>
+          </section>
+        )}
+        {meus.length === 0 && !erroSaudeMental && <p className="py-2 text-center text-sm text-slate-400">Nenhum registro ainda.</p>}
+        {meus.map((r) => {
+          const mine = r.criado_por === meuUsuarioId;
+          const diag = Object.keys(r.diagnosticos || {}).filter((k) => (r.diagnosticos || {})[k]);
+          return (
+            <button key={r.id} type="button" onClick={() => abrirEdicaoRegistroSM(r)} disabled={!mine} className="flex w-full flex-col gap-1.5 rounded-2xl border border-[#E1E6E3] bg-white p-4 text-left">
+              <span className="flex items-center justify-between">
+                <span className="flex items-center gap-2 text-sm font-semibold text-[#26332E]"><span className="h-3 w-3 rounded-full" style={{ background: corHumor(r.humor) }} />{rotuloHumor(r.humor)}</span>
+                <span className="text-xs text-[#55615B]">{formatarData(r.data_registro.slice(0, 10))}{!mine ? ' · de outra pessoa' : ''}</span>
+              </span>
+              {diag.length > 0 && <span className="text-[13px] text-[#55615B]">Diagnósticos: {diag.join(', ')}</span>}
+              {r.anotacoes && <span className="text-sm text-[#26332E]">{r.anotacoes}</span>}
+            </button>
+          );
+        })}
+        <section className="flex items-center justify-between gap-3 rounded-2xl bg-[#FFF5EC] p-4">
+          <span className="flex flex-col"><span className="text-sm font-semibold text-[#8A4416]">Precisa conversar com alguém?</span><span className="text-[13px] text-[#8A4416]">CVV · 24 horas, gratuito e com sigilo</span></span>
+          <a href="tel:188" className="shrink-0 rounded-full bg-[#8A4416] px-4 py-2 text-sm font-semibold text-white">Ligar 188</a>
+        </section>
+      </div>
+    );
+  }
+
+  function iconeHabito(id: string) {
+    const props = { width: 20, height: 20, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
+    if (id === 'alim') return <svg {...props}><path d="M5 3v8a3 3 0 0 0 3 3v7" /><path d="M9 3v6" /><path d="M16 3c-2 2-2 6 0 8v10" /></svg>;
+    if (id === 'ativ') return <svg {...props}><path d="M13 4a1.5 1.5 0 1 0 0 .01" /><path d="M7 21l3-6 3 2 2-5" /><path d="M5 11l4-2 4 2 3 3" /></svg>;
+    if (id === 'sono') return <svg {...props}><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" /></svg>;
+    if (id === 'tela') return <svg {...props}><rect x="7" y="2" width="10" height="20" rx="2" /><line x1="12" y1="18" x2="12" y2="18.01" /></svg>;
+    return <svg {...props}><circle cx="12" cy="12" r="9" /><path d="M9 9l6 6M15 9l-6 6" /></svg>;
+  }
+
+  function renderTelaHabitos() {
+    if (!membroSelecionado) return null;
+    const metaAgua = habitosVida?.agua_meta_ml || 2000;
+    const hoje = dataLocalISO(new Date());
+    const totalHoje = registrosAgua.filter((r) => r.dia === hoje).reduce((a, r) => a + r.ml, 0);
+    return (
+      <div className="space-y-4">
+        {renderSecao('Acompanhar no dia a dia', (
+          <div className="flex flex-col gap-2">
+            <button type="button" onClick={() => setTelaDetalhe('agua')} className="flex items-center justify-between gap-3 rounded-xl bg-[#EAF2F9] px-3.5 py-3 text-left">
+              <span className="flex flex-col"><span className="text-sm font-semibold text-[#1F4F7A]">Água de hoje</span><span className="text-[13px] text-[#55615B]">{formatarLitros(totalHoje)} de {formatarLitros(metaAgua)} · toque para registrar</span></span>
+              <span className="text-[#55615B]">›</span>
+            </button>
+            <button type="button" onClick={() => setTelaDetalhe('diario')} className="flex items-center justify-between gap-3 rounded-xl bg-[#FFF5EC] px-3.5 py-3 text-left">
+              <span className="flex flex-col"><span className="text-sm font-semibold text-[#8A4416]">Diário alimentar</span><span className="text-[13px] text-[#55615B]">{diarioFoco ? (diarioFoco.modo === 'investigar' ? `Investigando ${diarioFoco.titulo.toLowerCase()}` : diarioFoco.titulo) : 'Para investigar uma suspeita ou seguir um plano'}</span></span>
+              <span className="text-[#55615B]">›</span>
+            </button>
+          </div>
+        ))}
+        <p className="text-sm text-[#55615B]">Como é a rotina hoje. Toque nas opções que mais se parecem com o seu dia a dia.</p>
+        {secoesHabitos.map((sec) => {
+          const dica = dicaHabito(sec.id, hbResp);
+          return (
+            <section key={sec.id} className={secaoClasse}>
+              <div className="flex items-center gap-2 text-[#1E5B4A]">{iconeHabito(sec.id)}<h3 className={tituloSecao}>{sec.titulo}</h3></div>
+              {sec.perguntas.map((q) => (
+                <div key={q.id}>
+                  {renderCampo(q.label, (
+                    <div className="flex flex-wrap gap-2">
+                      {q.opcoes.map(([v, rot]) => {
+                        const chave = q.multi ? `${q.id}:${v}` : q.id;
+                        const on = q.multi ? !!hbResp[chave] : hbResp[q.id] === v;
+                        return (
+                          <button key={v} type="button" aria-pressed={on} className={chipDs(on)} onClick={() => setHbResp((m) => {
+                            const n = { ...m };
+                            if (q.multi) { if (on) delete n[chave]; else n[chave] = '1'; }
+                            else if (on) delete n[q.id]; else n[q.id] = v;
+                            return n;
+                          })}>{rot}</button>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
+              ))}
+              {renderCampo('Observações', <input className={inputClasse} placeholder={sec.obs} value={hbObs[sec.id] || ''} onChange={(e) => setHbObs((m) => ({ ...m, [sec.id]: e.target.value }))} />)}
+              {dica && <p className="rounded-xl bg-[#FFF5EC] px-3.5 py-3 text-[13px] text-[#8A4416]">{dica}</p>}
+            </section>
+          );
+        })}
+        <p className="text-[13px] text-[#55615B]">{habitosVida?.atualizado_em ? `Atualizado em ${formatarData(habitosVida.atualizado_em.slice(0, 10))}. ` : ''}O app lembra de revisar a cada 6 meses, para mostrar ao médico como a rotina mudou.</p>
+        {erroHabitosVida && <p className="text-sm text-red-600">{erroHabitosVida}</p>}
+        {renderBarraAcoes('Salvar', salvarHabitosVida, () => setTelaDetalhe(null), carregando)}
+      </div>
+    );
+  }
+
+  function renderTelaAgua() {
+    if (!membroSelecionado) return null;
+    const meta = habitosVida?.agua_meta_ml || 2000;
+    const hoje = dataLocalISO(new Date());
+    const doDia = (d: string) => registrosAgua.filter((r) => r.dia === d).reduce((a, r) => a + r.ml, 0);
+    const total = doDia(hoje);
+    const pct = Math.min(1, total / meta);
+    const falta = meta - total;
+    const dias = Array.from({ length: 7 }, (_, i) => somarDias(hoje, i - 6));
+    const valores = dias.map(doDia);
+    const max = Math.max(meta, ...valores);
+    const nomesDia = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
+    return (
+      <div className="space-y-4">
+        <section className="flex flex-col items-center gap-3 rounded-2xl border border-[#E1E6E3] bg-white p-[18px]">
+          <div className="relative h-44 w-44">
+            <svg viewBox="0 0 200 200" className="h-full w-full -rotate-90">
+              <circle cx="100" cy="100" r="86" fill="none" stroke="#DCE8F3" strokeWidth="14" />
+              <circle cx="100" cy="100" r="86" fill="none" stroke="#2F6FA8" strokeWidth="14" strokeLinecap="round" strokeDasharray="540.4" strokeDashoffset={540.4 * (1 - pct)} />
+            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+              <span className="text-3xl font-bold text-[#1F4F7A]">{formatarLitros(total)}</span>
+              <span className="text-sm text-[#55615B]">de {formatarLitros(meta)}</span>
+              <span className="text-xs font-semibold text-[#2F6FA8]">{Math.round((total / meta) * 100)}% da meta</span>
+            </div>
+          </div>
+          <p className="text-sm text-[#26332E]">{falta > 0 ? `Faltam ${formatarLitros(falta)} para a meta de hoje` : 'Meta do dia atingida'}</p>
+          <div className="grid w-full grid-cols-3 gap-2">
+            {coposAgua.map((b) => (
+              <button key={b.ml} type="button" onClick={() => adicionarAgua(b.ml)} className="flex flex-col items-center rounded-xl bg-[#EAF2F9] py-3 text-[#1F4F7A]">
+                <span className="text-sm font-bold">+{b.ml} ml</span>
+                <span className="text-xs">{b.nome}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+        {renderSecao('Registros de hoje', (
+          <div className="flex flex-col gap-1">
+            {registrosAgua.filter((r) => r.dia === hoje).length === 0 && <p className="text-sm text-[#55615B]">Nenhum copo ainda. Toque nos botões acima.</p>}
+            {[...registrosAgua.filter((r) => r.dia === hoje)].reverse().map((r) => (
+              <div key={r.id} className="flex items-center justify-between border-b border-[#EEF1EF] py-2 last:border-0">
+                <span className="text-sm text-[#55615B]">{r.hora}</span>
+                <span className="text-sm font-semibold text-[#26332E]">{r.ml} ml</span>
+                <button type="button" aria-label="Remover" onClick={() => removerAgua(r.id)} className="text-sm text-red-600">remover</button>
+              </div>
+            ))}
+          </div>
+        ))}
+        {renderSecao('Últimos 7 dias', (
+          <>
+            <div className="flex h-28 items-end justify-between gap-2">
+              {valores.map((v, i) => (
+                <div key={i} className="flex flex-1 flex-col items-center gap-1">
+                  <div className="w-full rounded-md" style={{ height: Math.max(4, Math.round((v / max) * 90)), background: i === 6 ? '#2F6FA8' : v >= meta ? '#7FA9CF' : '#C9D9E8' }} />
+                  <span className="text-xs text-[#55615B]">{i === 6 ? 'Hoje' : nomesDia[new Date(dias[i] + 'T12:00:00').getDay()]}</span>
+                </div>
+              ))}
+            </div>
+            <p className="text-[13px] text-[#55615B]">Meta batida em {valores.filter((v) => v >= meta).length} dos últimos 7 dias</p>
+          </>
+        ))}
+        {renderSecao('Meta diária', (
+          <>
+            <div className="flex flex-wrap gap-2">
+              {metasAgua.map((m) => <button key={m} type="button" className={chipDs(meta === m)} onClick={() => definirMetaAgua(m)}>{formatarLitros(m)}</button>)}
+            </div>
+            <p className="text-[13px] text-[#55615B]">Se o médico ou nutricionista indicou uma quantidade, use a dele. Algumas condições pedem menos água, não mais.</p>
+          </>
+        ))}
+        {erroDiario && <p className="text-sm text-red-600">{erroDiario}</p>}
+      </div>
+    );
+  }
+
+  function renderTelaDiario() {
+    if (!membroSelecionado) return null;
+    const hoje = dataLocalISO(new Date());
+
+    if (formDiario === 'foco') {
+      return (
+        <div className="space-y-4">
+          {renderSecao('Para que é este diário?', (
+            <>
+              {renderSegmentado([['investigar', 'Investigar doença'], ['dieta', 'Acompanhar dieta']], dModo, (v) => setDModo(v as 'investigar' | 'dieta'))}
+              {dModo === 'investigar' ? (
+                renderCampo('O que está sendo investigado', renderSelectDs(dFocoTitulo, (v) => { setDFocoTitulo(v); setDFocoTag(focosInvestigar.find((f) => f.titulo === v)?.tag || 'outro'); }, focosInvestigar.map((f) => <option key={f.titulo} value={f.titulo}>{f.titulo}</option>)), { dica: 'O diário dura 14 dias. No fim, o app mostra quantas refeições tiveram sintoma depois.' })
+              ) : (
+                <>
+                  {renderCampo('Nome do plano', <input className={inputClasse} placeholder="Ex.: Plano alimentar" value={dFocoTitulo} onChange={(e) => setDFocoTitulo(e.target.value)} />)}
+                  {renderCampo('Orientado por', <input className={inputClasse} placeholder="Nutricionista ou médico" value={dFocoTexto} onChange={(e) => setDFocoTexto(e.target.value)} />)}
+                </>
+              )}
+            </>
+          ))}
+          {dModo === 'investigar' && dFocoTag === 'gluten' && <p className="rounded-xl bg-[#FFF5EC] px-3.5 py-3 text-[13px] text-[#8A4416]">Não tire o glúten da dieta antes de falar com o médico: os exames para doença celíaca precisam que você ainda esteja comendo glúten.</p>}
+          {erroDiario && <p className="text-sm text-red-600">{erroDiario}</p>}
+          {renderBarraAcoes('Começar diário', salvarFocoDiario, () => setFormDiario(''), carregando)}
+        </div>
+      );
+    }
+
+    if (formDiario === 'ref' || formDiario === 'sint') {
+      const agora = new Date();
+      const horaAgora = `${String(agora.getHours()).padStart(2, '0')}:${String(agora.getMinutes()).padStart(2, '0')}`;
+      return (
+        <div className="space-y-4">
+          {formDiario === 'ref' ? (
+            <>
+              {renderSecao('Refeição', (
+                <>
+                  <div className="flex flex-wrap gap-2">{refeicoesDiario.map(([v, r]) => <button key={v} type="button" className={chipDs(dTipoRef === v)} onClick={() => setDTipoRef(v)}>{r}</button>)}</div>
+                  {renderCampo('O que comeu ou bebeu', <textarea className={inputClasse} rows={2} placeholder="Ex.: café com leite e pão" value={dTexto} onChange={(e) => setDTexto(e.target.value)} />, { obrigatorio: true })}
+                </>
+              ))}
+              {diarioFoco?.modo !== 'dieta' && renderSecao('Tinha algum destes?', (
+                <div className="flex flex-wrap gap-2">{Object.entries(tagsDiario).map(([k, r]) => <button key={k} type="button" aria-pressed={!!dContem[k]} className={chipDs(!!dContem[k])} onClick={() => setDContem((m) => ({ ...m, [k]: !m[k] }))}>{r}</button>)}</div>
+              ))}
+              {diarioFoco?.modo === 'dieta' && renderSecao('Seguiu o plano?', renderSegmentado(planoDiario, dPlano, setDPlano))}
+            </>
+          ) : (
+            <>
+              {renderSecao('O que sentiu', <div className="flex flex-wrap gap-2">{sintomasDiario.map((s) => <button key={s} type="button" aria-pressed={!!dSint[s]} className={chipDs(!!dSint[s])} onClick={() => setDSint((m) => ({ ...m, [s]: !m[s] }))}>{s}</button>)}</div>)}
+              {renderSecao('Intensidade', renderSegmentado(intensidadesDiario, dIntens, setDIntens))}
+            </>
+          )}
+          {erroDiario && <p className="text-sm text-red-600">{erroDiario}</p>}
+          {renderBarraAcoes(`Salvar agora (${horaAgora})`, salvarItemDiario, () => setFormDiario(''), carregando)}
+        </div>
+      );
+    }
+
+    if (!diarioFoco) {
+      return (
+        <div className="space-y-4">
+          <div className="flex flex-col items-center gap-3 rounded-2xl border border-[#E1E6E3] bg-white p-6 text-center">
+            <p className="text-base font-semibold text-[#26332E]">Diário alimentar</p>
+            <p className="text-sm text-[#55615B]">Registre o que come e o que sente. Serve para investigar uma suspeita (como lactose ou glúten) ou para seguir um plano de nutricionista.</p>
+            <button type="button" onClick={() => abrirFormDiario('foco')} className={botaoPrimario}>Começar um diário</button>
+          </div>
+          {erroDiario && <p className="text-sm text-red-600">{erroDiario}</p>}
+        </div>
+      );
+    }
+
+    const f = diarioFoco;
+    const diaN = Math.max(1, diasEntre(f.inicio, hoje) + 1);
+    const itensHoje = diarioItens.filter((i) => i.dia === hoje);
+    const nRef = itensHoje.filter((i) => i.tipo === 'refeicao').length;
+    const nSint = itensHoje.length - nRef;
+    const tagFoco = f.modo === 'investigar' ? (f.detalhe || 'leite') : '';
+    const c = tagFoco ? contarRefeicoesComSintoma(tagFoco) : null;
+    const semana = diarioItens.filter((i) => i.dia >= somarDias(hoje, -6));
+    const diasComRegistro = new Set(semana.map((i) => i.dia)).size;
+    const refsSemana = semana.filter((i) => i.tipo === 'refeicao');
+    const dentro = refsSemana.filter((i) => i.plano === 'sim').length;
+    const relatorioTxt = f.modo === 'investigar' ? 'Copiar relatório para o médico' : 'Copiar relatório para o nutricionista';
+
+    return (
+      <div className="space-y-4">
+        <section className="flex flex-col gap-1 rounded-2xl bg-[#1E5B4A] p-[18px] text-white">
+          <span className="text-sm opacity-80">{f.modo === 'investigar' ? 'Investigando' : 'Acompanhando'}</span>
+          <span className="text-xl font-bold">{f.titulo}</span>
+          <span className="text-sm opacity-90">{f.modo === 'investigar' ? `Dia ${Math.min(diaN, f.dias || diaN)} de ${f.dias}` : `Desde ${formatarData(f.inicio)}${f.detalhe ? ` · orientado por ${f.detalhe}` : ''}`}</span>
+          <button type="button" onClick={encerrarFocoDiario} className="mt-2 self-start rounded-full bg-white/15 px-3 py-1.5 text-sm font-semibold">Encerrar diário</button>
+        </section>
+        <div className="grid grid-cols-2 gap-3">
+          <button type="button" onClick={() => abrirFormDiario('ref')} className={botaoPrimario}>+ Refeição</button>
+          <button type="button" onClick={() => abrirFormDiario('sint')} className="h-[50px] rounded-[14px] border border-[#CDD5D1] bg-white text-base font-semibold text-[#1E5B4A]">+ Sintoma</button>
+        </div>
+        {renderSecao('Hoje', (
+          <div className="flex flex-col gap-2">
+            <p className="text-[13px] text-[#55615B]">{nRef} {nRef === 1 ? 'refeição' : 'refeições'} · {nSint} {nSint === 1 ? 'sintoma' : 'sintomas'}</p>
+            {itensHoje.length === 0 && <p className="text-sm text-[#55615B]">Nada registrado hoje.</p>}
+            {itensHoje.map((i) => (
+              <div key={i.id} className="flex items-start gap-3 rounded-xl bg-[#F4F7F5] px-3 py-2.5">
+                <span className="mt-0.5 text-xs font-semibold text-[#55615B]">{i.hora}</span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm text-[#26332E]">{i.texto}</p>
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {i.tipo === 'sintoma' && i.intensidade && <span className="rounded-full bg-[#EEF1EF] px-2 py-0.5 text-xs font-bold text-[#3B4A44]">{i.intensidade}</span>}
+                    {(i.contem || []).map((t) => <span key={t} className="rounded-full bg-[#FFF5EC] px-2 py-0.5 text-xs font-bold text-[#8A4416]">{tagsDiario[t]}</span>)}
+                    {i.plano && <span className="rounded-full bg-[#EEF4F1] px-2 py-0.5 text-xs font-bold text-[#1E5B4A]">{planoRotulo[i.plano]}</span>}
+                  </div>
+                </div>
+                <button type="button" aria-label="Remover" onClick={() => removerItemDiario(i.id)} className="text-xs text-red-600">remover</button>
+              </div>
+            ))}
+          </div>
+        ))}
+        {c && renderSecao('Resumo para o médico', (
+          <>
+            <div className="rounded-xl bg-[#F4F7F5] px-3.5 py-3 text-sm text-[#26332E]">Refeições com {tagsDiario[tagFoco].toLowerCase()}: <b>{c.comSint} de {c.com}</b> tiveram sintoma em até 6 horas.</div>
+            <div className="rounded-xl bg-[#F4F7F5] px-3.5 py-3 text-sm text-[#26332E]">Refeições sem: <b>{c.semSint} de {c.sem}</b> tiveram sintoma em até 6 horas.</div>
+            <p className="text-[13px] text-[#55615B]">O app só conta o que foi registrado. Quem interpreta e confirma é o médico.</p>
+            {tagFoco === 'gluten' && <p className="rounded-xl bg-[#FFF5EC] px-3.5 py-3 text-[13px] text-[#8A4416]">Não tire o glúten da dieta antes de falar com o médico: os exames para doença celíaca precisam que você ainda esteja comendo glúten.</p>}
+          </>
+        ))}
+        {f.modo === 'dieta' && renderSecao('Resumo da semana', (
+          <>
+            <div className="rounded-xl bg-[#F4F7F5] px-3.5 py-3 text-sm text-[#26332E]">Dias com registro: <b>{diasComRegistro} de 7</b></div>
+            <div className="rounded-xl bg-[#F4F7F5] px-3.5 py-3 text-sm text-[#26332E]">Refeições dentro do plano: <b>{dentro} de {refsSemana.length}</b></div>
+            <p className="text-[13px] text-[#55615B]">O objetivo é mostrar a rotina real para quem acompanha, não dar nota. Dia fora do plano também é informação útil.</p>
+          </>
+        ))}
+        <button type="button" onClick={copiarRelatorioDiario} className="h-11 w-full rounded-xl border border-[#CDD5D1] bg-white text-sm font-semibold text-[#1E5B4A]">{diarioCopiado ? 'Copiado!' : relatorioTxt}</button>
+        {erroDiario && <p className="text-sm text-red-600">{erroDiario}</p>}
       </div>
     );
   }
@@ -5848,12 +6537,13 @@ export default function Home() {
     desenvolvimento: [mostrarFormDesenvolvimento, () => setMostrarFormDesenvolvimento(false), '', ''],
     alimentacaoinfantil: [mostrarFormAlimentacaoInfantil, () => setMostrarFormAlimentacaoInfantil(false), '', ''],
     puberdade: [mostrarFormPuberdade, () => setMostrarFormPuberdade(false), '', ''],
-    saudemental: [mostrarFormSaudeMental, () => setMostrarFormSaudeMental(false), '', ''],
+    saudemental: [mostrarFormSaudeMental, () => setMostrarFormSaudeMental(false), 'Novo registro', 'Editar registro'],
+    diario: [formDiario !== '', () => setFormDiario(''), formDiario === 'sint' ? 'Registrar sintoma' : formDiario === 'foco' ? 'Novo diário' : 'Registrar refeição', formDiario === 'sint' ? 'Registrar sintoma' : formDiario === 'foco' ? 'Novo diário' : 'Registrar refeição'],
     habitosvida: [mostrarFormHabitosVida, () => setMostrarFormHabitosVida(false), '', ''],
   };
   const idEditandoDaTela: Record<string, string | null | undefined> = {
     condicoes: condicaoEditandoId, cirurgias: condicaoEditandoId, medicos: medicoEditandoId, exames: exameEditandoId,
-    vacinas: vacinaEditandoId, crescimento: crescimentoEditandoId, terapias: terapiaEditandoId,
+    vacinas: vacinaEditandoId, crescimento: crescimentoEditandoId, terapias: terapiaEditandoId, saudemental: smEditandoId,
   };
   const emTelaDetalhe = passo === 'painel' && !!membroSelecionado;
 
@@ -6859,6 +7549,8 @@ export default function Home() {
                     }
                     if (telaDetalhe === 'nutricionista' || telaDetalhe === 'esportes') {
                       setTelaDetalhe('bemestar');
+                    } else if (telaDetalhe === 'agua' || telaDetalhe === 'diario') {
+                      setTelaDetalhe('habitosvida');
                     } else {
                       setTelaDetalhe(null);
                     }
@@ -6894,6 +7586,10 @@ export default function Home() {
                       ? 'Gestação e Nascimento'
                       : telaDetalhe === 'gestacaoatual'
                       ? 'Gestação'
+                      : telaDetalhe === 'agua'
+                      ? 'Água de hoje'
+                      : telaDetalhe === 'diario'
+                      ? 'Diário alimentar'
                       : telaDetalhe === 'desenvolvimento'
                       ? 'Desenvolvimento Neuropsicomotor'
                       : telaDetalhe === 'alimentacaoinfantil'
@@ -9391,92 +10087,13 @@ export default function Home() {
               </div>
             )}
 
-            {telaDetalhe === 'saudemental' && (
-              <div className="space-y-3">
-                <p className="text-sm text-slate-500">Humor e pontos de atenção emocional.</p>
-                {(saudeMental?.ideacao_suicida || saudeMental?.automutilacao) && (
-                  <div className="rounded-xl bg-amber-50 border border-amber-100 p-3">
-                    <p className="text-sm text-amber-800">
-                      Se isso ainda for uma preocupação atual, vale buscar apoio profissional (psicólogo/psiquiatra) o quanto antes — e, em caso de risco imediato, o CVV (188) atende 24h.
-                    </p>
-                  </div>
-                )}
-                {!mostrarFormSaudeMental ? (
-                  <>
-                    {!saudeMental ? (
-                      <p className="text-sm text-slate-400 text-center py-2">Nenhuma informação registrada ainda.</p>
-                    ) : (
-                      <div className="grid grid-cols-2 gap-3">
-                        {saudeMental.humor && <div className="col-span-2 rounded-xl bg-[#FAFAF8] p-3"><p className="text-xs text-slate-400">Humor</p><p className="text-sm text-slate-700">{saudeMental.humor}</p></div>}
-                        <div className="rounded-xl bg-[#FAFAF8] p-3"><p className="text-xs text-slate-400">Ansiedade</p><p className="text-sm font-medium text-slate-800">{saudeMental.ansiedade == null ? '—' : saudeMental.ansiedade ? 'Sim' : 'Não'}</p></div>
-                        <div className="rounded-xl bg-[#FAFAF8] p-3"><p className="text-xs text-slate-400">Tristeza persistente</p><p className="text-sm font-medium text-slate-800">{saudeMental.tristeza_persistente == null ? '—' : saudeMental.tristeza_persistente ? 'Sim' : 'Não'}</p></div>
-                        <div className="rounded-xl bg-[#FAFAF8] p-3"><p className="text-xs text-slate-400">Ideação suicida</p><p className="text-sm font-medium text-slate-800">{saudeMental.ideacao_suicida == null ? '—' : saudeMental.ideacao_suicida ? 'Sim' : 'Não'}</p></div>
-                        <div className="rounded-xl bg-[#FAFAF8] p-3"><p className="text-xs text-slate-400">Automutilação</p><p className="text-sm font-medium text-slate-800">{saudeMental.automutilacao == null ? '—' : saudeMental.automutilacao ? 'Sim' : 'Não'}</p></div>
-                        {saudeMental.observacao && <div className="col-span-2 rounded-xl bg-[#FAFAF8] p-3"><p className="text-xs text-slate-400">Observações</p><p className="text-sm text-slate-700">{saudeMental.observacao}</p></div>}
-                      </div>
-                    )}
-                    <button onClick={abrirEdicaoSaudeMental} className={botaoPrimario}>{saudeMental ? 'Editar' : '+ Adicionar'}</button>
-                  </>
-                ) : (
-                  <div className="space-y-4 rounded-2xl bg-white border border-[#E1E6E3] p-[18px]">
-                    <input className={inputClasse} placeholder="como está o humor (opcional)" value={formSaudeMental.humor} onChange={(e) => setFormSaudeMental((f) => ({ ...f, humor: e.target.value }))} />
-                    <select className={inputClasse} value={formSaudeMental.ansiedade} onChange={(e) => setFormSaudeMental((f) => ({ ...f, ansiedade: e.target.value as '' | 'sim' | 'nao' }))}>
-                      <option value="">tem ansiedade?</option>
-                      <option value="sim">Sim</option>
-                      <option value="nao">Não</option>
-                    </select>
-                    <select className={inputClasse} value={formSaudeMental.tristeza_persistente} onChange={(e) => setFormSaudeMental((f) => ({ ...f, tristeza_persistente: e.target.value as '' | 'sim' | 'nao' }))}>
-                      <option value="">tristeza persistente?</option>
-                      <option value="sim">Sim</option>
-                      <option value="nao">Não</option>
-                    </select>
-                    <select className={inputClasse} value={formSaudeMental.ideacao_suicida} onChange={(e) => setFormSaudeMental((f) => ({ ...f, ideacao_suicida: e.target.value as '' | 'sim' | 'nao' }))}>
-                      <option value="">ideação suicida?</option>
-                      <option value="sim">Sim</option>
-                      <option value="nao">Não</option>
-                    </select>
-                    <select className={inputClasse} value={formSaudeMental.automutilacao} onChange={(e) => setFormSaudeMental((f) => ({ ...f, automutilacao: e.target.value as '' | 'sim' | 'nao' }))}>
-                      <option value="">automutilação?</option>
-                      <option value="sim">Sim</option>
-                      <option value="nao">Não</option>
-                    </select>
-                    <textarea className={inputClasse} rows={2} placeholder="observações (opcional)" value={formSaudeMental.observacao} onChange={(e) => setFormSaudeMental((f) => ({ ...f, observacao: e.target.value }))} />
-                    {erroSaudeMental && <p className="text-sm text-red-600">{erroSaudeMental}</p>}
-                    {renderBarraAcoes('Salvar', salvarSaudeMental, () => setMostrarFormSaudeMental(false), carregando)}
-                  </div>
-                )}
-              </div>
-            )}
+            {telaDetalhe === 'saudemental' && renderTelaSaudeMental()}
 
-            {telaDetalhe === 'habitosvida' && (
-              <div className="space-y-3">
-                <p className="text-sm text-slate-500">Alimentação do dia a dia, atividade física, sono e uso de telas.</p>
-                {!mostrarFormHabitosVida ? (
-                  <>
-                    {!habitosVida ? (
-                      <p className="text-sm text-slate-400 text-center py-2">Nenhuma informação registrada ainda.</p>
-                    ) : (
-                      <div className="space-y-2">
-                        {habitosVida.alimentacao && <div className="rounded-xl bg-[#FAFAF8] p-3"><p className="text-xs text-slate-400">Alimentação</p><p className="text-sm text-slate-700">{habitosVida.alimentacao}</p></div>}
-                        {habitosVida.atividade_fisica && <div className="rounded-xl bg-[#FAFAF8] p-3"><p className="text-xs text-slate-400">Atividade física</p><p className="text-sm text-slate-700">{habitosVida.atividade_fisica}</p></div>}
-                        {habitosVida.sono && <div className="rounded-xl bg-[#FAFAF8] p-3"><p className="text-xs text-slate-400">Sono</p><p className="text-sm text-slate-700">{habitosVida.sono}</p></div>}
-                        {habitosVida.uso_telas && <div className="rounded-xl bg-[#FAFAF8] p-3"><p className="text-xs text-slate-400">Uso de telas</p><p className="text-sm text-slate-700">{habitosVida.uso_telas}</p></div>}
-                      </div>
-                    )}
-                    <button onClick={abrirEdicaoHabitosVida} className={botaoPrimario}>{habitosVida ? 'Editar' : '+ Adicionar'}</button>
-                  </>
-                ) : (
-                  <div className="space-y-4 rounded-2xl bg-white border border-[#E1E6E3] p-[18px]">
-                    <textarea className={inputClasse} rows={2} placeholder="alimentação do dia a dia (opcional)" value={formHabitosVida.alimentacao} onChange={(e) => setFormHabitosVida((f) => ({ ...f, alimentacao: e.target.value }))} />
-                    <textarea className={inputClasse} rows={2} placeholder="atividade física (opcional)" value={formHabitosVida.atividade_fisica} onChange={(e) => setFormHabitosVida((f) => ({ ...f, atividade_fisica: e.target.value }))} />
-                    <textarea className={inputClasse} rows={2} placeholder="sono (opcional)" value={formHabitosVida.sono} onChange={(e) => setFormHabitosVida((f) => ({ ...f, sono: e.target.value }))} />
-                    <textarea className={inputClasse} rows={2} placeholder="uso de telas (opcional)" value={formHabitosVida.uso_telas} onChange={(e) => setFormHabitosVida((f) => ({ ...f, uso_telas: e.target.value }))} />
-                    {erroHabitosVida && <p className="text-sm text-red-600">{erroHabitosVida}</p>}
-                    {renderBarraAcoes('Salvar', salvarHabitosVida, () => setMostrarFormHabitosVida(false), carregando)}
-                  </div>
-                )}
-              </div>
-            )}
+            {telaDetalhe === 'habitosvida' && renderTelaHabitos()}
+
+            {telaDetalhe === 'agua' && renderTelaAgua()}
+
+            {telaDetalhe === 'diario' && renderTelaDiario()}
 
             {telaDetalhe === 'crescimento' && (
               <div className="space-y-3">
