@@ -121,7 +121,7 @@ export const vacinasComuns: string[] = [
   'Pneumocócica 10-valente', 'Pneumocócica 13-valente', 'Pneumocócica 23-valente',
   'Meningocócica C (conjugada)', 'Meningocócica ACWY', 'Meningocócica B',
   'Febre Amarela', 'Tríplice Viral (Sarampo, Caxumba e Rubéola)', 'Tetra Viral (SCR + Varicela)',
-  'Varicela (Catapora)', 'Hepatite A', 'HPV', 'Influenza (Gripe)', 'Dengue', 'Covid-19',
+  'Varicela (Catapora)', 'Hepatite A', 'HPV', 'Influenza (Gripe)', 'Dengue', 'Covid-19', 'VSR (Vírus Sincicial Respiratório)',
   'Raiva', 'Herpes-zóster', 'Outra (especificar)',
 ];
 
@@ -184,6 +184,25 @@ export type InformacaoNascimento = {
   pre_natal_num_consultas: number | null;
   intercorrencias_gestacionais: string | null;
   uso_substancias_medicacoes: string | null;
+  hora_nascimento?: string | null;
+  idade_gestacional_dias?: number | null;
+  houve_intercorrencia?: string | null;
+  intercorrencias_itens?: Record<string, string> | null;
+};
+
+export type Gestacao = {
+  id: string;
+  membro_id: string;
+  dum: string;
+  dpp: string;
+  tipo_gestacao: 'unica' | 'gemeos' | 'outro';
+  fator_rh: 'positivo' | 'negativo' | null;
+  status: 'em_andamento' | 'encerrada';
+  passos_feitos: Record<string, boolean> | null;
+  intercorrencias: Record<string, string> | null;
+  preparacao: Record<string, string> | null;
+  bebe_membro_id: string | null;
+  encerrada_em: string | null;
 };
 
 // As 5 seções de anamnese abaixo seguem todas o mesmo padrão de informacao_nascimento:
@@ -241,6 +260,7 @@ export type MedicaoCrescimento = {
   peso_kg: number | null;
   altura_cm: number | null;
   condicao_relacionada_id: string | null;
+  pressao_arterial?: string | null;
 };
 
 export type AtividadeFisica = {
@@ -265,7 +285,7 @@ export type Medico = {
 };
 
 export type Passo = 'login' | 'cadastro' | 'onboarding' | 'painel';
-export type Aba = 'geral' | 'condicoes' | 'cirurgias' | 'medicacoes' | 'consultas' | 'odontologia' | 'exames' | 'vacinas' | 'nascimento' | 'menupessoal' | 'gestacao' | 'desenvolvimento' | 'alimentacaoinfantil' | 'puberdade' | 'saudemental' | 'habitosvida' | 'crescimento' | 'riscos' | 'medicos' | 'bemestar' | 'nutricionista' | 'esportes' | 'novoregistro' | 'onboardingvoz' | 'eventoresumo' | 'feedeventos' | 'terapias' | 'parentes';
+export type Aba = 'geral' | 'condicoes' | 'cirurgias' | 'medicacoes' | 'consultas' | 'odontologia' | 'exames' | 'vacinas' | 'nascimento' | 'menupessoal' | 'gestacao' | 'gestacaoatual' | 'desenvolvimento' | 'alimentacaoinfantil' | 'puberdade' | 'saudemental' | 'habitosvida' | 'crescimento' | 'riscos' | 'medicos' | 'bemestar' | 'nutricionista' | 'esportes' | 'novoregistro' | 'onboardingvoz' | 'eventoresumo' | 'feedeventos' | 'terapias' | 'parentes';
 
 // ATENÇÃO: estas são orientações gerais de rastreamento, baseadas em diretrizes conhecidas
 // (ex: sociedades de mastologia, coloproctologia, urologia, diabetes). Elas NÃO substituem

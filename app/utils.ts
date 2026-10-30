@@ -179,3 +179,10 @@ export function somarMeses(dataISO: string, meses: number): string {
   alvo.setDate(Math.min(d, ultimoDia));
   return `${alvo.getFullYear()}-${String(alvo.getMonth() + 1).padStart(2, '0')}-${String(alvo.getDate()).padStart(2, '0')}`;
 }
+
+// Quantos dias há de a até b (ambas yyyy-mm-dd). Positivo quando b é depois de a.
+export function diasEntre(a: string, b: string): number {
+  const da = new Date(a + 'T12:00:00').getTime();
+  const db = new Date(b + 'T12:00:00').getTime();
+  return Math.round((db - da) / 86400000);
+}

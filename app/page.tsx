@@ -29,6 +29,7 @@ import type {
   TerapiaRascunho,
   SessaoTerapia,
   LembreteConsulta,
+  Gestacao,
 } from './tipos';
 import {
   opcoesParentesco,
@@ -67,7 +68,10 @@ import {
   paraNumeroTolerante,
   obterCategoriaDoenca,
   calcularRiscosGeneticos,
+  diasEntre,
 } from './utils';
+import { normalizar, marcosPreNatal, examesPreNatal, vacinasGestacao, gruposIntercorrencia, opcoesTipoParto, rotuloTipoParto } from './gestacao';
+import type { MarcoPreNatal, GrupoIntercorrencia } from './gestacao';
 
 
 // Ícones de linha (substituem os emojis pequenos espalhados pela tela).
@@ -476,6 +480,31 @@ export default function Home() {
 
   const [nascimento, setNascimento] = useState<InformacaoNascimento | null>(null);
   const [mostrarFormNascimento, setMostrarFormNascimento] = useState(false);
+  // Gestação em andamento e novo formulário de nascimento
+  const [gestacaoBruta, setGestacao] = useState<Gestacao | null>(null);
+  const [gestacaoCarregadaPara, setGestacaoCarregadaPara] = useState<string | null>(null);
+  const gestacao = gestacaoBruta && gestacaoBruta.membro_id === membroSelecionado?.id ? gestacaoBruta : null;
+  const gestacaoCarregada = gestacaoCarregadaPara === membroSelecionado?.id;
+  const [mostrarFormGestacao, setMostrarFormGestacao] = useState(false);
+  const [gBase, setGBase] = useState<'dum' | 'dpp'>('dum');
+  const [gData, setGData] = useState('');
+  const [gTipo, setGTipo] = useState<'unica' | 'gemeos' | 'outro'>('unica');
+  const [gRh, setGRh] = useState<'' | 'positivo' | 'negativo'>('');
+  const [erroGestacao, setErroGestacao] = useState('');
+  const [gestConfirma, setGestConfirma] = useState<'' | 'encerrar' | 'excluir'>('');
+  const [gestTri, setGestTri] = useState<0 | 1 | 2 | 3>(0);
+  const [gestPainel, setGestPainel] = useState<'' | 'interc' | 'prep'>('');
+  const [origemGest, setOrigemGest] = useState(false);
+  const [mostrarFormBebe, setMostrarFormBebe] = useState(false);
+  const [bebeNome, setBebeNome] = useState('');
+  const [bebeSexo, setBebeSexo] = useState('');
+  const [nascData, setNascData] = useState('');
+  const [nascHora, setNascHora] = useState('');
+  const [nascIgDias, setNascIgDias] = useState('');
+  const [nascHouve, setNascHouve] = useState<'' | 'sim' | 'nao' | 'ns'>('');
+  const [nascItens, setNascItens] = useState<Record<string, string>>({});
+  const [nascGruposAbertos, setNascGruposAbertos] = useState<Record<string, boolean>>({});
+  const [nascMaisAberto, setNascMaisAberto] = useState(false);
   const [novoPesoNascimento, setNovoPesoNascimento] = useState('');
   const [novoComprimentoNascimento, setNovoComprimentoNascimento] = useState('');
   const [novoPerimetroCefalico, setNovoPerimetroCefalico] = useState('');
@@ -540,6 +569,7 @@ export default function Home() {
   const [novaDataCrescimento, setNovaDataCrescimento] = useState('');
   const [novoPesoCrescimento, setNovoPesoCrescimento] = useState('');
   const [novaAlturaCrescimento, setNovaAlturaCrescimento] = useState('');
+  const [novaPressaoCrescimento, setNovaPressaoCrescimento] = useState('');
   const [erroCrescimento, setErroCrescimento] = useState('');
   const [crescimentoEditandoId, setCrescimentoEditandoId] = useState<string | null>(null);
   const [novaCondicaoRelacionadaCrescimento, setNovaCondicaoRelacionadaCrescimento] = useState('');
@@ -705,6 +735,7 @@ export default function Home() {
       carregarLembretesConsulta(membroSelecionado.id);
       carregarSessoesTerapia(membroSelecionado.id);
       carregarNascimento(membroSelecionado.id);
+      carregarGestacao(membroSelecionado.id);
       carregarDesenvolvimento(membroSelecionado.id);
       carregarAlimentacaoInfantil(membroSelecionado.id);
       carregarPuberdadeSexualidade(membroSelecionado.id);
@@ -720,6 +751,7 @@ export default function Home() {
       setExames([]);
       setVacinas([]);
       setNascimento(null);
+      setGestacao(null);
       setDesenvolvimento(null);
       setAlimentacaoInfantil(null);
       setPuberdadeSexualidade(null);
@@ -834,10 +866,10 @@ export default function Home() {
   async function carregarNascimento(membroId: string) {
     const { data, error } = await supabase
       .from('informacao_nascimento')
-      .select('id, peso_nascimento, comprimento_nascimento, perimetro_cefalico, idade_gestacional_semanas, tipo_parto, apgar_1min, apgar_5min, uti_neonatal, intercorrencias, local_nascimento, pre_natal_adequado, pre_natal_num_consultas, intercorrencias_gestacionais, uso_substancias_medicacoes')
+      .select('id, peso_nascimento, comprimento_nascimento, perimetro_cefalico, idade_gestacional_semanas, tipo_parto, apgar_1min, apgar_5min, uti_neonatal, intercorrencias, local_nascimento, pre_natal_adequado, pre_natal_num_consultas, intercorrencias_gestacionais, uso_substancias_medicacoes, hora_nascimento, idade_gestacional_dias, houve_intercorrencia, intercorrencias_itens')
       .eq('membro_id', membroId)
       .maybeSingle();
-    if (!error && membroAtualRef.current === membroId) setNascimento(data);
+    if (!error && membroAtualRef.current === membroId) setNascimento(data as InformacaoNascimento | null);
   }
 
   // Carregamento das 5 seções novas de anamnese — todas "uma por membro", igual
@@ -890,7 +922,7 @@ export default function Home() {
   async function carregarCrescimento(membroId: string) {
     const { data, error } = await supabase
       .from('medicao_crescimento')
-      .select('id, data_medicao, peso_kg, altura_cm, condicao_relacionada_id')
+      .select('id, data_medicao, peso_kg, altura_cm, condicao_relacionada_id, pressao_arterial')
       .eq('membro_id', membroId)
       .order('data_medicao', { ascending: true });
     if (!error && data && membroAtualRef.current === membroId) setCrescimento(data);
@@ -2284,7 +2316,7 @@ export default function Home() {
     setContagemAnexos(c);
   }
 
-  async function carregarAnexosSaude(tipo: 'exame' | 'vacina', itemId: string) {
+  async function carregarAnexosSaude(tipo: 'exame' | 'vacina' | 'nascimento', itemId: string) {
     const { data } = await supabase
       .from('anexo_saude')
       .select('id, caminho, nome')
@@ -2317,7 +2349,7 @@ export default function Home() {
     if (validos.length) setAnexosSaudeNovos((l) => [...l, ...validos]);
   }
 
-  async function enviarAnexosSaude(tipo: 'exame' | 'vacina', itemId: string, membroId: string) {
+  async function enviarAnexosSaude(tipo: 'exame' | 'vacina' | 'nascimento', itemId: string, membroId: string) {
     for (const arquivo of anexosSaudeNovos) {
       const ext = (arquivo.name.split('.').pop() || 'jpg').toLowerCase();
       const caminho = `${membroId}/${tipo}/${itemId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
@@ -3171,82 +3203,315 @@ export default function Home() {
     await carregarSessoesTerapia(membroSelecionado.id);
   }
 
+  // ---------- Nascimento (novo formulário, desenho da Roberta) ----------
   function abrirEdicaoNascimento() {
-    setNovoPesoNascimento(nascimento?.peso_nascimento != null ? String(nascimento.peso_nascimento) : '');
-    setNovoComprimentoNascimento(nascimento?.comprimento_nascimento != null ? String(nascimento.comprimento_nascimento) : '');
-    setNovoPerimetroCefalico(nascimento?.perimetro_cefalico != null ? String(nascimento.perimetro_cefalico) : '');
-    setNovaIdadeGestacional(nascimento?.idade_gestacional_semanas != null ? String(nascimento.idade_gestacional_semanas) : '');
-    setNovoTipoParto(nascimento?.tipo_parto || '');
-    setNovoApgar1(nascimento?.apgar_1min != null ? String(nascimento.apgar_1min) : '');
-    setNovoApgar5(nascimento?.apgar_5min != null ? String(nascimento.apgar_5min) : '');
-    setNovoUtiNeonatal(nascimento?.uti_neonatal || false);
-    setNovasIntercorrencias(nascimento?.intercorrencias || '');
-    setNovoLocalNascimento(nascimento?.local_nascimento || '');
-    setNovoPreNatalAdequado(nascimento?.pre_natal_adequado || '');
-    setNovoPreNatalNumConsultas(nascimento?.pre_natal_num_consultas != null ? String(nascimento.pre_natal_num_consultas) : '');
-    setNovasIntercorrenciasGestacionais(nascimento?.intercorrencias_gestacionais || '');
-    setNovoUsoSubstancias(nascimento?.uso_substancias_medicacoes || '');
+    const n = nascimento;
+    setNascData(membroSelecionado?.data_nascimento || '');
+    setNascHora(n?.hora_nascimento || '');
+    setNovoPesoNascimento(n?.peso_nascimento != null ? String(Math.round(n.peso_nascimento < 20 ? n.peso_nascimento * 1000 : n.peso_nascimento)) : '');
+    setNovoComprimentoNascimento(n?.comprimento_nascimento != null ? String(n.comprimento_nascimento) : '');
+    setNovoPerimetroCefalico(n?.perimetro_cefalico != null ? String(n.perimetro_cefalico) : '');
+    setNovaIdadeGestacional(n?.idade_gestacional_semanas != null ? String(n.idade_gestacional_semanas) : '');
+    setNascIgDias(n?.idade_gestacional_dias != null ? String(n.idade_gestacional_dias) : '');
+    setNovoTipoParto(n?.tipo_parto || '');
+    setNovoApgar1(n?.apgar_1min != null ? String(n.apgar_1min) : '');
+    setNovoApgar5(n?.apgar_5min != null ? String(n.apgar_5min) : '');
+    setNovoUtiNeonatal(n?.uti_neonatal || false);
+    setNovasIntercorrencias(n?.intercorrencias || '');
+    setNovoLocalNascimento(n?.local_nascimento || '');
+    setNovoPreNatalAdequado(n?.pre_natal_adequado || '');
+    setNovoPreNatalNumConsultas(n?.pre_natal_num_consultas != null ? String(n.pre_natal_num_consultas) : '');
+    setNovasIntercorrenciasGestacionais(n?.intercorrencias_gestacionais || '');
+    setNovoUsoSubstancias(n?.uso_substancias_medicacoes || '');
+    const itens: Record<string, string> = { ...(n?.intercorrencias_itens || {}) };
+    if (n?.uti_neonatal && itens['rn:Ficou na UTI neonatal'] === undefined) itens['rn:Ficou na UTI neonatal'] = '';
+    setNascItens(itens);
+    const houve = (n?.houve_intercorrencia as '' | 'sim' | 'nao' | 'ns' | null | undefined) || ((Object.keys(itens).length > 0 || n?.intercorrencias) ? 'sim' : '');
+    setNascHouve(houve || '');
+    setNascGruposAbertos(Object.fromEntries(gruposIntercorrencia.map((g) => [g.id, Object.keys(itens).some((k) => k.startsWith(g.id + ':'))])));
+    setNascMaisAberto(!!(n?.pre_natal_adequado || n?.pre_natal_num_consultas != null || n?.uso_substancias_medicacoes || n?.intercorrencias_gestacionais));
+    reiniciarAnexosSaude();
+    if (membroSelecionado) carregarAnexosSaude('nascimento', membroSelecionado.id);
     setErroNascimento('');
     setMostrarFormNascimento(true);
   }
 
-  async function salvarNascimento() {
-    setErroNascimento('');
-    if (!membroSelecionado) return;
-
+  // Lê e confere os campos do formulário de nascimento. Devolve null (e mostra o erro) se algo estiver errado.
+  function montarDadosNascimento(): Record<string, unknown> | null {
     const peso = paraNumeroTolerante(novoPesoNascimento);
     const comprimento = paraNumeroTolerante(novoComprimentoNascimento);
     const perimetro = paraNumeroTolerante(novoPerimetroCefalico);
     const idadeGestacional = paraNumeroTolerante(novaIdadeGestacional);
+    const igDias = paraNumeroTolerante(nascIgDias);
     const apgar1 = paraNumeroTolerante(novoApgar1);
     const apgar5 = paraNumeroTolerante(novoApgar5);
     const preNatalNumConsultas = paraNumeroTolerante(novoPreNatalNumConsultas);
 
     const camposInvalidos: string[] = [];
-    if (Number.isNaN(peso)) camposInvalidos.push('peso ao nascer');
-    if (Number.isNaN(comprimento)) camposInvalidos.push('comprimento ao nascer');
-    if (Number.isNaN(perimetro)) camposInvalidos.push('perímetro cefálico');
-    if (Number.isNaN(idadeGestacional)) camposInvalidos.push('idade gestacional');
+    if (Number.isNaN(peso)) camposInvalidos.push('peso');
+    if (Number.isNaN(comprimento)) camposInvalidos.push('altura');
+    if (Number.isNaN(perimetro)) camposInvalidos.push('cabeça');
+    if (Number.isNaN(idadeGestacional)) camposInvalidos.push('semanas de gestação');
+    if (Number.isNaN(igDias)) camposInvalidos.push('dias de gestação');
     if (Number.isNaN(apgar1)) camposInvalidos.push('Apgar 1º minuto');
     if (Number.isNaN(apgar5)) camposInvalidos.push('Apgar 5º minuto');
-    if (Number.isNaN(preNatalNumConsultas)) camposInvalidos.push('número de consultas do pré-natal');
-
+    if (Number.isNaN(preNatalNumConsultas)) camposInvalidos.push('consultas do pré-natal');
     if (camposInvalidos.length > 0) {
       setErroNascimento(`Não consegui entender o número em: ${camposInvalidos.join(', ')}. Deixe só os números (pode usar vírgula para decimais).`);
-      return;
+      return null;
     }
-
-    setCarregando(true);
-
-    const dados = {
-      membro_id: membroSelecionado.id,
-      peso_nascimento: peso,
+    if (igDias != null && (igDias < 0 || igDias > 6)) {
+      setErroNascimento('Os dias da idade gestacional vão de 0 a 6.');
+      return null;
+    }
+    if ((apgar1 != null && (apgar1 < 0 || apgar1 > 10)) || (apgar5 != null && (apgar5 < 0 || apgar5 > 10))) {
+      setErroNascimento('O Apgar vai de 0 a 10.');
+      return null;
+    }
+    const itens = nascHouve === 'sim' ? nascItens : {};
+    return {
+      peso_nascimento: peso == null ? null : (peso < 20 ? peso : peso / 1000), // aceita gramas (3200) ou kg (3,2)
       comprimento_nascimento: comprimento,
       perimetro_cefalico: perimetro,
       idade_gestacional_semanas: idadeGestacional,
+      idade_gestacional_dias: igDias,
+      hora_nascimento: nascHora || null,
       tipo_parto: novoTipoParto || null,
       apgar_1min: apgar1,
       apgar_5min: apgar5,
-      uti_neonatal: novoUtiNeonatal,
-      intercorrencias: novasIntercorrencias || null,
+      uti_neonatal: nascHouve === 'sim' && 'rn:Ficou na UTI neonatal' in nascItens,
+      houve_intercorrencia: nascHouve || null,
+      intercorrencias_itens: itens,
+      intercorrencias: nascHouve === 'sim' ? (novasIntercorrencias || null) : null,
       local_nascimento: novoLocalNascimento || null,
       pre_natal_adequado: novoPreNatalAdequado || null,
       pre_natal_num_consultas: preNatalNumConsultas,
       intercorrencias_gestacionais: novasIntercorrenciasGestacionais || null,
       uso_substancias_medicacoes: novoUsoSubstancias || null,
     };
+  }
+
+  async function salvarNascimento() {
+    setErroNascimento('');
+    if (!membroSelecionado) return;
+    if (!nascData) {
+      setErroNascimento('Preencha a data do nascimento.');
+      return;
+    }
+    const dados = montarDadosNascimento();
+    if (!dados) return;
+    setCarregando(true);
 
     const { error } = await supabase
       .from('informacao_nascimento')
-      .upsert(dados, { onConflict: 'membro_id' });
-
-    setCarregando(false);
+      .upsert({ membro_id: membroSelecionado.id, ...dados }, { onConflict: 'membro_id' });
     if (error) {
+      setCarregando(false);
       setErroNascimento(error.message);
       return;
     }
+    try {
+      await enviarAnexosSaude('nascimento', membroSelecionado.id, membroSelecionado.id);
+    } catch (e) {
+      setCarregando(false);
+      setErroNascimento(e instanceof Error ? e.message : 'Não consegui enviar o anexo.');
+      return;
+    }
+    if (nascData !== membroSelecionado.data_nascimento) {
+      const { error: erroData } = await supabase.from('membro').update({ data_nascimento: nascData }).eq('id', membroSelecionado.id);
+      if (erroData) {
+        setCarregando(false);
+        setErroNascimento(erroData.message);
+        return;
+      }
+      const atualizado = { ...membroSelecionado, data_nascimento: nascData };
+      setMembroSelecionado(atualizado);
+      setMembros((l) => l.map((m) => (m.id === atualizado.id ? atualizado : m)));
+    }
+    setCarregando(false);
     setMostrarFormNascimento(false);
+    reiniciarAnexosSaude();
     await carregarNascimento(membroSelecionado.id);
+  }
+
+  // ---------- Gestação (acompanhamento da gestante) ----------
+  async function carregarGestacao(membroId: string) {
+    const { data, error } = await supabase
+      .from('gestacao')
+      .select('id, membro_id, dum, dpp, tipo_gestacao, fator_rh, status, passos_feitos, intercorrencias, preparacao, bebe_membro_id, encerrada_em')
+      .eq('membro_id', membroId)
+      .eq('status', 'em_andamento')
+      .order('criado_em', { ascending: false })
+      .limit(1);
+    if (membroAtualRef.current === membroId) {
+      setGestacao(!error && data && data.length > 0 ? (data[0] as Gestacao) : null);
+      setGestacaoCarregadaPara(membroId);
+    }
+  }
+
+  function abrirFormGestacao(editar: boolean) {
+    setErroGestacao('');
+    if (editar && gestacao) {
+      setGBase('dum');
+      setGData(gestacao.dum);
+      setGTipo(gestacao.tipo_gestacao);
+      setGRh(gestacao.fator_rh || '');
+    } else {
+      const ts = membroSelecionado?.tipo_sanguineo || '';
+      setGBase('dum');
+      setGData('');
+      setGTipo('unica');
+      setGRh(ts.endsWith('-') ? 'negativo' : ts.endsWith('+') ? 'positivo' : '');
+    }
+    setMostrarFormGestacao(true);
+  }
+
+  async function salvarGestacao() {
+    setErroGestacao('');
+    if (!membroSelecionado) return;
+    if (!gData) {
+      setErroGestacao(gBase === 'dum' ? 'Informe o primeiro dia da última menstruação.' : 'Informe a data provável do parto.');
+      return;
+    }
+    const dum = gBase === 'dum' ? gData : somarDias(gData, -280);
+    const dpp = gBase === 'dpp' ? gData : somarDias(gData, 280);
+    const dias = diasEntre(dum, dataLocalISO(new Date()));
+    if (dias < 0 || dias > 301) {
+      setErroGestacao('Essa data não parece certa para uma gestação em andamento. Confira, por favor.');
+      return;
+    }
+    setCarregando(true);
+    const dados = { dum, dpp, tipo_gestacao: gTipo, fator_rh: gRh || null };
+    const { error } = gestacao
+      ? await supabase.from('gestacao').update(dados).eq('id', gestacao.id)
+      : await supabase.from('gestacao').insert({ membro_id: membroSelecionado.id, status: 'em_andamento', ...dados });
+    setCarregando(false);
+    if (error) {
+      setErroGestacao(error.message.includes('gestacao') ? 'O banco ainda não tem a tabela da gestação. Rode o script gestacao.sql no Supabase primeiro.' : error.message);
+      return;
+    }
+    setMostrarFormGestacao(false);
+    await carregarGestacao(membroSelecionado.id);
+  }
+
+  async function atualizarCamposGestacao(campos: Partial<Pick<Gestacao, 'passos_feitos' | 'intercorrencias' | 'preparacao'>>) {
+    if (!gestacao) return;
+    setGestacao({ ...gestacao, ...campos });
+    const { error } = await supabase.from('gestacao').update(campos).eq('id', gestacao.id);
+    if (error) setErroGestacao(error.message);
+  }
+
+  async function encerrarGestacao() {
+    if (!gestacao || !membroSelecionado) return;
+    setCarregando(true);
+    const { error } = await supabase.from('gestacao').update({ status: 'encerrada', encerrada_em: dataLocalISO(new Date()) }).eq('id', gestacao.id);
+    setCarregando(false);
+    if (error) { setErroGestacao(error.message); return; }
+    setMostrarFormGestacao(false);
+    setGestacao(null);
+  }
+
+  async function excluirGestacao() {
+    if (!gestacao || !membroSelecionado) return;
+    setCarregando(true);
+    const { error } = await supabase.from('gestacao').delete().eq('id', gestacao.id);
+    setCarregando(false);
+    if (error) { setErroGestacao(error.message); return; }
+    setMostrarFormGestacao(false);
+    setGestacao(null);
+  }
+
+  function abrirBebeNasceu() {
+    if (!gestacao) return;
+    const dias = Math.max(0, diasEntre(gestacao.dum, dataLocalISO(new Date())));
+    const itens: Record<string, string> = {};
+    Object.entries((gestacao.intercorrencias || {}) as Record<string, string>).forEach(([nome, detalhe]) => { itens['gest:' + nome] = detalhe; });
+    setBebeNome('');
+    setBebeSexo('');
+    setNascData(dataLocalISO(new Date()));
+    setNascHora('');
+    setNovoPesoNascimento('');
+    setNovoComprimentoNascimento('');
+    setNovoPerimetroCefalico('');
+    setNovaIdadeGestacional(String(Math.min(42, Math.floor(dias / 7))));
+    setNascIgDias(String(dias % 7));
+    setNovoTipoParto('');
+    setNovoApgar1('');
+    setNovoApgar5('');
+    setNovoUtiNeonatal(false);
+    setNovasIntercorrencias('');
+    setNovoLocalNascimento(gestacao.preparacao?.maternidade || '');
+    setNovoPreNatalAdequado('');
+    setNovoPreNatalNumConsultas('');
+    setNovasIntercorrenciasGestacionais('');
+    setNovoUsoSubstancias('');
+    setNascItens(itens);
+    setNascHouve(Object.keys(itens).length > 0 ? 'sim' : '');
+    setNascGruposAbertos({ gest: Object.keys(itens).length > 0, parto: false, rn: false });
+    setNascMaisAberto(false);
+    reiniciarAnexosSaude();
+    setErroNascimento('');
+    setMostrarFormBebe(true);
+  }
+
+  async function salvarBebeNasceu() {
+    setErroNascimento('');
+    if (!membroSelecionado || !gestacao) return;
+    if (!bebeNome.trim() || !bebeSexo || !nascData) {
+      setErroNascimento('Preencha o nome do bebê, o sexo biológico e a data do nascimento.');
+      return;
+    }
+    const dados = montarDadosNascimento();
+    if (!dados) return;
+    setCarregando(true);
+    const { data: userData } = await supabase.auth.getUser();
+    const { data: meuUsuario } = await supabase.from('usuario').select('familia_id').eq('id', userData.user?.id).single();
+    // id gerado aqui para não precisar ler o membro de volta logo após criar (mesma razão do "Novo membro")
+    const bebeId = crypto.randomUUID();
+    const { error: erroMembro } = await supabase.from('membro').insert({
+      id: bebeId,
+      familia_id: meuUsuario?.familia_id,
+      criado_por: userData.user?.id,
+      nome: bebeNome.trim(),
+      data_nascimento: nascData,
+      sexo_biologico: bebeSexo,
+    });
+    if (erroMembro) {
+      setCarregando(false);
+      setErroNascimento(erroMembro.message);
+      return;
+    }
+    const { error: erroNasc } = await supabase.from('informacao_nascimento').insert({ membro_id: bebeId, ...dados });
+    let avisoFinal = '';
+    if (erroNasc) avisoFinal = 'O perfil do bebê foi criado, mas não consegui salvar os dados do nascimento: ' + erroNasc.message;
+    try {
+      await enviarAnexosSaude('nascimento', bebeId, bebeId);
+    } catch (e) {
+      avisoFinal = avisoFinal || (e instanceof Error ? e.message : 'Não consegui enviar o anexo.');
+    }
+    // Em gestação de gêmeos o acompanhamento continua aberto até a mãe encerrar.
+    if (gestacao.tipo_gestacao !== 'gemeos') {
+      await supabase.from('gestacao').update({ status: 'encerrada', encerrada_em: nascData, bebe_membro_id: bebeId }).eq('id', gestacao.id);
+    } else if (!gestacao.bebe_membro_id) {
+      await supabase.from('gestacao').update({ bebe_membro_id: bebeId }).eq('id', gestacao.id);
+    }
+    const { data: membrosAtualizados } = await supabase
+      .from('membro')
+      .select('id, nome, data_nascimento, sexo_biologico, tipo_sanguineo, observacoes_gerais, data_falecimento, parentesco, foto_url, alergias')
+      .is('data_falecimento', null)
+      .order('nome');
+    setCarregando(false);
+    setMostrarFormBebe(false);
+    reiniciarAnexosSaude();
+    if (membrosAtualizados) {
+      setMembros(membrosAtualizados);
+      const bebe = membrosAtualizados.find((m) => m.id === bebeId);
+      if (bebe) {
+        setMembroSelecionado(bebe);
+        setTelaDetalhe('gestacao');
+      }
+    }
+    if (avisoFinal) setErro(avisoFinal);
   }
 
   // Os 3 campos "Sim/Não/não informado" das 5 seções de anamnese usam esse par de
@@ -3427,6 +3692,7 @@ export default function Home() {
     setNovaDataCrescimento('');
     setNovoPesoCrescimento('');
     setNovaAlturaCrescimento('');
+    setNovaPressaoCrescimento('');
     setNovaCondicaoRelacionadaCrescimento('');
     setErroCrescimento('');
     setMostrarFormCrescimento(true);
@@ -3437,6 +3703,7 @@ export default function Home() {
     setNovaDataCrescimento(m.data_medicao);
     setNovoPesoCrescimento(m.peso_kg != null ? String(m.peso_kg) : '');
     setNovaAlturaCrescimento(m.altura_cm != null ? String(m.altura_cm) : '');
+    setNovaPressaoCrescimento(m.pressao_arterial || '');
     setNovaCondicaoRelacionadaCrescimento(m.condicao_relacionada_id || '');
     setErroCrescimento('');
     setMostrarFormCrescimento(true);
@@ -3462,8 +3729,8 @@ export default function Home() {
       setErroCrescimento('Não consegui entender o peso ou a altura. Deixe só os números.');
       return;
     }
-    if (peso == null && altura == null) {
-      setErroCrescimento('Preencha ao menos o peso ou a altura.');
+    if (peso == null && altura == null && !novaPressaoCrescimento.trim()) {
+      setErroCrescimento('Preencha ao menos o peso, a altura ou a pressão.');
       return;
     }
     setCarregando(true);
@@ -3472,6 +3739,7 @@ export default function Home() {
       data_medicao: novaDataCrescimento,
       peso_kg: peso,
       altura_cm: altura,
+      pressao_arterial: novaPressaoCrescimento.trim() || null,
       condicao_relacionada_id: novaCondicaoRelacionadaCrescimento || null,
     };
 
@@ -3817,6 +4085,489 @@ export default function Home() {
           </div>
         </div>
       </>
+    );
+  }
+
+  // ---------- Telas de Gestação e Nascimento ----------
+  function renderGrupoItens(g: GrupoIntercorrencia, prefixo: string, itens: Record<string, string>, alterar: (novo: Record<string, string>) => void) {
+    return (
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap gap-2">
+          {g.itens.map(([nome]) => {
+            const chave = prefixo + nome;
+            const ativo = chave in itens;
+            return (
+              <button key={nome} type="button" className={chipDs(ativo)} onClick={() => {
+                const novo = { ...itens };
+                if (ativo) delete novo[chave]; else novo[chave] = '';
+                alterar(novo);
+              }}>
+                {nome}
+              </button>
+            );
+          })}
+        </div>
+        {g.itens.filter(([nome]) => (prefixo + nome) in itens).map(([nome, dica]) => (
+          <div key={nome}>
+            {renderCampo(nome, (
+              <input className={inputClasse} placeholder={dica || 'Detalhes (opcional)'} value={itens[prefixo + nome]} onChange={(e) => alterar({ ...itens, [prefixo + nome]: e.target.value })} />
+            ))}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  function renderCamposNascimento() {
+    return (
+      <div className="space-y-4">
+        {renderSecao('O nascimento', (
+          <>
+            {renderCampo('Data do nascimento', <input className={inputClasse} type="date" value={nascData} onChange={(e) => setNascData(e.target.value)} />, { obrigatorio: true })}
+            <div className="grid grid-cols-2 gap-3">
+              {renderCampo('Hora', <input className={inputClasse} type="time" value={nascHora} onChange={(e) => setNascHora(e.target.value)} />)}
+              {renderCampo('Local', <input className={inputClasse} placeholder="Maternidade" value={novoLocalNascimento} onChange={(e) => setNovoLocalNascimento(e.target.value)} />)}
+            </div>
+          </>
+        ))}
+        {renderSecao('Medidas ao nascer', (
+          <>
+            <div className="grid grid-cols-2 gap-3">
+              {renderCampo('Peso (g)', <input className={inputClasse} inputMode="decimal" placeholder="Ex.: 3250" value={novoPesoNascimento} onChange={(e) => setNovoPesoNascimento(e.target.value)} />)}
+              {renderCampo('Altura (cm)', <input className={inputClasse} inputMode="decimal" placeholder="Ex.: 49" value={novoComprimentoNascimento} onChange={(e) => setNovoComprimentoNascimento(e.target.value)} />)}
+            </div>
+            {renderCampo('Perímetro da cabeça (cm)', <input className={inputClasse} inputMode="decimal" placeholder="Ex.: 34" value={novoPerimetroCefalico} onChange={(e) => setNovoPerimetroCefalico(e.target.value)} />)}
+          </>
+        ))}
+        {renderSecao('Gestação e parto', (
+          <>
+            <div className="grid grid-cols-2 gap-3">
+              {renderCampo('Semanas de gestação', <input className={inputClasse} inputMode="numeric" placeholder="Ex.: 39" value={novaIdadeGestacional} onChange={(e) => setNovaIdadeGestacional(e.target.value)} />)}
+              {renderCampo('Dias', <input className={inputClasse} inputMode="numeric" placeholder="0 a 6" value={nascIgDias} onChange={(e) => setNascIgDias(e.target.value)} />)}
+            </div>
+            {renderCampo('Tipo de parto', renderSelectDs(novoTipoParto, setNovoTipoParto, (
+              <>
+                <option value="">Não informado</option>
+                {opcoesTipoParto.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </>
+            )))}
+            <div className="grid grid-cols-2 gap-3">
+              {renderCampo('Apgar 1º minuto', <input className={inputClasse} inputMode="numeric" placeholder="0 a 10" value={novoApgar1} onChange={(e) => setNovoApgar1(e.target.value)} />)}
+              {renderCampo('Apgar 5º minuto', <input className={inputClasse} inputMode="numeric" placeholder="0 a 10" value={novoApgar5} onChange={(e) => setNovoApgar5(e.target.value)} />)}
+            </div>
+          </>
+        ))}
+        {renderSecao('Intercorrências', (
+          <>
+            {renderCampo('Houve alguma intercorrência?', renderSegmentado([['sim', 'Sim'], ['nao', 'Não'], ['ns', 'Não sei']], nascHouve, (v) => setNascHouve(v as '' | 'sim' | 'nao' | 'ns')))}
+            {nascHouve === 'sim' && (
+              <>
+                {gruposIntercorrencia.map((g) => {
+                  const qtd = Object.keys(nascItens).filter((k) => k.startsWith(g.id + ':')).length;
+                  const aberto = !!nascGruposAbertos[g.id];
+                  return (
+                    <div key={g.id} className="rounded-xl border border-[#E1E6E3]">
+                      <button type="button" onClick={() => setNascGruposAbertos((m) => ({ ...m, [g.id]: !aberto }))} className="flex w-full items-center justify-between px-3.5 py-3 text-left">
+                        <span className="text-sm font-semibold text-[#26332E]">{g.titulo}{qtd > 0 && <span className="ml-2 rounded-full bg-[#1E5B4A] px-2 py-0.5 text-xs text-white">{qtd}</span>}</span>
+                        <span className="text-[#55615B]">{aberto ? '−' : '+'}</span>
+                      </button>
+                      {aberto && <div className="px-3.5 pb-3.5">{renderGrupoItens(g, g.id + ':', nascItens, setNascItens)}</div>}
+                    </div>
+                  );
+                })}
+                {renderCampo('Outras observações', <textarea className={inputClasse} rows={2} placeholder="Algo que não está nas opções" value={novasIntercorrencias} onChange={(e) => setNovasIntercorrencias(e.target.value)} />)}
+              </>
+            )}
+          </>
+        ))}
+        <section className={secaoClasse}>
+          <button type="button" onClick={() => setNascMaisAberto(!nascMaisAberto)} className="flex w-full items-center justify-between text-left">
+            <span className={tituloSecao}>Pré-natal e outras informações</span>
+            <span className="text-[#55615B]">{nascMaisAberto ? '−' : '+'}</span>
+          </button>
+          {nascMaisAberto && (
+            <>
+              {renderCampo('O pré-natal foi adequado?', renderSelectDs(novoPreNatalAdequado, setNovoPreNatalAdequado, (
+                <>
+                  <option value="">Não informado</option>
+                  <option value="adequado">Adequado</option>
+                  <option value="inadequado">Inadequado</option>
+                </>
+              )))}
+              {renderCampo('Número de consultas do pré-natal', <input className={inputClasse} inputMode="numeric" value={novoPreNatalNumConsultas} onChange={(e) => setNovoPreNatalNumConsultas(e.target.value)} />)}
+              {renderCampo('Intercorrências na gestação (texto livre)', <textarea className={inputClasse} rows={2} value={novasIntercorrenciasGestacionais} onChange={(e) => setNovasIntercorrenciasGestacionais(e.target.value)} />)}
+              {renderCampo('Substâncias ou medicações usadas na gestação', <textarea className={inputClasse} rows={2} value={novoUsoSubstancias} onChange={(e) => setNovoUsoSubstancias(e.target.value)} />)}
+            </>
+          )}
+        </section>
+        {renderSecao('Anexos', renderAnexosSaude('Cartão da gestante, alta da maternidade, teste do pezinho...'))}
+      </div>
+    );
+  }
+
+  function renderTelaNascimento() {
+    if (!membroSelecionado) return null;
+    if (mostrarFormNascimento) {
+      return (
+        <div className="space-y-4">
+          {renderCamposNascimento()}
+          {erroNascimento && <p className="text-sm text-red-600">{erroNascimento}</p>}
+          {renderBarraAcoes('Salvar', salvarNascimento, () => setMostrarFormNascimento(false), carregando)}
+        </div>
+      );
+    }
+    const n = nascimento;
+    const pesoG = n?.peso_nascimento != null ? Math.round(n.peso_nascimento < 20 ? n.peso_nascimento * 1000 : n.peso_nascimento) : null;
+    const itensSel = Object.entries(n?.intercorrencias_itens || {});
+    const linha = (rotulo: string, valor: string | null | undefined) => (
+      <div className="flex items-start justify-between gap-3 border-b border-[#EEF1EF] py-2 last:border-0">
+        <span className="text-sm text-[#55615B]">{rotulo}</span>
+        <span className="text-right text-sm font-semibold text-[#26332E]">{valor || '—'}</span>
+      </div>
+    );
+    return (
+      <div className="space-y-3">
+        <p className="text-sm text-[#55615B]">Informações sobre a gestação, o parto e o período neonatal. Úteis para os médicos entenderem o histórico desde o início.</p>
+        {!n ? (
+          <p className="py-2 text-center text-sm text-slate-400">Nenhuma informação registrada ainda.</p>
+        ) : (
+          <>
+            {renderSecao('O nascimento', (
+              <div>
+                {linha('Data', formatarData(membroSelecionado.data_nascimento))}
+                {linha('Hora', n.hora_nascimento)}
+                {linha('Local', n.local_nascimento)}
+                {linha('Tipo de parto', rotuloTipoParto(n.tipo_parto))}
+                {linha('Gestação', n.idade_gestacional_semanas != null ? `${n.idade_gestacional_semanas} semanas${n.idade_gestacional_dias ? ` e ${n.idade_gestacional_dias} dias` : ''}` : null)}
+              </div>
+            ))}
+            {renderSecao('Ao nascer', (
+              <div>
+                {linha('Peso', pesoG != null ? `${pesoG} g` : null)}
+                {linha('Altura', n.comprimento_nascimento != null ? `${n.comprimento_nascimento} cm` : null)}
+                {linha('Perímetro da cabeça', n.perimetro_cefalico != null ? `${n.perimetro_cefalico} cm` : null)}
+                {linha('Apgar (1º / 5º min)', n.apgar_1min != null || n.apgar_5min != null ? `${n.apgar_1min ?? '—'} / ${n.apgar_5min ?? '—'}` : null)}
+                {linha('UTI neonatal', n.uti_neonatal ? 'Sim' : 'Não')}
+              </div>
+            ))}
+            {(itensSel.length > 0 || n.intercorrencias || n.houve_intercorrencia === 'nao') && renderSecao('Intercorrências', (
+              <div className="space-y-2">
+                {itensSel.length === 0 && !n.intercorrencias && <p className="text-sm text-[#26332E]">Nenhuma intercorrência.</p>}
+                {gruposIntercorrencia.map((g) => {
+                  const lista = itensSel.filter(([k]) => k.startsWith(g.id + ':'));
+                  if (lista.length === 0) return null;
+                  return (
+                    <div key={g.id}>
+                      <p className="text-xs font-semibold uppercase text-[#55615B]">{g.titulo}</p>
+                      {lista.map(([k, detalhe]) => <p key={k} className="text-sm text-[#26332E]">• {k.slice(g.id.length + 1)}{detalhe ? ` — ${detalhe}` : ''}</p>)}
+                    </div>
+                  );
+                })}
+                {n.intercorrencias && <p className="text-sm text-[#26332E]">{n.intercorrencias}</p>}
+              </div>
+            ))}
+            {(n.pre_natal_adequado || n.pre_natal_num_consultas != null || n.intercorrencias_gestacionais || n.uso_substancias_medicacoes) && renderSecao('Pré-natal', (
+              <div>
+                {linha('Pré-natal', n.pre_natal_adequado)}
+                {linha('Consultas', n.pre_natal_num_consultas != null ? String(n.pre_natal_num_consultas) : null)}
+                {n.intercorrencias_gestacionais && <p className="py-2 text-sm text-[#26332E]">{n.intercorrencias_gestacionais}</p>}
+                {n.uso_substancias_medicacoes && <p className="py-2 text-sm text-[#26332E]">{n.uso_substancias_medicacoes}</p>}
+              </div>
+            ))}
+          </>
+        )}
+        <button onClick={abrirEdicaoNascimento} className={botaoPrimario}>{n ? 'Editar informações' : '+ Adicionar informações'}</button>
+      </div>
+    );
+  }
+
+  // Acompanhamento da gestação em andamento
+  function renderTelaGestacao() {
+    if (!membroSelecionado) return null;
+    const hoje = dataLocalISO(new Date());
+
+    if (mostrarFormBebe) {
+      return (
+        <div className="space-y-4">
+          <p className="text-sm text-[#55615B]">Parabéns! Vamos criar o perfil do bebê e guardar os dados do nascimento. Você pode completar depois.</p>
+          {renderSecao('Dados do bebê', (
+            <>
+              {renderCampo('Nome', <input className={inputClasse} value={bebeNome} onChange={(e) => setBebeNome(e.target.value)} />, { obrigatorio: true })}
+              {renderCampo('Sexo biológico', renderSegmentado([['feminino', 'Feminino'], ['masculino', 'Masculino']], bebeSexo, setBebeSexo), { obrigatorio: true })}
+            </>
+          ))}
+          {renderCamposNascimento()}
+          {erroNascimento && <p className="text-sm text-red-600">{erroNascimento}</p>}
+          {renderBarraAcoes('Criar perfil do bebê', salvarBebeNasceu, () => setMostrarFormBebe(false), carregando)}
+        </div>
+      );
+    }
+
+    if (mostrarFormGestacao) {
+      const prevDum = gData ? (gBase === 'dum' ? gData : somarDias(gData, -280)) : '';
+      const prevDpp = gData ? (gBase === 'dpp' ? gData : somarDias(gData, 280)) : '';
+      return (
+        <div className="space-y-4">
+          {renderSecao('Como você quer informar?', (
+            <>
+              {renderSegmentado([['dum', 'Última menstruação'], ['dpp', 'Data provável do parto']], gBase, setGBase)}
+              {renderCampo(gBase === 'dum' ? 'Primeiro dia da última menstruação (DUM)' : 'Data provável do parto (DPP)', <input className={inputClasse} type="date" value={gData} onChange={(e) => setGData(e.target.value)} />, { obrigatorio: true, dica: gBase === 'dum' ? 'A data provável do parto é calculada automaticamente (DUM + 280 dias).' : 'Se o ultrassom mudou a data, use a data do ultrassom.' })}
+              {prevDum && prevDpp && (
+                <div className="rounded-xl bg-[#EEF4F1] px-3.5 py-3 text-sm text-[#26332E]">
+                  Data provável do parto: <b>{formatarData(prevDpp)}</b><br />
+                  Hoje: <b>{Math.floor(Math.max(0, diasEntre(prevDum, hoje)) / 7)} semanas e {Math.max(0, diasEntre(prevDum, hoje)) % 7} dias</b>
+                </div>
+              )}
+            </>
+          ))}
+          {renderSecao('Sobre a gestação', (
+            <>
+              {renderCampo('Tipo de gestação', renderSegmentado([['unica', 'Única'], ['gemeos', 'Gêmeos'], ['outro', 'Outro']], gTipo, (v) => setGTipo(v as 'unica' | 'gemeos' | 'outro')))}
+              {renderCampo('Fator Rh da gestante', renderSegmentado([['positivo', 'Positivo'], ['negativo', 'Negativo'], ['', 'Não sei']], gRh, (v) => setGRh(v as '' | 'positivo' | 'negativo')), { dica: 'Se for negativo, o app mostra o lembrete da imunoglobulina anti-Rh.' })}
+            </>
+          ))}
+          {gestacao && (
+            <section className={secaoClasse}>
+              <h3 className={tituloSecao}>Outras opções</h3>
+              {gestConfirma ? (
+                <div className="space-y-2">
+                  <p className="text-sm text-[#26332E]">{gestConfirma === 'excluir' ? 'Excluir apaga todo o acompanhamento desta gestação. Tem certeza?' : 'Encerrar guarda o acompanhamento como finalizado (sem bebê). Tem certeza?'}</p>
+                  <div className="flex gap-2">
+                    <button type="button" className="h-11 flex-1 rounded-xl border border-[#CDD5D1] text-sm font-semibold" onClick={() => setGestConfirma('')}>Voltar</button>
+                    <button type="button" className="h-11 flex-1 rounded-xl bg-red-600 text-sm font-semibold text-white" onClick={() => (gestConfirma === 'excluir' ? excluirGestacao() : encerrarGestacao())}>Confirmar</button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <button type="button" className="h-11 flex-1 rounded-xl border border-[#CDD5D1] text-sm font-semibold text-[#26332E]" onClick={() => setGestConfirma('encerrar')}>Encerrar acompanhamento</button>
+                  <button type="button" className="h-11 flex-1 rounded-xl border border-red-200 text-sm font-semibold text-red-700" onClick={() => setGestConfirma('excluir')}>Excluir</button>
+                </div>
+              )}
+            </section>
+          )}
+          {erroGestacao && <p className="text-sm text-red-600">{erroGestacao}</p>}
+          {renderBarraAcoes(gestacao ? 'Salvar' : 'Iniciar acompanhamento', salvarGestacao, () => setMostrarFormGestacao(false), carregando)}
+        </div>
+      );
+    }
+
+    if (!gestacaoCarregada) return <p className="text-sm text-[#55615B]">Carregando...</p>;
+
+    if (!gestacao) {
+      return (
+        <div className="space-y-4">
+          <div className="flex flex-col items-center gap-3 rounded-2xl border border-[#E1E6E3] bg-white p-6 text-center">
+            <span className="text-[#1E5B4A]">{iconeSecao('gestacaoatual', 40)}</span>
+            <p className="text-base font-semibold text-[#26332E]">Acompanhe a gestação de {membroSelecionado.nome.split(' ')[0]}</p>
+            <p className="text-sm text-[#55615B]">Semanas, consultas e exames do pré-natal, vacinas da gestação e preparação para o parto. Quando o bebê nascer, o perfil dele é criado aqui mesmo e o histórico continua no app.</p>
+            <button onClick={() => abrirFormGestacao(false)} className={botaoPrimario}>Iniciar acompanhamento</button>
+          </div>
+          <p className="text-xs text-[#55615B]">Orientações gerais baseadas no pré-natal do Ministério da Saúde e no calendário de vacinação da gestante da SBIm. O obstetra pode ajustar tudo isso.</p>
+        </div>
+      );
+    }
+
+    // Gestação em andamento
+    const g = gestacao;
+    const dias = Math.max(0, diasEntre(g.dum, hoje));
+    const sem = Math.floor(dias / 7);
+    const dRest = dias % 7;
+    const tri = sem < 14 ? 1 : sem < 28 ? 2 : 3;
+    const faltam = diasEntre(hoje, g.dpp);
+    const pct = Math.min(100, Math.round((dias / 280) * 100));
+    const rhNeg = g.fator_rh === 'negativo';
+
+    const realizados = (lista: { nome: string; status?: string; data: string }[], trecho: string) =>
+      lista.some((x) => (x.status || 'realizado') === 'realizado' && x.data >= g.dum && normalizar(x.nome).includes(normalizar(trecho)));
+    const solicitado = (trecho: string) =>
+      exames.some((x) => x.status === 'solicitado' && normalizar(x.nome).includes(normalizar(trecho)));
+    const listaExames = exames.map((x) => ({ nome: x.nome, status: x.status, data: x.data_realizacao }));
+    const listaVacinas = vacinas.map((x) => ({ nome: x.nome, status: x.status, data: x.data_aplicacao }));
+    const consultasPN = consultas.filter((c) => c.data_hora.slice(0, 10) >= g.dum && c.status !== 'cancelada' && (/gineco|obstet/.test(normalizar(c.especialidade?.nome || '')) || /pre natal/.test(normalizar(c.motivo || ''))));
+    const consultasFeitas = consultasPN.filter((c) => c.status === 'realizada').length;
+    const proximaConsulta = consultasPN.filter((c) => c.status === 'agendada').sort((a, b) => a.data_hora.localeCompare(b.data_hora))[0];
+
+    const marcoFeito = (m: MarcoPreNatal): boolean => {
+      if (g.passos_feitos?.[m.id]) return true;
+      if (m.exame) return realizados(listaExames, m.exame);
+      if (m.vacina) return realizados(listaVacinas, m.vacina);
+      if (m.id === 'consulta1') return consultasFeitas > 0;
+      return false;
+    };
+    const marcos = marcosPreNatal.filter((m) => !(m.soRhNegativo && !rhNeg));
+    const pendentes = marcos.filter((m) => !marcoFeito(m)).sort((a, b) => a.de - b.de);
+    const concluidos = marcos.filter(marcoFeito);
+
+    function sairPara(tela: Aba) {
+      setOrigemGest(true);
+      setTelaDetalhe(tela);
+    }
+    function agirNoMarco(m: MarcoPreNatal) {
+      if (m.exame) { sairPara('exames'); abrirNovoExame(false); setNovoNomeExame(m.exame); return; }
+      if (m.vacina) {
+        const v = vacinasGestacao.find((x) => x.chave === m.vacina);
+        sairPara('vacinas'); abrirNovaVacina(false); if (v) setNovoNomeVacina(v.nome); return;
+      }
+      if (m.id === 'consulta1') { sairPara('consultas'); abrirNovaConsulta('Ginecologia e Obstetrícia'); setNovoMotivoConsulta('Pré-natal'); return; }
+      atualizarCamposGestacao({ passos_feitos: { ...(g.passos_feitos || {}), [m.id]: true } });
+    }
+    function alternarMarco(m: MarcoPreNatal) {
+      const atual = { ...(g.passos_feitos || {}) };
+      if (atual[m.id]) delete atual[m.id]; else atual[m.id] = true;
+      atualizarCamposGestacao({ passos_feitos: atual });
+    }
+    const rotuloMarco = (m: MarcoPreNatal) => (sem > m.ate ? 'Atrasado' : sem >= m.de ? 'Agora' : `Semana ${m.de}`);
+    const corMarco = (m: MarcoPreNatal) => (sem > m.ate ? 'bg-[#FBEDE7] text-[#B4441F]' : sem >= m.de ? 'bg-[#E3F1EA] text-[#1E5B4A]' : 'bg-[#EEF1EF] text-[#55615B]');
+
+    const triExames = gestTri || (tri as 1 | 2 | 3);
+    const painel = (id: 'interc' | 'prep', titulo: string, subtitulo: string, conteudo: ReactNode) => (
+      <section className={secaoClasse}>
+        <button type="button" onClick={() => setGestPainel(gestPainel === id ? '' : id)} className="flex w-full items-center justify-between text-left">
+          <span className="flex flex-col">
+            <span className={tituloSecao}>{titulo}</span>
+            <span className="text-[13px] text-[#55615B]">{subtitulo}</span>
+          </span>
+          <span className="text-[#55615B]">{gestPainel === id ? '−' : '+'}</span>
+        </button>
+        {gestPainel === id && conteudo}
+      </section>
+    );
+    const linhaLink = (titulo: string, descricao: string, aoClicar: () => void) => (
+      <button type="button" onClick={aoClicar} className="flex w-full items-center justify-between gap-3 rounded-2xl border border-[#E1E6E3] bg-white p-[18px] text-left">
+        <span className="flex flex-col">
+          <span className="text-sm font-semibold text-[#26332E]">{titulo}</span>
+          <span className="text-[13px] text-[#55615B]">{descricao}</span>
+        </span>
+        <span className="text-[#55615B]">›</span>
+      </button>
+    );
+    const prep = g.preparacao || {};
+
+    return (
+      <div className="space-y-4">
+        <section className="rounded-2xl bg-[#1E5B4A] p-[18px] text-white">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm opacity-80">{tri}º trimestre</p>
+              <p className="text-3xl font-bold">{sem} semanas{dRest > 0 ? ` e ${dRest} ${dRest === 1 ? 'dia' : 'dias'}` : ''}</p>
+              <p className="mt-1 text-sm opacity-90">
+                {faltam > 0 ? `Faltam ${faltam} dias (cerca de ${Math.ceil(faltam / 7)} semanas)` : faltam === 0 ? 'Hoje é a data provável do parto' : `${-faltam} dias além da data provável`}
+              </p>
+            </div>
+            <button type="button" onClick={() => abrirFormGestacao(true)} className="rounded-full bg-white/15 px-3 py-1.5 text-sm font-semibold">Editar</button>
+          </div>
+          <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/25"><div className="h-full rounded-full bg-white" style={{ width: `${pct}%` }} /></div>
+          <p className="mt-2 text-sm opacity-90">Data provável do parto: {formatarData(g.dpp)}{g.tipo_gestacao === 'gemeos' ? ' · gêmeos' : ''}</p>
+          {dias > 294 && <p className="mt-2 rounded-lg bg-white/15 px-3 py-2 text-sm">A gestação passou de 42 semanas. Fale com o obstetra.</p>}
+        </section>
+
+        <button type="button" onClick={abrirBebeNasceu} className={botaoPrimario}>O bebê nasceu</button>
+
+        {renderSecao('Próximos passos', (
+          <div className="flex flex-col gap-2">
+            {pendentes.length === 0 && <p className="text-sm text-[#55615B]">Tudo em dia por enquanto.</p>}
+            {pendentes.slice(0, 6).map((m) => (
+              <div key={m.id} className="flex items-center gap-3 rounded-xl bg-[#F4F7F5] px-3 py-2.5">
+                <button type="button" aria-label="Marcar como feito" onClick={() => alternarMarco(m)} className="h-6 w-6 shrink-0 rounded-full border-2 border-[#9DB0A7] bg-white" />
+                <button type="button" onClick={() => agirNoMarco(m)} className="flex min-w-0 flex-1 flex-col text-left">
+                  <span className="text-sm font-semibold text-[#26332E]">{m.titulo}</span>
+                  <span className="text-[13px] text-[#55615B]">{m.quando}</span>
+                </button>
+                <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${corMarco(m)}`}>{rotuloMarco(m)}</span>
+              </div>
+            ))}
+            {concluidos.length > 0 && (
+              <div className="pt-1">
+                <p className="text-xs font-semibold uppercase text-[#55615B]">Feitos ({concluidos.length})</p>
+                {concluidos.map((m) => (
+                  <button key={m.id} type="button" onClick={() => g.passos_feitos?.[m.id] && alternarMarco(m)} className="mt-1 block text-left text-sm text-[#55615B]">✓ {m.titulo}</button>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+
+        {renderSecao('Consultas do pré-natal', (
+          <>
+            <div className="rounded-xl bg-[#EEF4F1] px-3.5 py-3 text-sm text-[#26332E]">
+              <b>{consultasFeitas}</b> {consultasFeitas === 1 ? 'consulta feita' : 'consultas feitas'}
+              {proximaConsulta ? <> · próxima em <b>{formatarData(proximaConsulta.data_hora.slice(0, 10))}</b></> : ' · nenhuma agendada'}
+            </div>
+            <p className="text-[13px] text-[#55615B]">Ritmo habitual: uma por mês até 28 semanas, a cada 15 dias até 36 e toda semana até o parto.</p>
+            <button type="button" className="h-11 rounded-xl border border-[#CDD5D1] bg-white text-sm font-semibold text-[#1E5B4A]" onClick={() => { sairPara('consultas'); abrirNovaConsulta('Ginecologia e Obstetrícia'); setNovoMotivoConsulta('Pré-natal'); }}>
+              + Agendar ou registrar consulta
+            </button>
+          </>
+        ))}
+
+        {renderSecao('Exames e ultrassons', (
+          <>
+            {renderSegmentado([['1', '1º tri'], ['2', '2º tri'], ['3', '3º tri']], String(triExames), (v) => setGestTri(Number(v) as 1 | 2 | 3))}
+            <div className="flex flex-col gap-2">
+              {examesPreNatal[triExames].filter((x) => !(x.soRhNegativo && !rhNeg)).map((x) => {
+                const feito = realizados(listaExames, x.nome);
+                const pedido = !feito && solicitado(x.nome);
+                return (
+                  <button key={x.nome} type="button" onClick={() => {
+                    const existente = exames.find((e) => normalizar(e.nome).includes(normalizar(x.nome)) && e.data_realizacao >= g.dum);
+                    sairPara('exames');
+                    if (existente) abrirEdicaoExame(existente, pedido); else { abrirNovoExame(false); setNovoNomeExame(x.nome); }
+                  }} className="flex items-center gap-3 rounded-xl bg-[#F4F7F5] px-3 py-2.5 text-left">
+                    <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${feito ? 'bg-[#1E5B4A] text-white' : 'border-2 border-[#9DB0A7] bg-white text-transparent'}`}>✓</span>
+                    <span className="flex min-w-0 flex-1 flex-col">
+                      <span className="text-sm font-semibold text-[#26332E]">{x.nome}</span>
+                      {x.detalhe && <span className="text-[13px] text-[#55615B]">{x.detalhe}</span>}
+                    </span>
+                    {pedido && <span className="shrink-0 rounded-full bg-[#FFF3D6] px-2.5 py-1 text-xs font-semibold text-[#8A5A00]">Solicitado</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        ))}
+
+        {renderSecao('Vacinas da gestação', (
+          <div className="flex flex-col gap-2">
+            {vacinasGestacao.map((v) => {
+              const feita = realizados(listaVacinas, v.chave);
+              return (
+                <button key={v.chave} type="button" onClick={() => {
+                  const existente = vacinas.find((x) => normalizar(x.nome).includes(v.chave) && x.data_aplicacao >= g.dum);
+                  sairPara('vacinas');
+                  if (existente) abrirEdicaoVacina(existente, (existente.status || 'realizado') !== 'realizado'); else { abrirNovaVacina(false); setNovoNomeVacina(v.nome); }
+                }} className="flex items-center gap-3 rounded-xl bg-[#F4F7F5] px-3 py-2.5 text-left">
+                  <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${feita ? 'bg-[#1E5B4A] text-white' : 'border-2 border-[#9DB0A7] bg-white text-transparent'}`}>✓</span>
+                  <span className="text-sm font-semibold text-[#26332E]">{v.nome}</span>
+                </button>
+              );
+            })}
+            <p className="text-[13px] text-[#55615B]">Gripe: em qualquer fase. dTpa: a partir de 20 semanas. VSR: a partir de 28 semanas, conforme orientação do obstetra. Hepatite B e Covid-19 conforme a carteira de vacinação.</p>
+          </div>
+        ))}
+
+        {linhaLink('Suplementos e remédios', 'Ácido fólico, ferro, vitaminas e o que o obstetra receitar', () => sairPara('medicacoes'))}
+        {linhaLink('Peso e pressão arterial', 'Registre as medições em cada consulta', () => sairPara('crescimento'))}
+
+        {painel('interc', 'Intercorrências', Object.keys(g.intercorrencias || {}).length > 0 ? `${Object.keys(g.intercorrencias || {}).length} registrada(s)` : 'Diabetes gestacional, pressão alta, sangramento...', (
+          <>
+            {renderGrupoItens(gruposIntercorrencia[0], '', g.intercorrencias || {}, (novo) => atualizarCamposGestacao({ intercorrencias: novo }))}
+            <p className="text-[13px] text-[#55615B]">Quando o bebê nascer, estas intercorrências já vão preenchidas no formulário de nascimento.</p>
+          </>
+        ))}
+
+        {painel('prep', 'Preparação para o parto', prep.maternidade ? `Maternidade: ${prep.maternidade}` : 'Maternidade, pediatra, acompanhante', (
+          <>
+            {renderCampo('Maternidade', <input className={inputClasse} value={prep.maternidade || ''} onChange={(e) => setGestacao({ ...g, preparacao: { ...prep, maternidade: e.target.value } })} />)}
+            {renderCampo('Pediatra', <input className={inputClasse} value={prep.pediatra || ''} onChange={(e) => setGestacao({ ...g, preparacao: { ...prep, pediatra: e.target.value } })} />)}
+            {renderCampo('Acompanhante', <input className={inputClasse} value={prep.acompanhante || ''} onChange={(e) => setGestacao({ ...g, preparacao: { ...prep, acompanhante: e.target.value } })} />)}
+            {renderCampo('Anotações (plano de parto, mala...)', <textarea className={inputClasse} rows={3} value={prep.anotacoes || ''} onChange={(e) => setGestacao({ ...g, preparacao: { ...prep, anotacoes: e.target.value } })} />)}
+            <button type="button" className={botaoPrimario} onClick={() => atualizarCamposGestacao({ preparacao: g.preparacao || {} })}>Salvar preparação</button>
+          </>
+        ))}
+
+        {erroGestacao && <p className="text-sm text-red-600">{erroGestacao}</p>}
+        <p className="text-xs text-[#55615B]">Orientações gerais baseadas no pré-natal do Ministério da Saúde e no calendário de vacinação da gestante da SBIm. Não substituem o obstetra, que pode ajustar tudo conforme cada caso.</p>
+      </div>
     );
   }
 
@@ -4804,6 +5555,7 @@ export default function Home() {
     const itens = [
       { id: 'nascimento' as Aba, label: 'Dados pessoais', descricao: 'Foto, tipo sanguíneo, parentesco, alergias e observações gerais.', mostrar: true },
       { id: 'gestacao' as Aba, label: 'Gestação e Nascimento', descricao: 'Pré-natal, parto, Apgar e intercorrências da gestação e do nascimento.', mostrar: true },
+      { id: 'gestacaoatual' as Aba, label: 'Gestação (acompanhamento)', descricao: 'Semanas, consultas, exames e vacinas do pré-natal, e o botão "O bebê nasceu".', mostrar: (membroSelecionado?.sexo_biologico === 'feminino' && idadeAnos >= 10 && idadeAnos <= 55) || !!gestacao },
       { id: 'desenvolvimento' as Aba, label: 'Desenvolvimento Neuropsicomotor', descricao: 'Marcos do desenvolvimento: sustentar a cabeça, sentar, engatinhar, andar, falar.', mostrar: idadeAnos < 6 || !!desenvolvimento },
       { id: 'alimentacaoinfantil' as Aba, label: 'Alimentação', descricao: 'Aleitamento materno, fórmula, introdução e aceitação alimentar.', mostrar: idadeAnos < 6 || !!alimentacaoInfantil },
       { id: 'puberdade' as Aba, label: 'Puberdade e Sexualidade', descricao: 'Menarca/espermarca, ciclo menstrual, vida sexual e métodos contraceptivos.', mostrar: idadeAnos >= 9 || !!puberdadeSexualidade },
@@ -4849,6 +5601,8 @@ export default function Home() {
         return <svg {...props}><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4 4-7 8-7s8 3 8 7" /></svg>;
       case 'menupessoal':
         return <svg {...props}><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" /></svg>;
+      case 'gestacaoatual':
+        return <svg {...props}><circle cx="12" cy="5" r="2.5" /><path d="M9 22v-6.5C7 14 7 11 9.5 10c1.5-.7 3.5-.7 5 .2 1.7 1.2 1.6 3.6-.3 4.6-.8.4-1 1.1-1 1.9V22" /></svg>;
       case 'gestacao':
         return <svg {...props}><path d="M12 21s-7-4.35-9.5-9A5.5 5.5 0 0 1 12 6a5.5 5.5 0 0 1 9.5 6c-2.5 4.65-9.5 9-9.5 9z" /></svg>;
       case 'desenvolvimento':
@@ -4940,7 +5694,7 @@ export default function Home() {
             </p>
             {membroSelecionado.alergias && <p className="text-sm text-slate-700 mt-1">Alergias: {membroSelecionado.alergias}</p>}
             {membroSelecionado.observacoes_gerais && <p className="text-sm text-slate-700 mt-1">Observações: {membroSelecionado.observacoes_gerais}</p>}
-            {nascimento?.tipo_parto && <p className="text-sm text-slate-700 mt-1">Tipo de parto: {nascimento.tipo_parto}</p>}
+            {nascimento?.tipo_parto && <p className="text-sm text-slate-700 mt-1">Tipo de parto: {rotuloTipoParto(nascimento.tipo_parto)}</p>}
           </section>
         )}
 
@@ -5090,6 +5844,7 @@ export default function Home() {
     parentes: [mostrarFormParente, () => setMostrarFormParente(false), 'Novo parente', 'Parente'],
     nascimento: [mostrarFormNascimento, () => setMostrarFormNascimento(false), '', ''],
     gestacao: [mostrarFormNascimento, () => setMostrarFormNascimento(false), '', ''],
+    gestacaoatual: [mostrarFormGestacao || mostrarFormBebe, () => { setMostrarFormGestacao(false); setMostrarFormBebe(false); setGestConfirma(''); }, mostrarFormBebe ? 'O bebê nasceu' : 'Iniciar gestação', mostrarFormBebe ? 'O bebê nasceu' : 'Editar gestação'],
     desenvolvimento: [mostrarFormDesenvolvimento, () => setMostrarFormDesenvolvimento(false), '', ''],
     alimentacaoinfantil: [mostrarFormAlimentacaoInfantil, () => setMostrarFormAlimentacaoInfantil(false), '', ''],
     puberdade: [mostrarFormPuberdade, () => setMostrarFormPuberdade(false), '', ''],
@@ -5107,6 +5862,7 @@ export default function Home() {
   // aparecer uma tela de uma aba enquanto o menu mostra outra selecionada.
   function irParaAbaInferior(aba: 'home' | 'incluir' | 'consultar' | 'compartilhar' | 'configuracao') {
     setAlvoPendencia(null);
+    setOrigemGest(false);
     setMostrarFormTerapia(false);
     setAbaInferior(aba);
     setTelaDetalhe(null);
@@ -5171,7 +5927,7 @@ export default function Home() {
 
   return (
     <>
-    <style>{`select.w-full:not(.sel-ds){appearance:none;-webkit-appearance:none;font-family:inherit;padding-right:40px;background-repeat:no-repeat;background-position:right 14px center;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%2355615B' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")}`}</style>
+    <style dangerouslySetInnerHTML={{ __html: `select.w-full:not(.sel-ds){appearance:none;-webkit-appearance:none;font-family:inherit;padding-right:40px;background-repeat:no-repeat;background-position:right 14px center;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%2355615B' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")}` }} />
     <main className={`min-h-screen flex justify-center ${emTelaDetalhe ? 'bg-[#F4F6F4] items-start p-0' : 'bg-[#FAFAF8] items-center p-4'}`}>
       <div className={`w-full ${larguraContainer} transition-all ${emTelaDetalhe ? 'px-4 pt-3 pb-24' : `rounded-2xl bg-white p-8 shadow-sm border border-[#E5E1DA] ${passo === 'painel' ? 'pb-24' : ''}`}`}>
         {!membroSelecionado && (
@@ -6074,6 +6830,12 @@ export default function Home() {
                 <button
                   aria-label="Voltar"
                   onClick={() => {
+                    if (origemGest && (telaDetalhe === 'exames' || telaDetalhe === 'vacinas' || telaDetalhe === 'medicacoes' || telaDetalhe === 'consultas' || telaDetalhe === 'crescimento')) {
+                      setMostrarFormExame(false); setMostrarFormVacina(false); setMostrarFormMedicacao(false); setMostrarFormConsulta(false); setMostrarFormCrescimento(false);
+                      setOrigemGest(false);
+                      setTelaDetalhe('gestacaoatual');
+                      return;
+                    }
                     if (telaDetalhe && formDaTela[telaDetalhe]?.[0]) {
                       formDaTela[telaDetalhe][1]();
                       if (abaInferior === 'incluir') setTelaDetalhe(null);
@@ -6130,6 +6892,8 @@ export default function Home() {
                       ? 'Dados pessoais'
                       : telaDetalhe === 'gestacao'
                       ? 'Gestação e Nascimento'
+                      : telaDetalhe === 'gestacaoatual'
+                      ? 'Gestação'
                       : telaDetalhe === 'desenvolvimento'
                       ? 'Desenvolvimento Neuropsicomotor'
                       : telaDetalhe === 'alimentacaoinfantil'
@@ -8509,204 +9273,9 @@ export default function Home() {
               </div>
             )}
 
-            {telaDetalhe === 'gestacao' && (
-              <div className="space-y-3">
-                <p className="text-sm text-slate-500">
-                  Informações sobre a gestação, o parto e o período neonatal — útil pra médicos entenderem o histórico desde o início.
-                </p>
-                {!mostrarFormNascimento ? (
-                  <>
-                    {!nascimento ? (
-                      <p className="text-sm text-slate-400 text-center py-2">Nenhuma informação registrada ainda.</p>
-                    ) : (
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="rounded-xl bg-[#FAFAF8] p-3">
-                          <p className="text-xs text-slate-400">Pré-natal</p>
-                          <p className="text-sm font-medium text-slate-800 capitalize">
-                            {nascimento.pre_natal_adequado || '—'}
-                            {nascimento.pre_natal_num_consultas != null ? ` · ${nascimento.pre_natal_num_consultas} consultas` : ''}
-                          </p>
-                        </div>
-                        <div className="rounded-xl bg-[#FAFAF8] p-3">
-                          <p className="text-xs text-slate-400">Peso ao nascer</p>
-                          <p className="text-sm font-medium text-slate-800">{nascimento.peso_nascimento != null ? `${nascimento.peso_nascimento} kg` : '—'}</p>
-                        </div>
-                        <div className="rounded-xl bg-[#FAFAF8] p-3">
-                          <p className="text-xs text-slate-400">Comprimento ao nascer</p>
-                          <p className="text-sm font-medium text-slate-800">{nascimento.comprimento_nascimento != null ? `${nascimento.comprimento_nascimento} cm` : '—'}</p>
-                        </div>
-                        <div className="rounded-xl bg-[#FAFAF8] p-3">
-                          <p className="text-xs text-slate-400">Perímetro cefálico</p>
-                          <p className="text-sm font-medium text-slate-800">{nascimento.perimetro_cefalico != null ? `${nascimento.perimetro_cefalico} cm` : '—'}</p>
-                        </div>
-                        <div className="rounded-xl bg-[#FAFAF8] p-3">
-                          <p className="text-xs text-slate-400">Idade gestacional</p>
-                          <p className="text-sm font-medium text-slate-800">{nascimento.idade_gestacional_semanas != null ? `${nascimento.idade_gestacional_semanas} semanas` : '—'}</p>
-                        </div>
-                        <div className="rounded-xl bg-[#FAFAF8] p-3">
-                          <p className="text-xs text-slate-400">Tipo de parto</p>
-                          <p className="text-sm font-medium text-slate-800 capitalize">{nascimento.tipo_parto || '—'}</p>
-                        </div>
-                        <div className="rounded-xl bg-[#FAFAF8] p-3">
-                          <p className="text-xs text-slate-400">Apgar</p>
-                          <p className="text-sm font-medium text-slate-800">
-                            {nascimento.apgar_1min != null || nascimento.apgar_5min != null
-                              ? `${nascimento.apgar_1min ?? '—'} / ${nascimento.apgar_5min ?? '—'}`
-                              : '—'}
-                          </p>
-                        </div>
-                        <div className="rounded-xl bg-[#FAFAF8] p-3">
-                          <p className="text-xs text-slate-400">UTI neonatal</p>
-                          <p className="text-sm font-medium text-slate-800">{nascimento.uti_neonatal ? 'Sim' : 'Não'}</p>
-                        </div>
-                        <div className="rounded-xl bg-[#FAFAF8] p-3">
-                          <p className="text-xs text-slate-400">Local de nascimento</p>
-                          <p className="text-sm font-medium text-slate-800">{nascimento.local_nascimento || '—'}</p>
-                        </div>
-                        {nascimento.uso_substancias_medicacoes && (
-                          <div className="col-span-2 rounded-xl bg-[#FAFAF8] p-3">
-                            <p className="text-xs text-slate-400">Uso de substâncias/medicações na gestação</p>
-                            <p className="text-sm text-slate-700">{nascimento.uso_substancias_medicacoes}</p>
-                          </div>
-                        )}
-                        {nascimento.intercorrencias_gestacionais && (
-                          <div className="col-span-2 rounded-xl bg-[#FAFAF8] p-3">
-                            <p className="text-xs text-slate-400">Intercorrências gestacionais</p>
-                            <p className="text-sm text-slate-700">{nascimento.intercorrencias_gestacionais}</p>
-                          </div>
-                        )}
-                        {nascimento.intercorrencias && (
-                          <div className="col-span-2 rounded-xl bg-[#FAFAF8] p-3">
-                            <p className="text-xs text-slate-400">Intercorrências neonatais</p>
-                            <p className="text-sm text-slate-700">{nascimento.intercorrencias}</p>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    <button onClick={abrirEdicaoNascimento} className={botaoPrimario}>
-                      {nascimento ? 'Editar informações' : '+ Adicionar informações'}
-                    </button>
-                  </>
-                ) : (
-                  <div className="space-y-4 rounded-2xl bg-white border border-[#E1E6E3] p-[18px]">
-                    <p className="text-xs font-medium text-slate-500">Pré-natal</p>
-                    <select
-                      className={inputClasse}
-                      value={novoPreNatalAdequado}
-                      onChange={(e) => setNovoPreNatalAdequado(e.target.value)}
-                    >
-                      <option value="">pré-natal foi adequado?</option>
-                      <option value="adequado">Adequado</option>
-                      <option value="inadequado">Inadequado</option>
-                    </select>
-                    <input
-                      className={inputClasse}
-                      placeholder="número de consultas do pré-natal (opcional)"
-                      value={novoPreNatalNumConsultas}
-                      onChange={(e) => setNovoPreNatalNumConsultas(e.target.value)}
-                    />
-                    <textarea
-                      className={inputClasse}
-                      placeholder="intercorrências gestacionais (opcional)"
-                      rows={2}
-                      value={novasIntercorrenciasGestacionais}
-                      onChange={(e) => setNovasIntercorrenciasGestacionais(e.target.value)}
-                    />
-                    <textarea
-                      className={inputClasse}
-                      placeholder="uso de substâncias/medicações na gestação (opcional)"
-                      rows={2}
-                      value={novoUsoSubstancias}
-                      onChange={(e) => setNovoUsoSubstancias(e.target.value)}
-                    />
-                    <p className="text-xs font-medium text-slate-500 pt-1">Parto e nascimento</p>
-                    <input
-                      className={inputClasse}
-                      placeholder="peso ao nascer (kg, ex: 3,250)"
-                      value={novoPesoNascimento}
-                      onChange={(e) => setNovoPesoNascimento(e.target.value)}
-                    />
-                    <input
-                      className={inputClasse}
-                      placeholder="comprimento ao nascer (cm, ex: 49)"
-                      value={novoComprimentoNascimento}
-                      onChange={(e) => setNovoComprimentoNascimento(e.target.value)}
-                    />
-                    <input
-                      className={inputClasse}
-                      placeholder="perímetro cefálico (cm, opcional)"
-                      value={novoPerimetroCefalico}
-                      onChange={(e) => setNovoPerimetroCefalico(e.target.value)}
-                    />
-                    <input
-                      className={inputClasse}
-                      placeholder="idade gestacional (semanas)"
-                      value={novaIdadeGestacional}
-                      onChange={(e) => setNovaIdadeGestacional(e.target.value)}
-                    />
-                    <select
-                      className={inputClasse}
-                      value={novoTipoParto}
-                      onChange={(e) => setNovoTipoParto(e.target.value)}
-                    >
-                      <option value="">tipo de parto</option>
-                      <option value="normal">Normal</option>
-                      <option value="cesarea">Cesárea</option>
-                      <option value="forceps">Fórceps</option>
-                    </select>
-                    <div className="flex gap-2">
-                      <input
-                        className={inputClasse}
-                        placeholder="Apgar 1º minuto"
-                        value={novoApgar1}
-                        onChange={(e) => setNovoApgar1(e.target.value)}
-                      />
-                      <input
-                        className={inputClasse}
-                        placeholder="Apgar 5º minuto"
-                        value={novoApgar5}
-                        onChange={(e) => setNovoApgar5(e.target.value)}
-                      />
-                    </div>
-                    <label className="flex items-center gap-2 text-sm text-slate-600">
-                      <input
-                        type="checkbox"
-                        checked={novoUtiNeonatal}
-                        onChange={(e) => setNovoUtiNeonatal(e.target.checked)}
-                      />
-                      Precisou de UTI neonatal
-                    </label>
-                    <input
-                      className={inputClasse}
-                      placeholder="hospital/local de nascimento (opcional)"
-                      value={novoLocalNascimento}
-                      onChange={(e) => setNovoLocalNascimento(e.target.value)}
-                    />
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="text-xs text-slate-400">intercorrências neonatais (opcional)</label>
-                        <button
-                          type="button"
-                          onClick={() => alternarReconhecimentoVoz('intercorrencias', setNovasIntercorrencias)}
-                          className={`shrink-0 rounded-full px-2 py-1 text-xs ${gravandoCampo === 'intercorrencias' ? 'bg-red-100 text-red-700 animate-pulse' : 'bg-slate-100 text-slate-600'}`}
-                        >
-                          <Ic n="mic" /> {gravandoCampo === 'intercorrencias' ? 'Ouvindo...' : 'Falar'}
-                        </button>
-                      </div>
-                      <textarea
-                        className={inputClasse}
-                        placeholder="intercorrências neonatais (opcional)"
-                        rows={3}
-                        value={novasIntercorrencias}
-                        onChange={(e) => setNovasIntercorrencias(e.target.value)}
-                      />
-                    </div>
-                    {erroNascimento && <p className="text-sm text-red-600">{erroNascimento}</p>}
-                    {renderBarraAcoes('Salvar', salvarNascimento, () => setMostrarFormNascimento(false), carregando)}
-                  </div>
-                )}
-              </div>
-            )}
+            {telaDetalhe === 'gestacao' && renderTelaNascimento()}
+
+            {telaDetalhe === 'gestacaoatual' && renderTelaGestacao()}
 
             {telaDetalhe === 'desenvolvimento' && (
               <div className="space-y-3">
@@ -8977,7 +9546,7 @@ export default function Home() {
                         <span className="text-xs text-slate-400">{formatarIdadeEmMeses(idadeMeses)}</span>
                       </div>
                       <p className="text-xs text-slate-400">
-                        {[m.peso_kg != null && `${m.peso_kg} kg`, m.altura_cm != null && `${m.altura_cm} cm`, imc != null && `IMC ${imc.toFixed(1)}`].filter(Boolean).join(' · ')}
+                        {[m.peso_kg != null && `${m.peso_kg} kg`, m.altura_cm != null && `${m.altura_cm} cm`, m.pressao_arterial && `PA ${m.pressao_arterial}`, imc != null && `IMC ${imc.toFixed(1)}`].filter(Boolean).join(' · ')}
                       </p>
                       {(zscores || (ehAdulto && imc != null)) && (
                         <div className="flex flex-wrap gap-1 mt-1">
@@ -9019,7 +9588,8 @@ export default function Home() {
                             <input className={inputClasse} inputMode="decimal" placeholder="Ex.: 88" value={novaAlturaCrescimento} onChange={(e) => setNovaAlturaCrescimento(e.target.value)} />
                           ))}
                         </div>
-                        <span className="text-[13px] text-[#55615B]">Preencha pelo menos um dos dois.</span>
+                        {renderCampo('Pressão arterial', <input className={inputClasse} placeholder="Ex.: 120/80" value={novaPressaoCrescimento} onChange={(e) => setNovaPressaoCrescimento(e.target.value)} />)}
+                        <span className="text-[13px] text-[#55615B]">Preencha pelo menos um dos campos.</span>
                       </>
                     ))}
                     {renderSecao('Origem', (
