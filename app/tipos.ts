@@ -188,6 +188,14 @@ export type InformacaoNascimento = {
   idade_gestacional_dias?: number | null;
   houve_intercorrencia?: string | null;
   intercorrencias_itens?: Record<string, string> | null;
+  dados_mae?: DadosMae | null;
+};
+
+export type DadosMae = {
+  tipo_sanguineo?: string | null;
+  gestacao?: { tipo: string; dum: string; dpp: string; consultas_prenatal: number } | null;
+  sorologias?: { nome: string; data: string; resultado: string | null }[];
+  vacinas?: { nome: string; data: string }[];
 };
 
 export type Gestacao = {

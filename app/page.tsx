@@ -34,6 +34,7 @@ import type {
   RegistroAgua,
   DiarioFoco,
   DiarioItem,
+  DadosMae,
 } from './tipos';
 import {
   opcoesParentesco,
@@ -501,8 +502,9 @@ export default function Home() {
   const [gestPainel, setGestPainel] = useState<'' | 'interc' | 'prep'>('');
   const [origemGest, setOrigemGest] = useState(false);
   const [mostrarFormBebe, setMostrarFormBebe] = useState(false);
-  const [bebeNome, setBebeNome] = useState('');
-  const [bebeSexo, setBebeSexo] = useState('');
+  const [bebes, setBebes] = useState<{ nome: string; sexo: string; data: string; hora: string }[]>([]);
+  const [bebeAba, setBebeAba] = useState(0);
+  const [bebeOff, setBebeOff] = useState<Record<string, boolean>>({});
   const [nascData, setNascData] = useState('');
   const [nascHora, setNascHora] = useState('');
   const [nascIgDias, setNascIgDias] = useState('');
@@ -916,7 +918,7 @@ export default function Home() {
   async function carregarNascimento(membroId: string) {
     const { data, error } = await supabase
       .from('informacao_nascimento')
-      .select('id, peso_nascimento, comprimento_nascimento, perimetro_cefalico, idade_gestacional_semanas, tipo_parto, apgar_1min, apgar_5min, uti_neonatal, intercorrencias, local_nascimento, pre_natal_adequado, pre_natal_num_consultas, intercorrencias_gestacionais, uso_substancias_medicacoes, hora_nascimento, idade_gestacional_dias, houve_intercorrencia, intercorrencias_itens')
+      .select('id, peso_nascimento, comprimento_nascimento, perimetro_cefalico, idade_gestacional_semanas, tipo_parto, apgar_1min, apgar_5min, uti_neonatal, intercorrencias, local_nascimento, pre_natal_adequado, pre_natal_num_consultas, intercorrencias_gestacionais, uso_substancias_medicacoes, hora_nascimento, idade_gestacional_dias, houve_intercorrencia, intercorrencias_itens, dados_mae')
       .eq('membro_id', membroId)
       .maybeSingle();
     if (!error && membroAtualRef.current === membroId) setNascimento(data as InformacaoNascimento | null);
@@ -3473,77 +3475,99 @@ export default function Home() {
 
   function abrirBebeNasceu() {
     if (!gestacao) return;
-    const dias = Math.max(0, diasEntre(gestacao.dum, dataLocalISO(new Date())));
-    const itens: Record<string, string> = {};
-    Object.entries((gestacao.intercorrencias || {}) as Record<string, string>).forEach(([nome, detalhe]) => { itens['gest:' + nome] = detalhe; });
-    setBebeNome('');
-    setBebeSexo('');
-    setNascData(dataLocalISO(new Date()));
-    setNascHora('');
-    setNovoPesoNascimento('');
-    setNovoComprimentoNascimento('');
-    setNovoPerimetroCefalico('');
-    setNovaIdadeGestacional(String(Math.min(42, Math.floor(dias / 7))));
-    setNascIgDias(String(dias % 7));
-    setNovoTipoParto('');
-    setNovoApgar1('');
-    setNovoApgar5('');
-    setNovoUtiNeonatal(false);
-    setNovasIntercorrencias('');
-    setNovoLocalNascimento(gestacao.preparacao?.maternidade || '');
-    setNovoPreNatalAdequado('');
-    setNovoPreNatalNumConsultas('');
-    setNovasIntercorrenciasGestacionais('');
-    setNovoUsoSubstancias('');
-    setNascItens(itens);
-    setNascHouve(Object.keys(itens).length > 0 ? 'sim' : '');
-    setNascGruposAbertos({ gest: Object.keys(itens).length > 0, parto: false, rn: false });
-    setNascMaisAberto(false);
-    reiniciarAnexosSaude();
+    const hoje = dataLocalISO(new Date());
+    const qtd = gestacao.tipo_gestacao === 'gemeos' ? 2 : 1;
+    setBebes(Array.from({ length: qtd }, () => ({ nome: '', sexo: '', data: hoje, hora: '' })));
+    setBebeAba(0);
+    setBebeOff({});
     setErroNascimento('');
     setMostrarFormBebe(true);
+  }
+
+  function atualizarBebe(i: number, campos: Partial<{ nome: string; sexo: string; data: string; hora: string }>) {
+    setBebes((l) => l.map((b, idx) => (idx === i ? { ...b, ...campos } : b)));
   }
 
   async function salvarBebeNasceu() {
     setErroNascimento('');
     if (!membroSelecionado || !gestacao) return;
-    if (!bebeNome.trim() || !bebeSexo || !nascData) {
-      setErroNascimento('Preencha o nome do bebê, o sexo biológico e a data do nascimento.');
-      return;
+    const g = gestacao;
+    for (let i = 0; i < bebes.length; i++) {
+      const b = bebes[i];
+      if (!b.nome.trim() || !b.sexo || !b.data) {
+        setBebeAba(i);
+        setErroNascimento(`Preencha nome, data e sexo ${bebes.length > 1 ? `do ${i + 1}º bebê` : 'do bebê'}.`);
+        return;
+      }
     }
-    const dados = montarDadosNascimento();
-    if (!dados) return;
     setCarregando(true);
     const { data: userData } = await supabase.auth.getUser();
     const { data: meuUsuario } = await supabase.from('usuario').select('familia_id').eq('id', userData.user?.id).single();
-    // id gerado aqui para não precisar ler o membro de volta logo após criar (mesma razão do "Novo membro")
-    const bebeId = crypto.randomUUID();
-    const { error: erroMembro } = await supabase.from('membro').insert({
-      id: bebeId,
-      familia_id: meuUsuario?.familia_id,
-      criado_por: userData.user?.id,
-      nome: bebeNome.trim(),
-      data_nascimento: nascData,
-      sexo_biologico: bebeSexo,
-    });
-    if (erroMembro) {
-      setCarregando(false);
-      setErroNascimento(erroMembro.message);
-      return;
+
+    // Resumo da gestação que vai junto para o perfil do bebê (cada item pode ser desmarcado).
+    const realizado = (status?: string) => (status || 'realizado') === 'realizado';
+    const dadosMae: DadosMae = {};
+    if (!bebeOff.sangue) dadosMae.tipo_sanguineo = membroSelecionado.tipo_sanguineo || (g.fator_rh === 'negativo' ? 'Rh negativo' : g.fator_rh === 'positivo' ? 'Rh positivo' : null);
+    const consultasPN = consultas.filter((c) => c.data_hora.slice(0, 10) >= g.dum && c.status === 'realizada' && (/gineco|obstet/.test(normalizar(c.especialidade?.nome || '')) || /pre natal/.test(normalizar(c.motivo || ''))));
+    if (!bebeOff.resumo) dadosMae.gestacao = { tipo: g.tipo_gestacao, dum: g.dum, dpp: g.dpp, consultas_prenatal: consultasPN.length };
+    if (!bebeOff.sorol) {
+      dadosMae.sorologias = exames
+        .filter((e) => realizado(e.status) && e.data_realizacao >= g.dum && /sorologia|estreptococo|hiv|sifilis|hepatite|toxoplasm|rubeola/.test(normalizar(e.nome)))
+        .map((e) => ({ nome: e.nome, data: e.data_realizacao, resultado: e.resultado_resumo }));
     }
-    const { error: erroNasc } = await supabase.from('informacao_nascimento').insert({ membro_id: bebeId, ...dados });
-    let avisoFinal = '';
-    if (erroNasc) avisoFinal = 'O perfil do bebê foi criado, mas não consegui salvar os dados do nascimento: ' + erroNasc.message;
-    try {
-      await enviarAnexosSaude('nascimento', bebeId, bebeId);
-    } catch (e) {
-      avisoFinal = avisoFinal || (e instanceof Error ? e.message : 'Não consegui enviar o anexo.');
+    if (!bebeOff.vac) {
+      dadosMae.vacinas = vacinas
+        .filter((v) => realizado(v.status) && v.data_aplicacao >= g.dum && vacinasGestacao.some((x) => normalizar(v.nome).includes(x.chave)))
+        .map((v) => ({ nome: v.nome, data: v.data_aplicacao }));
     }
-    // Em gestação de gêmeos o acompanhamento continua aberto até a mãe encerrar.
-    if (gestacao.tipo_gestacao !== 'gemeos') {
-      await supabase.from('gestacao').update({ status: 'encerrada', encerrada_em: nascData, bebe_membro_id: bebeId }).eq('id', gestacao.id);
-    } else if (!gestacao.bebe_membro_id) {
-      await supabase.from('gestacao').update({ bebe_membro_id: bebeId }).eq('id', gestacao.id);
+    const itensGest: Record<string, string> = {};
+    if (!bebeOff.inter) Object.entries((g.intercorrencias || {}) as Record<string, string>).forEach(([nome, detalhe]) => { itensGest['gest:' + nome] = detalhe; });
+
+    const idsCriados: string[] = [];
+    let aviso = '';
+    for (const b of bebes) {
+      const bebeId = crypto.randomUUID();
+      // id gerado aqui para não precisar ler o membro de volta logo após criar (mesma razão do "Novo membro")
+      const { error: erroMembro } = await supabase.from('membro').insert({
+        id: bebeId,
+        familia_id: meuUsuario?.familia_id,
+        criado_por: userData.user?.id,
+        nome: b.nome.trim(),
+        data_nascimento: b.data,
+        sexo_biologico: b.sexo,
+      });
+      if (erroMembro) {
+        aviso = 'Não consegui criar o perfil de ' + b.nome.trim() + ': ' + erroMembro.message;
+        break;
+      }
+      idsCriados.push(bebeId);
+      const dias = Math.max(0, diasEntre(g.dum, b.data));
+      const { error: erroNasc } = await supabase.from('informacao_nascimento').insert({
+        membro_id: bebeId,
+        hora_nascimento: b.hora || null,
+        idade_gestacional_semanas: Math.min(45, Math.floor(dias / 7)),
+        idade_gestacional_dias: dias % 7,
+        local_nascimento: g.preparacao?.maternidade || null,
+        houve_intercorrencia: Object.keys(itensGest).length > 0 ? 'sim' : null,
+        intercorrencias_itens: itensGest,
+        pre_natal_num_consultas: bebeOff.resumo ? null : consultasPN.length,
+        dados_mae: dadosMae,
+      });
+      if (erroNasc) aviso = 'O perfil foi criado, mas os dados do nascimento não: ' + erroNasc.message;
+      // Carteirinha de vacinação e lembretes dos testes do recém-nascido
+      await supabase.from('vacina').insert([
+        { membro_id: bebeId, nome: 'BCG', dose: 'Dose única', data_aplicacao: b.data, status: 'indicada' },
+        { membro_id: bebeId, nome: 'Hepatite B', dose: 'Ao nascer', data_aplicacao: b.data, status: 'indicada' },
+      ]);
+      await supabase.from('exame').insert([
+        { membro_id: bebeId, nome: 'Teste do pezinho', data_realizacao: somarDias(b.data, 3), status: 'solicitado' },
+        { membro_id: bebeId, nome: 'Teste da orelhinha', data_realizacao: somarDias(b.data, 7), status: 'solicitado' },
+        { membro_id: bebeId, nome: 'Teste do olhinho', data_realizacao: somarDias(b.data, 1), status: 'solicitado' },
+        { membro_id: bebeId, nome: 'Teste do coraçãozinho', data_realizacao: somarDias(b.data, 1), status: 'solicitado' },
+      ]);
+    }
+    if (idsCriados.length > 0) {
+      await supabase.from('gestacao').update({ status: 'encerrada', encerrada_em: bebes[0].data, bebe_membro_id: idsCriados[0] }).eq('id', g.id);
     }
     const { data: membrosAtualizados } = await supabase
       .from('membro')
@@ -3551,17 +3575,16 @@ export default function Home() {
       .is('data_falecimento', null)
       .order('nome');
     setCarregando(false);
-    setMostrarFormBebe(false);
-    reiniciarAnexosSaude();
-    if (membrosAtualizados) {
+    if (idsCriados.length > 0) setMostrarFormBebe(false);
+    if (membrosAtualizados && idsCriados.length > 0) {
       setMembros(membrosAtualizados);
-      const bebe = membrosAtualizados.find((m) => m.id === bebeId);
-      if (bebe) {
-        setMembroSelecionado(bebe);
+      const primeiro = membrosAtualizados.find((m) => m.id === idsCriados[0]);
+      if (primeiro) {
+        setMembroSelecionado(primeiro);
         setTelaDetalhe('gestacao');
       }
     }
-    if (avisoFinal) setErro(avisoFinal);
+    if (aviso) { setErro(aviso); setErroNascimento(aviso); }
   }
 
   // Os 3 campos "Sim/Não/não informado" das 5 seções de anamnese usam esse par de
@@ -4561,6 +4584,14 @@ export default function Home() {
                 {n.intercorrencias && <p className="text-sm text-[#26332E]">{n.intercorrencias}</p>}
               </div>
             ))}
+            {n.dados_mae && (n.dados_mae.tipo_sanguineo || n.dados_mae.gestacao || (n.dados_mae.sorologias || []).length > 0 || (n.dados_mae.vacinas || []).length > 0) && renderSecao('Da gestação (dados da mãe)', (
+              <div className="space-y-1">
+                {n.dados_mae.tipo_sanguineo && <p className="text-sm text-[#26332E]">Tipo sanguíneo da mãe: {n.dados_mae.tipo_sanguineo}</p>}
+                {n.dados_mae.gestacao && <p className="text-sm text-[#26332E]">Gestação {n.dados_mae.gestacao.tipo === 'gemeos' ? 'de gêmeos' : n.dados_mae.gestacao.tipo === 'unica' ? 'única' : ''} · {n.dados_mae.gestacao.consultas_prenatal} consultas de pré-natal</p>}
+                {(n.dados_mae.sorologias || []).map((x, i) => <p key={i} className="text-sm text-[#26332E]">• {x.nome} ({formatarData(x.data)}){x.resultado ? `: ${x.resultado}` : ''}</p>)}
+                {(n.dados_mae.vacinas || []).map((x, i) => <p key={i} className="text-sm text-[#26332E]">• Vacina {x.nome} ({formatarData(x.data)})</p>)}
+              </div>
+            ))}
             {(n.pre_natal_adequado || n.pre_natal_num_consultas != null || n.intercorrencias_gestacionais || n.uso_substancias_medicacoes) && renderSecao('Pré-natal', (
               <div>
                 {linha('Pré-natal', n.pre_natal_adequado)}
@@ -4582,18 +4613,52 @@ export default function Home() {
     const hoje = dataLocalISO(new Date());
 
     if (mostrarFormBebe) {
+      const gem = bebes.length > 1;
+      const b = bebes[bebeAba] || { nome: '', sexo: '', data: hoje, hora: '' };
+      const itensLevar: [string, string, string][] = [
+        ['resumo', 'Resumo da gestação', 'Idade gestacional, gestação única ou gemelar, pré-natal'],
+        ['inter', 'Intercorrências da gestação', 'Ex.: diabetes gestacional, pressão alta'],
+        ['sangue', 'Tipo sanguíneo e Rh da mãe', 'Importante em caso de icterícia'],
+        ['sorol', 'Sorologias da mãe', 'Sífilis, HIV, hepatites, toxoplasmose, estreptococo B'],
+        ['vac', 'Vacinas tomadas na gestação', 'dTpa, gripe: protegem o bebê nos primeiros meses'],
+      ];
       return (
         <div className="space-y-4">
-          <p className="text-sm text-[#55615B]">Parabéns! Vamos criar o perfil do bebê e guardar os dados do nascimento. Você pode completar depois.</p>
-          {renderSecao('Dados do bebê', (
+          <div className="rounded-2xl bg-[#1E5B4A] p-[18px] text-white">
+            <p className="text-xl font-bold">Parabéns!</p>
+            <p className="text-sm opacity-90">Vamos criar o perfil {gem ? 'dos bebês' : 'do bebê'}. Tudo o que foi registrado na gestação já vai junto.</p>
+          </div>
+          {gem && renderSegmentado([['0', '1º bebê'], ['1', '2º bebê']], String(bebeAba), (v) => setBebeAba(Number(v)))}
+          {renderSecao(gem ? `${bebeAba + 1}º bebê` : 'O bebê', (
             <>
-              {renderCampo('Nome', <input className={inputClasse} value={bebeNome} onChange={(e) => setBebeNome(e.target.value)} />, { obrigatorio: true })}
-              {renderCampo('Sexo biológico', renderSegmentado([['feminino', 'Feminino'], ['masculino', 'Masculino']], bebeSexo, setBebeSexo), { obrigatorio: true })}
+              {renderCampo('Nome', <input className={inputClasse} value={b.nome} onChange={(e) => atualizarBebe(bebeAba, { nome: e.target.value })} />, { obrigatorio: true })}
+              <div className="grid grid-cols-2 gap-3">
+                {renderCampo('Data', <input className={inputClasse} type="date" value={b.data} onChange={(e) => atualizarBebe(bebeAba, { data: e.target.value })} />, { obrigatorio: true })}
+                {renderCampo('Horário', <input className={inputClasse} type="time" value={b.hora} onChange={(e) => atualizarBebe(bebeAba, { hora: e.target.value })} />)}
+              </div>
+              {renderCampo('Sexo', (
+                <div className="flex gap-2">
+                  {([['feminino', 'Menina'], ['masculino', 'Menino']] as const).map(([v, r]) => <button key={v} type="button" aria-pressed={b.sexo === v} className={chipDs(b.sexo === v)} onClick={() => atualizarBebe(bebeAba, { sexo: v })}>{r}</button>)}
+                </div>
+              ), { obrigatorio: true })}
+              <p className="text-[13px] text-[#55615B]">Peso, Apgar e o restante você completa na próxima tela ou depois, com calma.</p>
             </>
           ))}
-          {renderCamposNascimento()}
+          {renderSecao('Vai para o perfil do bebê', (
+            <div className="flex flex-col gap-2">
+              {itensLevar.map(([id, t, sub]) => renderChecagem(t, sub, !bebeOff[id], (v) => setBebeOff((m) => ({ ...m, [id]: !v }))))}
+            </div>
+          ), 'Desmarque o que não quiser levar')}
+          {renderSecao('O app já prepara', (
+            <ul className="flex flex-col gap-2 text-sm text-[#26332E]">
+              <li>✓ Carteirinha de vacinação, com as vacinas do nascimento</li>
+              <li>✓ Lembretes dos testes do pezinho, orelhinha, olhinho e coraçãozinho</li>
+              <li>✓ Você como responsável pelo perfil</li>
+            </ul>
+          ))}
+          <p className="text-[13px] text-[#55615B]">Seus dados de saúde continuam no seu perfil. O bebê recebe só o que diz respeito a ele. A gestação fica encerrada e guardada no seu histórico.</p>
           {erroNascimento && <p className="text-sm text-red-600">{erroNascimento}</p>}
-          {renderBarraAcoes('Criar perfil do bebê', salvarBebeNasceu, () => setMostrarFormBebe(false), carregando)}
+          {renderBarraAcoes(gem ? 'Criar os 2 perfis' : 'Criar perfil do bebê', salvarBebeNasceu, () => setMostrarFormBebe(false), carregando)}
         </div>
       );
     }
