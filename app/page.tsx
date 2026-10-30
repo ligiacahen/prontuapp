@@ -4310,7 +4310,7 @@ export default function Home() {
         <div className="space-y-4">
           {renderSecao('Como você quer informar?', (
             <>
-              {renderSegmentado([['dum', 'Última menstruação'], ['dpp', 'Data provável do parto']], gBase, setGBase)}
+              {renderSegmentado([['dum', 'Última menstruação'], ['dpp', 'Data provável do parto']], gBase, (v) => setGBase(v as 'dum' | 'dpp'))}
               {renderCampo(gBase === 'dum' ? 'Primeiro dia da última menstruação (DUM)' : 'Data provável do parto (DPP)', <input className={inputClasse} type="date" value={gData} onChange={(e) => setGData(e.target.value)} />, { obrigatorio: true, dica: gBase === 'dum' ? 'A data provável do parto é calculada automaticamente (DUM + 280 dias).' : 'Se o ultrassom mudou a data, use a data do ultrassom.' })}
               {prevDum && prevDpp && (
                 <div className="rounded-xl bg-[#EEF4F1] px-3.5 py-3 text-sm text-[#26332E]">
