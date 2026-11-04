@@ -6731,7 +6731,7 @@ export default function Home() {
         if (!eventoId) eventoId = id;
       }
       let anexado = false;
-      async function anexarOriginais(tipo: 'exame' | 'vacina', itemId: string) {
+      const anexarOriginais = async (tipo: 'exame' | 'vacina', itemId: string): Promise<void> => {
         if (anexado) return;
         anexado = true;
         for (const a of adArquivos) {
@@ -6742,7 +6742,7 @@ export default function Home() {
           const { error: e2 } = await supabase.from('anexo_saude').insert({ tipo, item_id: itemId, membro_id: membroId, caminho, nome: a.file.name });
           if (e2) throw new Error('Salvei os registros, mas não consegui registrar o anexo: ' + e2.message);
         }
-      }
+      };
       for (const i of lista) {
         if (i.tipo === 'evento') continue;
         if (i.tipo === 'cirurgia') {
