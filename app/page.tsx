@@ -150,6 +150,27 @@ export default function Home() {
   // categorias — cada uma abre direto no modo certo), compartilhar (PDF) e
   // configuração (conta/senha). Trocar de membro agora é feito dentro da própria Home.
   const [abaInferior, setAbaInferior] = useState<'home' | 'incluir' | 'consultar' | 'compartilhar' | 'configuracao'>('home');
+  // ===== NOVO MODELO (teste): "Adicionar" com foto/arquivo/voz/texto + "Consultar" com busca =====
+  // Fica atrás de um interruptor em Configuração. Desligado = app exatamente como antes.
+  type ItemRascunho = { uid: string; tipo: 'consulta' | 'exame' | 'medicamento' | 'vacina' | 'evento' | 'cirurgia'; titulo: string; data: string; status: string; profissional: string; local: string; detalhe: string; duvida: boolean; motivo_duvida: string };
+  const [novoModelo, setNovoModelo] = useState(false);
+  const [adTexto, setAdTexto] = useState('');
+  const [adArquivos, setAdArquivos] = useState<{ file: File; mime: string; dados: string }[]>([]);
+  const [adLendo, setAdLendo] = useState(false);
+  const [adErro, setAdErro] = useState('');
+  const [adMostrarTexto, setAdMostrarTexto] = useState(false);
+  const [rascunho, setRascunho] = useState<ItemRascunho[] | null>(null);
+  const [rascunhoResumo, setRascunhoResumo] = useState('');
+  const [rascunhoSalvando, setRascunhoSalvando] = useState(false);
+  const [buscaNova, setBuscaNova] = useState('');
+  const [filtroNova, setFiltroNova] = useState('todos');
+  useEffect(() => {
+    try { setNovoModelo(window.localStorage.getItem('prontuapp_novo_modelo') === '1'); } catch { /* sem armazenamento: fica desligado */ }
+  }, []);
+  function alterarNovoModelo(v: boolean) {
+    setNovoModelo(v);
+    try { window.localStorage.setItem('prontuapp_novo_modelo', v ? '1' : '0'); } catch { /* ignora */ }
+  }
 
   const [secoesCompartilhar, setSecoesCompartilhar] = useState<Record<string, boolean>>({
     nascimento: true,
@@ -6116,6 +6137,8 @@ export default function Home() {
     data: string | null; // formato YYYY-MM-DD, pode ser null se o evento não tiver data
     medico: string | null;
     aba: Aba;
+    busca?: string;
+    pendente?: boolean;
   };
 
   const categoriaFeedInfo: Record<EventoFeed['categoria'], { label: string; cor: string }> = {
@@ -6180,6 +6203,8 @@ export default function Home() {
         data: c.data_hora ? c.data_hora.slice(0, 10) : null,
         medico: c.profissional_saude?.nome ?? null,
         aba: ehOdontologia ? 'odontologia' : 'consultas',
+        busca: [c.anotacoes, c.motivo].filter(Boolean).join(' '),
+        pendente: c.status === 'agendada',
       });
     }
 
@@ -6192,6 +6217,8 @@ export default function Home() {
         data: e.data_realizacao,
         medico: null,
         aba: 'exames',
+        busca: e.resultado_resumo ?? '',
+        pendente: e.status === 'solicitado',
       });
     }
 
@@ -6612,6 +6639,331 @@ export default function Home() {
   };
   const emTelaDetalhe = passo === 'painel' && !!membroSelecionado;
 
+
+  // ===== NOVO MODELO: ler material (foto/PDF/texto) e montar rascunho =====
+  function lerComoBase64(blob: Blob): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(String(r.result).split(',')[1] || '');
+      r.onerror = () => reject(new Error('Não consegui ler o arquivo.'));
+      r.readAsDataURL(blob);
+    });
+  }
+
+  async function adicionarArquivosAd(lista: FileList | null) {
+    if (!lista || lista.length === 0) return;
+    setAdErro('');
+    const novos: { file: File; mime: string; dados: string }[] = [];
+    try {
+      for (const f of Array.from(lista)) {
+        if (f.type === 'application/pdf') {
+          if (f.size > 3 * 1024 * 1024) throw new Error(`O PDF "${f.name}" é grande demais (máximo 3 MB). Tire foto das páginas principais.`);
+          novos.push({ file: f, mime: 'application/pdf', dados: await lerComoBase64(f) });
+        } else if (f.type.startsWith('image/')) {
+          const blob = await reduzirImagem(f);
+          const nome = f.name.replace(/\.[^.]+$/, '') + '.jpg';
+          novos.push({ file: new File([blob], nome, { type: 'image/jpeg' }), mime: 'image/jpeg', dados: await lerComoBase64(blob) });
+        } else {
+          throw new Error(`"${f.name}" não é foto nem PDF.`);
+        }
+      }
+      setAdArquivos((a) => [...a, ...novos].slice(0, 6));
+    } catch (e: any) {
+      setAdErro(e?.message || 'Não consegui abrir o arquivo.');
+    }
+  }
+
+  async function lerMaterialAd() {
+    if (!membroSelecionado) return;
+    if (adArquivos.length === 0 && !adTexto.trim()) { setAdErro('Envie uma foto, um arquivo ou escreva o que aconteceu.'); return; }
+    const total = adArquivos.reduce((t, a) => t + a.dados.length, 0);
+    if (total > 4_000_000) { setAdErro('Os arquivos juntos ficaram grandes demais. Envie menos páginas por vez.'); return; }
+    setAdLendo(true);
+    setAdErro('');
+    try {
+      const resp = await fetch('/api/importar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ texto: adTexto, hoje: dataLocalISO(new Date()), arquivos: adArquivos.map((a) => ({ nome: a.file.name, mime: a.mime, dados: a.dados })) }),
+      });
+      const json = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(json.erro || 'Não consegui ler agora. Tente de novo ou use o cadastro manual.');
+      const itens: ItemRascunho[] = (json.itens || []).map((i: any, n: number) => ({
+        uid: `r${Date.now()}-${n}`,
+        tipo: i.tipo || 'evento',
+        titulo: i.titulo || '',
+        data: /^\d{4}-\d{2}-\d{2}$/.test(i.data || '') ? i.data : '',
+        status: i.status || (i.tipo === 'exame' ? 'realizado' : ''),
+        profissional: i.profissional || '',
+        local: i.local || '',
+        detalhe: i.detalhe || '',
+        duvida: !!i.duvida,
+        motivo_duvida: i.motivo_duvida || '',
+      }));
+      if (itens.length === 0) { setAdErro('Não encontrei informações de saúde nesse material. Tente outra foto ou escreva com suas palavras.'); return; }
+      setRascunho(itens);
+      setRascunhoResumo(json.resumo || '');
+    } catch (e: any) {
+      setAdErro(e?.message || 'Erro ao ler o material.');
+    } finally {
+      setAdLendo(false);
+    }
+  }
+
+  function limparAdicionar() {
+    setAdTexto(''); setAdArquivos([]); setAdErro(''); setRascunho(null); setRascunhoResumo(''); setAdMostrarTexto(false);
+  }
+
+  async function salvarRascunho() {
+    if (!membroSelecionado || !rascunho) return;
+    const lista = rascunho.filter((i) => i.titulo.trim());
+    if (lista.length === 0) { setAdErro('Não há nada para salvar.'); return; }
+    setRascunhoSalvando(true);
+    setAdErro('');
+    try {
+      const membroId = membroSelecionado.id;
+      const hojeIso = dataLocalISO(new Date());
+      const familiaId = await obterFamiliaId();
+      // 1) evento de saúde primeiro (os outros registros ficam ligados a ele)
+      let eventoId: string | null = null;
+      for (const i of lista.filter((x) => x.tipo === 'evento')) {
+        const id = await criarEventoRapido({ membroId, nome: i.titulo.trim() });
+        if (!eventoId) eventoId = id;
+      }
+      let anexado = false;
+      async function anexarOriginais(tipo: 'exame' | 'vacina', itemId: string) {
+        if (anexado) return;
+        anexado = true;
+        for (const a of adArquivos) {
+          const ext = (a.file.name.split('.').pop() || 'jpg').toLowerCase();
+          const caminho = `${membroId}/${tipo}/${itemId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+          const { error: e1 } = await supabase.storage.from('anexos-saude').upload(caminho, a.file);
+          if (e1) throw new Error('Salvei os registros, mas não consegui anexar o arquivo: ' + e1.message);
+          const { error: e2 } = await supabase.from('anexo_saude').insert({ tipo, item_id: itemId, membro_id: membroId, caminho, nome: a.file.name });
+          if (e2) throw new Error('Salvei os registros, mas não consegui registrar o anexo: ' + e2.message);
+        }
+      }
+      for (const i of lista) {
+        if (i.tipo === 'evento') continue;
+        if (i.tipo === 'cirurgia') {
+          const { error } = await supabase.from('condicao').insert({ membro_id: membroId, tipo: 'cirurgia', nome: i.titulo.trim(), status: 'ativa', data_diagnostico_ou_procedimento: i.data || null, medico: i.profissional || null, relevante_geneticamente: false });
+          if (error) throw error;
+        } else if (i.tipo === 'consulta') {
+          const id = await criarConsultaRapida({ membroId, especialidade: i.titulo.trim(), medico: i.profissional.trim(), data: i.data ? `${i.data}T12:00:00` : '', condicaoId: eventoId, familiaId, observacao: i.detalhe });
+          if (i.status === 'agendada' || (i.data && i.data > hojeIso)) await supabase.from('consulta').update({ status: 'agendada' }).eq('id', id);
+        } else if (i.tipo === 'medicamento') {
+          await criarMedicamentoRapido({ membroId, nome: i.titulo, dosagem: i.detalhe, dataInicio: i.data || undefined, usoContinuo: true, condicaoId: eventoId, medicoReceitou: i.profissional });
+        } else if (i.tipo === 'exame') {
+          const solicitado = i.status === 'solicitado';
+          const dataExame = i.data || (solicitado ? somarDias(hojeIso, 30) : hojeIso);
+          const r = await supabase.from('exame').insert({ membro_id: membroId, nome: i.titulo.trim(), data_realizacao: dataExame, laboratorio: i.local || null, resultado_resumo: i.detalhe || null, status: solicitado ? 'solicitado' : 'realizado', condicao_relacionada_id: eventoId }).select('id').single();
+          if (r.error) throw r.error;
+          if (!solicitado && r.data?.id) await anexarOriginais('exame', r.data.id as string);
+        } else if (i.tipo === 'vacina') {
+          const r = await supabase.from('vacina').insert({ membro_id: membroId, nome: i.titulo.trim(), dose: i.detalhe || null, data_aplicacao: i.data || hojeIso, status: i.status === 'solicitado' ? 'solicitado' : 'realizado', condicao_relacionada_id: eventoId }).select('id').single();
+          if (r.error) throw r.error;
+          if (r.data?.id) await anexarOriginais('vacina', r.data.id as string);
+        }
+      }
+      await Promise.all([carregarCondicoes(membroId), carregarMedicacoes(membroId), carregarConsultas(membroId), carregarExames(membroId), carregarVacinas(membroId)]);
+      limparAdicionar();
+      irParaAbaInferior('consultar');
+    } catch (e: any) {
+      setAdErro(e?.message || 'Não consegui salvar. Nada foi perdido: confira e tente de novo.');
+    } finally {
+      setRascunhoSalvando(false);
+    }
+  }
+
+  function atualizarItemRascunho(uid: string, campos: Partial<ItemRascunho>) {
+    setRascunho((l) => (l ? l.map((i) => (i.uid === uid ? { ...i, ...campos } : i)) : l));
+  }
+
+  const rotuloTipoRascunho: Record<ItemRascunho['tipo'], string> = { consulta: 'CONSULTA', exame: 'EXAME', medicamento: 'REMÉDIO', vacina: 'VACINA', evento: 'EVENTO DE SAÚDE', cirurgia: 'CIRURGIA' };
+
+  function renderAdicionar() {
+    if (!membroSelecionado) return null;
+    const botao = 'flex flex-col items-center justify-center gap-1.5 rounded-2xl border border-[#E1E6E3] bg-white px-2 py-5 text-[#1E5B4A] transition hover:bg-[#F4F6F4]';
+    return (
+      <div className="space-y-4 pb-24">
+        <div>
+          <h2 className="text-[22px] font-bold tracking-[-0.01em] text-[#1A2421]">Adicionar</h2>
+          <p className="text-sm text-[#55615B]">Paciente: {membroSelecionado.nome}</p>
+        </div>
+        <div className="rounded-2xl bg-[#1E5B4A] p-4 text-white">
+          <p className="text-lg font-bold">O que você tem em mãos?</p>
+          <p className="mt-1 text-sm text-white/85">Mande como estiver. O app lê, separa em registros e você só confere antes de salvar.</p>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <label className={`${botao} cursor-pointer`}>
+            <span className="text-2xl" aria-hidden="true">📷</span><span className="text-sm font-semibold">Tirar foto</span>
+            <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => { adicionarArquivosAd(e.target.files); e.target.value = ''; }} />
+          </label>
+          <label className={`${botao} cursor-pointer`}>
+            <span className="text-2xl" aria-hidden="true">📎</span><span className="text-sm font-semibold">Enviar arquivo</span>
+            <input type="file" accept="image/*,application/pdf" multiple className="hidden" onChange={(e) => { adicionarArquivosAd(e.target.files); e.target.value = ''; }} />
+          </label>
+          <button type="button" onClick={() => { setAdMostrarTexto(true); alternarReconhecimentoVoz('adTexto', setAdTexto); }} className={botao}>
+            <span className="text-2xl" aria-hidden="true">🎤</span><span className="text-sm font-semibold">{gravandoCampo === 'adTexto' ? 'Ouvindo... toque p/ parar' : 'Falar'}</span>
+          </button>
+          <button type="button" onClick={() => setAdMostrarTexto(true)} className={botao}>
+            <span className="text-2xl" aria-hidden="true">✍️</span><span className="text-sm font-semibold">Escrever</span>
+          </button>
+        </div>
+
+        {adArquivos.length > 0 && (
+          <div className="space-y-2 rounded-2xl border border-[#E1E6E3] bg-white p-3">
+            <p className="text-sm font-semibold text-[#26332E]">Para ler ({adArquivos.length})</p>
+            {adArquivos.map((a, n) => (
+              <div key={n} className="flex items-center gap-2 rounded-xl bg-[#F4F7F5] px-3 py-2 text-sm">
+                <span className="font-bold text-[#2F6FA8]">{a.mime === 'application/pdf' ? 'PDF' : 'FOTO'}</span>
+                <span className="min-w-0 flex-1 truncate">{a.file.name}</span>
+                <button type="button" aria-label="Tirar" onClick={() => setAdArquivos((l) => l.filter((_, k) => k !== n))} className="text-[#55615B]">✕</button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {(adMostrarTexto || adTexto) && (
+          <div className="space-y-2">
+            <p className="text-sm font-semibold text-[#26332E]">Conte com suas palavras</p>
+            <textarea className={inputClasse} rows={4} placeholder="Ex.: Ontem fui na cardiologista, ela começou losartana 50 mg e pediu ecocardiograma." value={adTexto} onChange={(e) => setAdTexto(e.target.value)} />
+          </div>
+        )}
+
+        {adErro && <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{adErro}</p>}
+
+        <button type="button" disabled={adLendo || (adArquivos.length === 0 && !adTexto.trim())} onClick={lerMaterialAd} className="h-[52px] w-full rounded-2xl bg-[#1E5B4A] text-base font-semibold text-white disabled:opacity-40">
+          {adLendo ? 'Lendo...' : 'Ler e montar o rascunho'}
+        </button>
+        <p className="text-xs text-[#55615B]">As fotos e textos são enviados à inteligência artificial só para ler. Nada é salvo sem você conferir.</p>
+
+        <div className="space-y-2 pt-2">
+          <p className="text-[13px] font-bold tracking-[0.06em] text-[#55615B]">OU CADASTRE DIRETO</p>
+          <div className="flex flex-wrap gap-2">
+            {([['consultas', 'Consulta'], ['exames', 'Exame'], ['medicacoes', 'Remédio'], ['vacinas', 'Vacina'], ['condicoes', 'Evento de saúde'], ['cirurgias', 'Cirurgia']] as [Aba, string][]).map(([id, rot]) => (
+              <button key={id} type="button" onClick={() => abrirCategoriaNoModo(id)} className="h-9 rounded-full border border-[#CDD5D1] bg-white px-3.5 text-sm">{rot}</button>
+            ))}
+          </div>
+          <details className="rounded-xl bg-white p-3 text-sm">
+            <summary className="cursor-pointer text-[#55615B]">Ver todas as categorias</summary>
+            <div className="mt-3 grid grid-cols-3 gap-2">
+              {secoes.map((sc) => (
+                <button key={sc.id} onClick={() => abrirCategoriaNoModo(sc.id)} className="flex flex-col items-center gap-1.5 rounded-2xl border border-[#E1E6E3] bg-white px-1 py-3 text-[#1E5B4A]">
+                  {iconeSecao(sc.id, 22)}
+                  <span className="w-full text-center text-[10px] font-medium leading-tight text-slate-600">{sc.labelCurto ?? sc.label}</span>
+                </button>
+              ))}
+            </div>
+          </details>
+        </div>
+      </div>
+    );
+  }
+
+  function renderConferir() {
+    if (!rascunho) return null;
+    const tipos: ItemRascunho['tipo'][] = ['consulta', 'exame', 'medicamento', 'vacina', 'evento', 'cirurgia'];
+    return (
+      <div className="space-y-3 pb-32">
+        <div>
+          <h2 className="text-[22px] font-bold tracking-[-0.01em] text-[#1A2421]">Conferir</h2>
+          <p className="text-sm text-[#55615B]">{rascunhoResumo || 'Veja se o app entendeu direito. Nada foi salvo ainda.'}</p>
+        </div>
+        {rascunho.map((i) => (
+          <section key={i.uid} className={`space-y-2 rounded-2xl border bg-white p-4 ${i.duvida ? 'border-[#E8B58A]' : 'border-[#E1E6E3]'}`}>
+            <div className="flex items-center justify-between gap-2">
+              <select className="rounded-lg bg-[#EEF4F1] px-2 py-1 text-xs font-bold text-[#1E5B4A]" value={i.tipo} onChange={(e) => atualizarItemRascunho(i.uid, { tipo: e.target.value as ItemRascunho['tipo'] })}>
+                {tipos.map((t) => <option key={t} value={t}>{rotuloTipoRascunho[t]}</option>)}
+              </select>
+              <button type="button" onClick={() => setRascunho((l) => (l ? l.filter((x) => x.uid !== i.uid) : l))} className="text-sm text-red-600">Remover</button>
+            </div>
+            {i.duvida && <p className="rounded-lg bg-[#FFF5EC] px-2.5 py-1.5 text-xs text-[#8A4416]">Confira: {i.motivo_duvida || 'algo ficou difícil de ler.'}</p>}
+            <input className={inputClasse} value={i.titulo} onChange={(e) => atualizarItemRascunho(i.uid, { titulo: e.target.value })} placeholder="Nome" />
+            <div className="grid grid-cols-2 gap-2">
+              <input className={inputClasse} type="date" value={i.data} onChange={(e) => atualizarItemRascunho(i.uid, { data: e.target.value })} />
+              <input className={inputClasse} value={i.profissional || i.local} onChange={(e) => atualizarItemRascunho(i.uid, i.tipo === 'exame' || i.tipo === 'vacina' ? { local: e.target.value } : { profissional: e.target.value })} placeholder={i.tipo === 'exame' || i.tipo === 'vacina' ? 'Laboratório / local' : 'Médico'} />
+            </div>
+            {i.tipo === 'exame' && (
+              <select className={inputClasse} value={i.status === 'solicitado' ? 'solicitado' : 'realizado'} onChange={(e) => atualizarItemRascunho(i.uid, { status: e.target.value })}>
+                <option value="realizado">Já feito (tenho o resultado)</option>
+                <option value="solicitado">Pedido, ainda não fiz</option>
+              </select>
+            )}
+            <textarea className={inputClasse} rows={2} value={i.detalhe} onChange={(e) => atualizarItemRascunho(i.uid, { detalhe: e.target.value })} placeholder={i.tipo === 'medicamento' ? 'Dose e frequência' : i.tipo === 'exame' ? 'Resultado em resumo' : 'Detalhes'} />
+          </section>
+        ))}
+        {adArquivos.length > 0 && <p className="text-xs text-[#55615B]">Os arquivos originais ficam anexados ao primeiro exame ou vacina.</p>}
+        {adErro && <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{adErro}</p>}
+        {renderBarraAcoes(`Salvar ${rascunho.filter((x) => x.titulo.trim()).length} registro(s)`, salvarRascunho, () => { setRascunho(null); setAdErro(''); }, rascunhoSalvando)}
+      </div>
+    );
+  }
+
+  function renderConsultarNovo() {
+    if (!membroSelecionado) return null;
+    const q = buscaNova.trim().toLowerCase();
+    const todos = obterEventosBrutos();
+    const filtros: [string, string][] = [['todos', 'Tudo'], ['consulta', 'Consultas'], ['exame', 'Exames'], ['medicamento', 'Remédios'], ['vacina', 'Vacinas'], ['doenca', 'Eventos']];
+    const lista = todos
+      .filter((ev) => filtroNova === 'todos' || ev.categoria === filtroNova || (filtroNova === 'consulta' && ev.categoria === 'odontologia'))
+      .filter((ev) => !q || [ev.titulo, ev.subtitulo, ev.medico, ev.busca, categoriaFeedInfo[ev.categoria].label, ev.data ? ev.data.split('-').reverse().join('/') : ''].filter(Boolean).join(' ').toLowerCase().includes(q));
+    const pendentes = q || filtroNova !== 'todos' ? [] : todos.filter((ev) => ev.pendente);
+    const fmt = (d: string | null) => (d ? d.split('-').reverse().join('/') : 'sem data');
+    const grupos: { mes: string; itens: EventoFeed[] }[] = [];
+    for (const ev of lista) {
+      const mes = ev.data ? new Date(ev.data + 'T12:00:00').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }).toUpperCase() : 'SEM DATA';
+      const g = grupos[grupos.length - 1];
+      if (g && g.mes === mes) g.itens.push(ev); else grupos.push({ mes, itens: [ev] });
+    }
+    return (
+      <div className="space-y-3 pb-24">
+        <div>
+          <h2 className="text-[22px] font-bold tracking-[-0.01em] text-[#1A2421]">Consultar</h2>
+          <p className="text-sm text-[#55615B]">Paciente: {membroSelecionado.nome}</p>
+        </div>
+        <div className="flex h-12 items-center gap-2 rounded-2xl border border-[#CDD5D1] bg-white px-3.5">
+          <span aria-hidden="true">🔎</span>
+          <input className="min-w-0 flex-1 bg-transparent text-[15px] outline-none" placeholder="Buscar exame, médico, remédio..." value={buscaNova} onChange={(e) => setBuscaNova(e.target.value)} />
+          {buscaNova && <button type="button" onClick={() => setBuscaNova('')} className="text-[13px] text-[#55615B]">limpar</button>}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {filtros.map(([id, rot]) => (
+            <button key={id} type="button" onClick={() => setFiltroNova(id)} className={chipDs(filtroNova === id)}>{rot}</button>
+          ))}
+        </div>
+        {pendentes.length > 0 && (
+          <div className="space-y-1.5 rounded-2xl bg-[#FFF5EC] p-3.5">
+            <p className="text-xs font-bold tracking-[0.06em] text-[#8A4416]">PENDENTE</p>
+            {pendentes.map((ev) => (
+              <button key={ev.id} type="button" onClick={() => setTelaDetalhe(ev.aba)} className="block w-full text-left text-sm">
+                {ev.categoria === 'exame' ? `${ev.titulo}: pedido, ainda sem resultado` : `${ev.titulo} em ${fmt(ev.data)}`}
+              </button>
+            ))}
+          </div>
+        )}
+        {q && <p className="text-[13px] text-[#55615B]">{lista.length} resultado(s) para “{buscaNova.trim()}”</p>}
+        {grupos.map((g) => (
+          <div key={g.mes} className="space-y-2">
+            <p className="pt-1 text-xs font-bold tracking-[0.06em] text-[#55615B]">{g.mes}</p>
+            {g.itens.map((ev) => (
+              <button key={ev.id} type="button" onClick={() => setTelaDetalhe(ev.aba)} className="block w-full rounded-2xl border border-[#E1E6E3] bg-white px-3.5 py-3 text-left">
+                <span className="flex justify-between">
+                  <span className="text-xs font-bold text-[#1E5B4A]">{categoriaFeedInfo[ev.categoria].label.toUpperCase()}</span>
+                  <span className="text-xs text-[#55615B]">{fmt(ev.data)}</span>
+                </span>
+                <span className="mt-0.5 block text-[15px] font-bold text-[#1A2421]">{ev.titulo}{ev.medico ? `, ${ev.medico}` : ''}</span>
+                {ev.subtitulo && <span className="block text-[13px] text-[#55615B]">{ev.subtitulo}</span>}
+              </button>
+            ))}
+          </div>
+        ))}
+        {lista.length === 0 && <p className="rounded-2xl bg-white p-4 text-sm text-[#55615B]">{q ? 'Nada encontrado. Tente outra palavra.' : 'Ainda não há registros. Toque em Adicionar.'}</p>}
+        <button type="button" onClick={() => setTelaDetalhe('feedeventos')} className="w-full py-2 text-center text-sm text-[#55615B] underline">Ver a linha do tempo antiga</button>
+      </div>
+    );
+  }
+
   // Troca de aba do menu inferior sempre volta pra tela "raiz" daquela aba (fecha
   // qualquer categoria/formulário que estivesse aberto na aba anterior), pra nunca
   // aparecer uma tela de uma aba enquanto o menu mostra outra selecionada.
@@ -6644,7 +6996,7 @@ export default function Home() {
     },
     {
       id: 'incluir',
-      label: 'Incluir',
+      label: novoModelo ? 'Adicionar' : 'Incluir',
       icone: (
         <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
           <circle cx="12" cy="12" r="9" /><line x1="12" y1="8" x2="12" y2="16" /><line x1="8" y1="12" x2="16" y2="12" />
@@ -6843,6 +7195,9 @@ export default function Home() {
 
         {passo === 'painel' && abaInferior === 'home' && membroSelecionado && telaDetalhe === null && (
           <div className="relative">
+            {novoModelo && (
+              <button type="button" onClick={() => irParaAbaInferior('incluir')} className="fixed bottom-20 right-4 z-40 h-[52px] rounded-full bg-[#1E5B4A] px-5 text-base font-bold text-white shadow-lg">+ Adicionar</button>
+            )}
             <header className="-mx-4 -mt-3 mb-5 flex items-center gap-2 border-b border-[#E1E6E3] bg-white py-3 pl-2 pr-3">
               <button
                 onClick={() => setMostrarMenuPessoal((v) => !v)}
@@ -7119,6 +7474,11 @@ export default function Home() {
         {passo === 'painel' && abaInferior === 'configuracao' && (
           <div className="space-y-6">
             <h2 className="text-[22px] font-bold tracking-[-0.01em] text-[#1A2421]">Configuração</h2>
+
+            <div className="space-y-2 rounded-2xl border border-[#E1E6E3] bg-white p-[18px]">
+              <p className="text-[13px] font-bold tracking-[0.06em] text-[#1E5B4A]">EM TESTE</p>
+              {renderChecagem('Testar novo modelo', 'Adicionar por foto, arquivo, voz ou texto, e Consultar com busca. Desligue para voltar ao modelo de antes.', novoModelo, alterarNovoModelo)}
+            </div>
 
             <div className="space-y-2 rounded-xl bg-white border border-[#E5E1DA] p-4">
               <p className="text-xs text-slate-400">Conta</p>
@@ -7501,7 +7861,10 @@ export default function Home() {
           </div>
         )}
 
-        {passo === 'painel' && (abaInferior === 'incluir' || abaInferior === 'consultar') && membroSelecionado && telaDetalhe === null && (
+        {passo === 'painel' && novoModelo && abaInferior === 'incluir' && membroSelecionado && telaDetalhe === null && (rascunho ? renderConferir() : renderAdicionar())}
+        {passo === 'painel' && novoModelo && abaInferior === 'consultar' && membroSelecionado && telaDetalhe === null && renderConsultarNovo()}
+
+        {passo === 'painel' && !novoModelo && (abaInferior === 'incluir' || abaInferior === 'consultar') && membroSelecionado && telaDetalhe === null && (
           <div>
             <h2 className="mb-1 text-[22px] font-bold tracking-[-0.01em] text-[#1A2421]">
               {abaInferior === 'incluir' ? 'Incluir registro' : 'Consultar registros'}
